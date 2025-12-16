@@ -1,4 +1,3 @@
-import { toggleMenu } from "../Tiptap";
 import { getCursorPos } from "./getCursorPos";
 import { Extension } from '@tiptap/core'
 import { defaultContent } from '../defaultContent'
