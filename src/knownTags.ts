@@ -36,6 +36,7 @@ export const KNOWN_TAGS = [
   "p",
   "m",
   "me",
+  "md",
   "ol",
   "ul",
   "li",

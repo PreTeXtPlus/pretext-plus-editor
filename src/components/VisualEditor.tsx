@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Editor, Node } from "@tiptap/core";
 import { BulletList, OrderedList, ListItem } from '@tiptap/extension-list'
-import { MathEquation, MathInline } from "../extensions/Math";
+import { MathDisplay, MathEquation, MathInline } from "../extensions/Math";
 import "katex/dist/katex.min.css";
 import Divisions from "../extensions/Divisions";
 import Inline from "../extensions/Inline";
@@ -56,6 +56,7 @@ const extensions = [
   RawPtx,
   MathInline,
   MathEquation,
+  MathDisplay,
   Focus.configure({ mode: "deepest" }),
   UndoRedo,
   Gapcursor,

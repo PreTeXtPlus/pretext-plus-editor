@@ -83,7 +83,7 @@ const MathEquation = Node.create({
 
       editable.classList.add("edit-math");
       editable.classList.add("is-editable");
-      editable.innerHTML = "<m>" + node.textContent + "</m>";
+      editable.innerHTML = "<md>" + node.textContent + "</md>";
 
       const observer = new MutationObserver(() => {
         console.log("mutation observer");
@@ -101,4 +101,54 @@ const MathEquation = Node.create({
   },
 });
 
-export { MathInline, MathEquation };
+const MathDisplay = Node.create({
+  name: "md",
+  content: "text*",
+  group: "inline math",
+  inline: true,
+
+  parseHTML() {
+    return [{ tag: "md" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["div", mergeAttributes({ class: "displayMath" }, HTMLAttributes)];
+  },
+
+  addNodeView() {
+    return ({ node, HTMLAttributes }) => {
+      const dom = document.createElement("div");
+      dom.classList.add("node-view");
+      dom.classList.add("display");
+      Object.entries(HTMLAttributes).forEach(([key, value]) => {
+        dom.setAttribute(key, value);
+      });
+
+      const rendered = document.createElement("span");
+      const editable = document.createElement("span");
+      const latex = node.textContent.trim();
+
+      rendered.innerHTML = katex.renderToString(latex, { throwOnError: false });
+      rendered.contentEditable = "false";
+
+      editable.classList.add("edit-math");
+      editable.classList.add("is-editable");
+      editable.innerHTML = "<md>" + node.textContent + "</md>";
+
+      const observer = new MutationObserver(() => {
+        console.log("mutation observer");
+        rendered.innerHTML = katex.renderToString(node.textContent, {
+          throwOnError: false,
+        });
+      });
+      observer.observe(editable, { characterData: true, subtree: true });
+      dom.append(rendered, editable);
+      return {
+        dom,
+        contentDOM: editable,
+      };
+    };
+  },
+});
+
+export { MathInline, MathEquation, MathDisplay };
