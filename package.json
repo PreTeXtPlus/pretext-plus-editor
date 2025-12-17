@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "@reduxjs/toolkit": "^2.11.2",
     "@tiptap/extension-code-block": "^3.13.0",
     "@tiptap/extension-hard-break": "^3.13.0",
     "@tiptap/extension-list": "^3.13.0",
@@ -18,11 +19,16 @@
     "@tiptap/extensions": "^3.13.0",
     "@tiptap/pm": "^3.13.0",
     "@tiptap/react": "^3.13.0",
+    "hast-util-whitespace": "^3.0.0",
+    "katex": "^0.16.27",
     "primeflex": "^4.0.0",
     "primeicons": "^7.0.0",
     "primereact": "^10.9.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "unist-util-visit": "^5.0.0",
+    "xast-util-from-xml": "^4.0.0",
+    "xast-util-to-xml": "^4.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
@@ -33,6 +39,7 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
+    "sass-embedded": "^1.97.0",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
     "vite": "^6.4.1"
