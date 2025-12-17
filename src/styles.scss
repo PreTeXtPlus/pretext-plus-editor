@@ -35,10 +35,12 @@
 .ptx-page {
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  min-height: 100vh;
+  height: 80vh;
+  width:100%;
   text-align: left;
-  ;
-  //padding: 2rem;
+  overflow-y: scroll;
+  padding-bottom: 3em;
+  font-family: "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 /* Basic editor styles */
@@ -117,12 +119,11 @@
   pointer-events: none;
 }
 
-
-
+// We will always only use top margins to avoid duplicating whitespace.
 
 .tiptap {
   position: relative;
-  margin-top: 1rem;
+  margin-top: 1em;
   color: var(--text-primary);
   background-color: var(--bg-primary);
 
@@ -144,22 +145,10 @@
     color: var(--alert-color);
   }
 
-  .statement,
-  .proof {
-    padding: 1ex;
-    margin: 1.5ex 1ex 1ex;
-    border: 1px dashed var(--border-color);
-  }
-
-  article::before,
-  section::before,
-  pre::before,
-  div::before {
-    content: attr(ptxtag);
-    display: block;
-    text-align: right;
-    font-size: 50%;
-    height: 0ex;
+  .c {
+    font-family: "JetBrainsMono", monospace;
+    background-color: var(--code-bg);
+    color: var(--text-primary);
   }
 
   .rawptx {
@@ -169,25 +158,18 @@
 
   .p {
     display: block;
-    margin: 2ex 1ex;
+    margin: 1ex 1ex 0 1ex;
   }
 
   .hidden {
     visibility: hidden;
   }
 
-  div::after {
-    content: attr(label);
-    display: block;
-    text-align: right;
-    font-size: 50%;
-    height: 1ex;
-    font-weight: normal;
-    color: var(--text-secondary);
-  }
+
 
   .title {
-    padding-top: 1ex;
+    margin-top: 1ex;
+    margin-left: 1ex;
     font-weight: bold;
     font-size: larger;
     color: var(--text-primary);
@@ -230,19 +212,7 @@
   //  color: var(--list-text);
   //}
 
-  ul::after {
-    content: "ul";
-    display: block;
-    text-align: right;
-    font-size: 50%;
-  }
 
-  ol::after {
-    content: "ol";
-    display: block;
-    text-align: right;
-    font-size: 50%;
-  }
 
   h1,
   h2,
@@ -250,7 +220,7 @@
   h4,
   h5,
   h6 {
-    line-height: 1.1;
+    line-height: 1;
   }
 
   //code {
@@ -291,24 +261,31 @@
   hr {
     border: none;
     border-top: 2px solid var(--hr-border);
-    margin: 2rem 0;
+    margin-top: 1em;
   }
 
   div.block-component {
-    border: 3px solid var(--block-border);
+    border-left: 5px solid var(--block-border);
     background-color: var(--block-bg);
-    border-radius: 0.1rem;
-    padding: 0.5rem;
-    margin: 2ex 1ex 1ex;
+    border-radius: 0.1ex;
+    padding: 0 1ex 1ex 1ex;
+    margin: 2ex 1ex 0 1ex;
 
+  .thm-component-content {
+    display: inline;
+    > :first-child {
+      display:inline;
+    }
+  }
     .block-title {
+      display: inline-block;
+      margin-top: 1ex;
       font-weight: bold;
-      margin-bottom: 0.5rem;
       color: var(--text-primary);
     }
 
     .title {
-      display: block;
+      display: inline-block;
       font-size: unset;
       font-weight: bold;
       text-emphasis: italic;
@@ -358,16 +335,60 @@
     //background-color: var(--bg-primary);
   }
 
-    .statement,
+
+
+  .has-focus {
+    box-shadow: -1px 1px 4px 2px var(--focus-shadow);
+    //padding: 0.25rem;
+    //margin: 0.25rem;
+  }
+
+    ul::after {
+    content: "ul";
+    display: block;
+    text-align: right;
+    font-size: 50%;
+  }
+
+  ol::after {
+    content: "ol";
+    display: block;
+    text-align: right;
+    font-size: 50%;
+  }
+
+    div::after {
+    content: attr(label);
+    display: block;
+    text-align: right;
+    font-size: 50%;
+    height: 1ex;
+    font-weight: normal;
+    color: var(--text-secondary);
+  }
+
+  article::before,
+  section::before,
+  pre::before,
+  div::before {
+    content: attr(ptxtag);
+    display: block;
+    text-align: right;
+    font-size: 50%;
+    height: 0ex;
+  }
+
+  .statement,
   .proof {
     padding: 1ex;
     margin: 1.5ex 1ex 1ex;
     border: 1px dashed var(--border-color);
   }
 
-  .has-focus {
-    box-shadow: -1px 1px 4px 2px var(--focus-shadow);
-    //padding: 0.25rem;
-    //margin: 0.25rem;
+  .statement,
+  .proof {
+    padding: 1ex;
+    margin: 1.5ex 1ex 1ex;
+    border: 1px dashed var(--border-color);
   }
 }

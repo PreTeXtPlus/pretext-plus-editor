@@ -285,7 +285,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
 
   return (
     <>
-      <div className="control-group">
+      {/*<div className="control-group">
         <p>
           <label>
             <input type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
@@ -294,7 +294,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
         </p>
       </div>
       <WarningMessage isValid={isValid} />
-      <MenuBar editor={editor} />
+      <MenuBar editor={editor} />*/}
       <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
         <EditorContent editor={editor} />
       </div>

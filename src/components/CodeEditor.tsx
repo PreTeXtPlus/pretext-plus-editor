@@ -18,7 +18,11 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
             theme="vs-dark"
             language="xml"
             value={content}
-            onChange={(value) => onChange(value || '')}
+            onChange={(value) => {
+                if (value !== content) {
+                    onChange(value || '');
+                }
+            }}
         />
     </>
  )

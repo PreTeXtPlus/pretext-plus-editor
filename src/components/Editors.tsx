@@ -25,7 +25,7 @@ const Editors = () => {
                     onChange={( content ) => setContent(content || '')}
                     />
                 </SplitterPanel>
-                <SplitterPanel>
+                <SplitterPanel className="flex">
                     <VisualEditor
                         content={content}
                         onChange={( content ) => setContent(content || '')}

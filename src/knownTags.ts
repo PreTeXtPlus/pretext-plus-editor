@@ -8,6 +8,15 @@ const theoremLikeElements = [
   "proof",
 ];
 
+const remarkLikeElements = [
+    "convention",
+  "insight",
+  "note",
+  "observation",
+  "remark",
+  "warning",
+];
+
 const axiomLikeElements = [
   "assumption",
   "axiom",
@@ -36,10 +45,12 @@ export const KNOWN_TAGS = [
   "statement",
   ...theoremLikeElements,
   ...axiomLikeElements,
+  ...remarkLikeElements,
   ...exampleLikeElements,
   ...solutionLikeElements,
   "term",
   "em",
   "alert",
+  "c",
   "pre",
 ];
