@@ -285,23 +285,22 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     , [editor, isEditable]);
 
   return (
-    <>
-      {/*<div className="control-group">
-        <p>
+    <div className="editor-panel">
+      <p>Simplified Preview</p>
+        {/* <p>
           <label>
             <input type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
-            Enable editing
+            Edit here
           </label>
-        </p>
-      </div>
-      <WarningMessage isValid={isValid} />
-      <MenuBar editor={editor} />*/}
+        </p> */}
+      {/* <WarningMessage isValid={isValid} />
+      <MenuBar editor={editor} /> */}
       <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
         <EditorContent editor={editor} />
       </div>
       <PtxBubbleMenu editor={editor} />
       {/*<InfoMessage editor={editor} />*/}
-    </>
+    </div>
   );
 };
 

@@ -43,6 +43,13 @@
   font-family: "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%
+}
+
 /* Basic editor styles */
 
 .info {

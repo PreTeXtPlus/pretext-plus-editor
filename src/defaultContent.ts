@@ -59,7 +59,7 @@ const defaultContent:string = `
 
   <ul>
     <li>
-      That’s a bullet list with one …
+      That's a bullet list with one …
     </li>
     <li>
       … or two list items.
@@ -67,7 +67,7 @@ const defaultContent:string = `
   </ul>
 
   <p>
-    Pretty neat, huh?  Oh yeah, and it can do some math: $\\int_1^2 x^2 dx = \\frac{7}{3}$.  I don't know if you can do display math though.
+    Pretty neat, huh?  Oh yeah, and it can do some math: <m>\\int_1^2 x^2 dx = \\frac{7}{3}</m>.  I don't know if you can do display math though.  Perhaps <md>\\int_1^2 x^2 dx = \\frac{7}{3}</md> will work?
   </p>
   <theorem>
     <title>My Theorem</title>

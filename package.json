@@ -1,8 +1,24 @@
 {
-  "name": "pretext-box-edit",
+  "name": "@pretextbook/editor",
+  "version": "0.0.1",
   "private": true,
-  "version": "0.0.0",
+  "description": "A web-based editor for PreTeXt documents, with simple preview functionality",
+  "keywords": [
+    "pretext",
+    "editor"
+  ],
+  "homepage": "https://github.com/oscarlevin/pretext-plus-editor#readme",
+  "bugs": {
+    "url": "https://github.com/oscarlevin/pretext-plus-editor/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oscarlevin/pretext-plus-editor.git"
+  },
+  "license": "MIT",
+  "author": "Oscar Levin",
   "type": "module",
+  "main": "index.html",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,6 +26,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.4",
     "@monaco-editor/react": "^4.7.0",
     "@reduxjs/toolkit": "^2.11.2",
     "@tiptap/extension-code-block": "^3.13.0",
