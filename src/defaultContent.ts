@@ -1,11 +1,5 @@
 
 const defaultContent:string = `
-  <title>My Document</title>
-  <introduction>
-  <p>
-    This is an introduction.  It can contain <term>terms</term> and <em>emphasis</em>.
-  </p>
-  </introduction>
   <section>
   <title>My Section</title>
   <p>
@@ -86,4 +80,13 @@ const defaultContent:string = `
   </section>
   `;
 
-export { defaultContent };
+const simpleContent:string = `
+  <section>
+  <title>My Section</title>
+  <p>
+    This is a paragraph.  It can contain <term>terms</term> and <em>emphasis</em>.
+  </p>
+  </section>
+  `;
+
+export { defaultContent, simpleContent };

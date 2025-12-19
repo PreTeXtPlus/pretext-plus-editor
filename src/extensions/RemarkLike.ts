@@ -4,26 +4,26 @@ import { ReactNodeViewRenderer } from "@tiptap/react";
 import { TheoremLikeComponent } from "../components/TheoremLike";
 import { generateInputRules } from "../utils";
 
-const AxiomLikeElements = [
-  "assumption",
-  "axiom",
-  "conjecture",
-  "heuristic",
-  "hypothesis",
-  "principle",
+const RemarkLikeElements = [
+  "convention",
+  "insight",
+  "note",
+  "observation",
+  "remark",
+  "warning",
 ];
 
-const AxiomLike = Extension.create({
-  name: "axiomLike",
+const RemarkLike = Extension.create({
+  name: "remarkLike",
 
   addExtensions() {
     const array = [];
-    for (const element of AxiomLikeElements) {
+    for (const element of RemarkLikeElements) {
       array.push(
         Node.create({
           name: element,
-          content: "title? statement",
-          group: "block axiomLike",
+          content: "title? BasicBlock+",
+          group: "block remarkLike",
           selectable: true,
           draggable: true,
           parseHTML() {
@@ -37,7 +37,7 @@ const AxiomLike = Extension.create({
             return [
               "article",
               mergeAttributes(
-                { class: `${element} axiom-like`, label: element },
+                { class: `${element} remark-like`, label: element },
                 HTMLAttributes
               ),
               0,
@@ -57,7 +57,7 @@ const AxiomLike = Extension.create({
   },
 });
 
-export default AxiomLike;
+export default RemarkLike;
 
 //addCommands() {
 //  return {
