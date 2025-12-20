@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Focus, Gapcursor, UndoRedo } from "@tiptap/extensions";
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Editor, Node } from "@tiptap/core";
 import { BulletList, OrderedList, ListItem } from '@tiptap/extension-list'
@@ -81,7 +81,6 @@ const extensions = [
   //  });
   //},
 ];
-//const defaultContent = '<p>Hello World</p>';
 
 interface VisualEditorProps {
   content: string;
@@ -177,7 +176,6 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
 
   const [isValid, setIsValid] = useState(true);
 
-  console.log("content:", content);
 
   const editor = useEditor({
     extensions,
@@ -189,20 +187,22 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     },
     enableContentCheck: true,
     onUpdate: ({ editor }) => {
-      console.log("VisualEditor: onUpdate");
-      console.log(JSON.stringify(editor.getJSON(), null, 2));
       onChange( json2ptx(editor.getJSON()) );
-      //vscode.postMessage({
-      //  type: 'update',
-      //  value: json2ptx(editor.getJSON())
-      //})
     }
   });
 
+
+  // The following will update the visual editor when there is an external change to the content.  
+  const isExternalUpdateRef = useRef(true);
+
   useEffect(() => {
-    if (editor && content !== editor.getHTML()) {
+    if (editor && content !== editor.getHTML() && isExternalUpdateRef.current) {
       const initialText = content;
+      console.log("Content changed, updating VisualEditor");
+      console.log("New content: ", initialText);
+      console.log("Current editor content: ", editor.getHTML());
       if (editor) {
+        console.log("Loading content into VisualEditor");
         try {
           editor.commands.setContent(cleanPtx(initialText), { emitUpdate: false });
           setIsValid(true);
@@ -210,70 +210,27 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
           console.error("Error setting content: ", error);
           setIsValid(false);
         }
-        // Always set editor to non-editable mode when first loading content
-        //if (editor.isEditable) {
-        //  editor.setEditable(false, false);
-        //}
       }
     }
   }, [content, editor]);
 
-  //useEffect(() => {
-  //  // Notify VS Code that the web panel is ready
-  //  //vscode.postMessage({ type: 'ready' });
+  useEffect(() => {
+    if (!editor) return;
 
-  //  const handleMessage = (event: MessageEvent) => {
-  //    console.log("Received message from extension");
-  //    const message = event.data; // The data that the extension sent
-  //    switch (message.type) {
-  //      case 'update':
-  //        const text = message.text;
+    const handleUpdate = () => {
+      isExternalUpdateRef.current = false;
+    };
 
-  //        if (editor) { // TODO: Add test to see if the contents have changed.
-  //          try {
-  //            editor.commands.setContent(cleanPtx(text), { emitUpdate: false });
-  //            console.log("JSON content: ", JSON.stringify(editor.getJSON(), null, 2));
-  //            console.log("HTML content: ", editor.getHTML());
-  //            console.log("PTX content: ", json2ptx(editor.getJSON()));
-  //            if (!editor.isEditable) {
-  //              editor.setEditable(true, false);
-  //            }
-  //            setIsValid(true);
-  //          } catch (error) {
-  //            console.error("Error setting content: ", error);
-  //            setIsValid(false);
-  //            if (editor.isEditable) {
-  //              editor.setEditable(false, false);
-  //            }
-  //          }
-  //        }
-  //        return;
-  //      case 'load':
-  //        const initialText = message.text;
-  //        if (editor) {
-  //          try {
-  //            editor.commands.setContent(cleanPtx(initialText), { emitUpdate: false });
-  //            setIsValid(true);
-  //          } catch (error) {
-  //            console.error("Error setting content: ", error);
-  //            setIsValid(false);
-  //          }
-  //          // Always set editor to non-editable mode when first loading content
-  //          if (editor.isEditable) {
-  //            editor.setEditable(false, false);
-  //          }
-  //        }
-  //    }
-  //  };
+    editor.on("update", handleUpdate);
+    return () => {
+      editor.off("update", handleUpdate);
+    };
+  }, [editor]);
 
-  //  //// Add the event listener
-  //  //window.addEventListener('message', handleMessage);
+  useEffect(() => {
+    isExternalUpdateRef.current = true;
+  }, [content]);
 
-  //  //// Cleanup the event listener on unmount
-  //  //return () => {
-  //  //  window.removeEventListener('message', handleMessage);
-  //  //};
-  //}, []); // Empty dependency array ensures this runs only once
 
   const [isEditable, setIsEditable] = useState(false);
 
@@ -287,15 +244,13 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
   return (
     <div className="editor-panel">
       <p>Simplified Preview</p>
-        {/* <p>
-          <label>
-            <input type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
-            Edit here
-          </label>
-        </p> */}
-      {/* <WarningMessage isValid={isValid} />
-      <MenuBar editor={editor} /> */}
+      <label style={{ textAlign: "right", paddingRight: "10px" }}>
+        <input type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
+        Edit
+      </label>
       <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
+      {/* <WarningMessage isValid={isValid} /> */}
+      {/* <MenuBar editor={editor} /> */}
         <EditorContent editor={editor} />
       </div>
       <PtxBubbleMenu editor={editor} />

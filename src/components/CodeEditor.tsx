@@ -22,6 +22,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+    const [isFocused, setIsFocused] = useState(false);
 
     const handleEditorMount = (editor: any, monaco: Monaco) => {
         editorRef.current = editor;
@@ -29,6 +30,15 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
         contentListenerRef.current?.dispose?.();
         contentListenerRef.current = editor.onDidChangeModelContent(() => {
             updateUndoRedoState();
+        });
+        // Subscribe to focus/blur events
+        editor.onDidFocusEditorWidget(() => {
+            console.log("Editor focused");
+            setIsFocused(true);
+        });
+        editor.onDidBlurEditorWidget(() => {
+            console.log("Editor blurred");
+            setIsFocused(false);
         });
         updateUndoRedoState();
     };
@@ -88,8 +98,12 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
                     value={content}
                     onMount={handleEditorMount}
                     onChange={(value) => {
-                        if (value !== content) {
+                        if (isFocused && value !== content) {
+                            console.log("Content changed via editor");
                             onChange(value || '');
+                        }
+                        else {
+                            console.log("Content change ignored (not focused or no change)");
                         }
                     }}
                 />
