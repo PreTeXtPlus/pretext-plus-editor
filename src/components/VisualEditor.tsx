@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Focus, Gapcursor, UndoRedo } from "@tiptap/extensions";
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Editor, Node } from "@tiptap/core";
 import { BulletList, OrderedList, ListItem } from '@tiptap/extension-list'
@@ -16,7 +16,6 @@ import RawPtx from "../extensions/RawPtx";
 import "../styles.scss";
 import { cleanPtx } from "../utils";
 import { json2ptx } from "../json2ptx";
-import { useState } from 'react';
 import { MenuBar } from "./MenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
@@ -175,7 +174,7 @@ interface VisualEditorProps {
 const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
 
   const [isValid, setIsValid] = useState(true);
-
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor({
     extensions,
@@ -187,10 +186,18 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     },
     enableContentCheck: true,
     onUpdate: ({ editor }) => {
-      onChange( json2ptx(editor.getJSON()) );
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => {
+        onChange(json2ptx(editor.getJSON()));
+      }, 500);
     }
   });
 
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
 
   // The following will update the visual editor when there is an external change to the content.  
   const isExternalUpdateRef = useRef(true);
@@ -198,11 +205,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
   useEffect(() => {
     if (editor && content !== editor.getHTML() && isExternalUpdateRef.current) {
       const initialText = content;
-      console.log("Content changed, updating VisualEditor");
-      console.log("New content: ", initialText);
-      console.log("Current editor content: ", editor.getHTML());
       if (editor) {
-        console.log("Loading content into VisualEditor");
         try {
           editor.commands.setContent(cleanPtx(initialText), { emitUpdate: false });
           setIsValid(true);

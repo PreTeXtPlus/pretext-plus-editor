@@ -24,8 +24,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(content, 'application/xml');
             
-            if (xmlDoc.parseError) {
-                alert('Invalid XML: ' + xmlDoc.parseError.reason);
+            if (xmlDoc.documentElement.nodeName === 'parsererror') {
+                alert('Invalid XML: ' + xmlDoc.documentElement.textContent);
                 return;
             }
 

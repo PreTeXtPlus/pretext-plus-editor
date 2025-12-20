@@ -1,5 +1,5 @@
 import { Editor } from '@monaco-editor/react';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Monaco } from '@monaco-editor/react';
 import CodeEditorMenu from './CodeEditorMenu';
 
@@ -20,9 +20,17 @@ let options = {
 const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     const editorRef = useRef<any>(null);
     const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
-    const [isFocused, setIsFocused] = useState(false);
+    // const [isFocused, setIsFocused] = useState(false);
+
+    useEffect(() => {
+        return () => {
+            contentListenerRef.current?.dispose?.();
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+        };
+    }, []);
 
     const handleEditorMount = (editor: any, monaco: Monaco) => {
         editorRef.current = editor;
@@ -31,15 +39,15 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
         contentListenerRef.current = editor.onDidChangeModelContent(() => {
             updateUndoRedoState();
         });
-        // Subscribe to focus/blur events
-        editor.onDidFocusEditorWidget(() => {
-            console.log("Editor focused");
-            setIsFocused(true);
-        });
-        editor.onDidBlurEditorWidget(() => {
-            console.log("Editor blurred");
-            setIsFocused(false);
-        });
+        // // Subscribe to focus/blur events
+        // editor.onDidFocusEditorWidget(() => {
+        //     console.log("Editor focused");
+        //     setIsFocused(true);
+        // });
+        // editor.onDidBlurEditorWidget(() => {
+        //     console.log("Editor blurred");
+        //     setIsFocused(false);
+        // });
         updateUndoRedoState();
     };
 
@@ -98,13 +106,10 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
                     value={content}
                     onMount={handleEditorMount}
                     onChange={(value) => {
-                        if (isFocused && value !== content) {
-                            console.log("Content changed via editor");
-                            onChange(value || '');
-                        }
-                        else {
-                            console.log("Content change ignored (not focused or no change)");
-                        }
+                        if (debounceRef.current) clearTimeout(debounceRef.current);
+                        debounceRef.current = setTimeout(() => {
+                            handleContentChange(value || '');
+                        }, 500);
                     }}
                 />
             </div>

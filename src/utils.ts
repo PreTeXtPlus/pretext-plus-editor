@@ -26,6 +26,7 @@ import { whitespace } from "hast-util-whitespace";
 import type { ElementContent, Root, RootContent } from "xast"; // Import ElementContent type
 import { wrappingInputRule } from "@tiptap/core";
 import { KNOWN_TAGS } from "./knownTags";
+import { useEffect, useState } from "react";
 
 /*
  * Clean up incoming PreTeXt source to ensure all tags are ones that the visual editor can handle.
@@ -129,3 +130,4 @@ export function generateInputRules(prefix: string, nodeType: any) {
     }),
   ];
 }
+
