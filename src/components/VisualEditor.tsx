@@ -20,6 +20,7 @@ import { MenuBar } from "./MenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
 import { getCursorPos } from "../extensions/getCursorPos";
+import { formatPretext } from "@pretextbook/format";
 //import KeyboardCommands from "../extensions/Keyboard";
 
 
@@ -188,7 +189,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     onUpdate: ({ editor }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        onChange(json2ptx(editor.getJSON()));
+        onChange(formatPretext(json2ptx(editor.getJSON())));
       }, 500);
     }
   });
