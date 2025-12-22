@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
+import FullPreview from "./FullPreview";
 import Switcher from "./Switcher";
 
 import { defaultContent } from '../defaultContent';
@@ -16,7 +17,7 @@ const Editors = () => {
 
     let preview;
     if (showFull) {
-        preview = <div>Foo</div>
+        preview = <FullPreview content={content} />
     } else {
         preview = (
             <VisualEditor
