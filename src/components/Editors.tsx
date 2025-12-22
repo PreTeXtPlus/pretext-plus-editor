@@ -15,6 +15,7 @@ const Editors = () => {
     const [content, setContent] = useState(startingContent)
     const [showFull, setShowFull] = useState(false);
 
+    // `preview` will either be the visual editor or the full preview based on `showFull`
     let preview;
     if (showFull) {
         preview = <FullPreview content={content} />
