@@ -31,7 +31,11 @@ const FullPreview = ({ content }:FullPreviewProps) => {
   const preview = () => {
       const source = content;
       const title = "foobar";
-      const token = "sLL4EsTJ3s3RA3";
+      // @ts-ignore
+      let token:string = window.buildToken
+      if (token === undefined) {
+        token = import.meta.env.VITE_APP_BUILD_TOKEN
+      }
       const postData = { source: source, title: title, token: token };
       postToIframe('https://build.pretext.plus', postData, 'fullPreview');
   }
