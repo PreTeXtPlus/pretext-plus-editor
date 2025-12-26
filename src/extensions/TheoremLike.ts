@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import { Extension, Node, mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import {
@@ -18,8 +19,8 @@ const TheoremLikeElements = [
 const TheoremLike = Extension.create({
   name: "theoremLike",
 
-  addExtensions() {
-    const array = [];
+  addExtensions(): Extension[] {
+    const array: ReturnType<typeof Node.create>[] = [];
     for (const element of TheoremLikeElements) {
       array.push(
         Node.create({
@@ -53,7 +54,8 @@ const TheoremLike = Extension.create({
             return ReactNodeViewRenderer(TheoremLikeComponent);
           },
           addInputRules() {
-            return generateInputRules(element, this.type);
+            // cast `this` to any so TS accepts .type here
+            return generateInputRules(element, (this as any).type);
           },
         })
       );
@@ -84,12 +86,12 @@ const TheoremLike = Extension.create({
           return ReactNodeViewRenderer(ProofComponent);
         },
         addInputRules() {
-          return generateInputRules("proof", this.type);
+          return generateInputRules("proof", (this as any).type);
         },
       })
     );
 
-    return array; // Ensure an array is always returned
+    return array as Extension[];
   },
 });
 

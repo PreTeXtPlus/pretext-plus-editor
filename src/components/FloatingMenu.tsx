@@ -4,7 +4,7 @@ import React, { useEffect } from "react";
 
 
 export const PtxFloatingMenu = ({ editor }: { editor: Editor }) => {
-    const [isEditable, setIsEditable] = React.useState(true)
+    const [isEditable, ] = React.useState(true)
     useEffect(() => {
         if (editor) {
             editor.setEditable(isEditable)

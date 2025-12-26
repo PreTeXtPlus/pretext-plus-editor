@@ -12,7 +12,7 @@ const ExampleLike = Extension.create({
   name: "exampleLike",
 
   addExtensions() {
-    const array = [];
+    const array: ReturnType<typeof Node.create>[] = [];
     for (const element of ExampleLikeElements) {
       array.push(
         Node.create({

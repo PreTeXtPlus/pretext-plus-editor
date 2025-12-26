@@ -19,7 +19,7 @@ import { json2ptx } from "../json2ptx";
 //import { MenuBar } from "./TiptapMenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
-import { getCursorPos } from "../extensions/getCursorPos";
+//import { getCursorPos } from "../extensions/getCursorPos";
 import { formatPretext } from "@pretextbook/format";
 //import KeyboardCommands from "../extensions/Keyboard";
 

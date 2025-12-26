@@ -31,7 +31,8 @@ const FullPreview = ({ content }:FullPreviewProps) => {
   const preview = () => {
       const source = content;
       const title = "foobar";
-      // @ts-ignore
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error
       let token:string = window.buildToken
       if (token === undefined) {
         token = import.meta.env.VITE_APP_BUILD_TOKEN

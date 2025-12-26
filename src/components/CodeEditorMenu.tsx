@@ -1,6 +1,6 @@
 import React from 'react';
 import './CodeEditorMenu.css';
-import { formatPretext } from '@pretextbook/format';
+//import { formatPretext } from '@pretextbook/format';
 
 interface CodeEditorMenuProps {
     content: string;
@@ -12,8 +12,8 @@ interface CodeEditorMenuProps {
 }
 
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
-    content,
-    onContentChange,
+    //content,
+    //onContentChange,
     onUndo,
     onRedo,
     canUndo,

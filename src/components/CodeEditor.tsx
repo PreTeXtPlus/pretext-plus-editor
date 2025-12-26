@@ -1,7 +1,7 @@
 import { Editor } from '@monaco-editor/react';
 import { useState, useRef, useEffect } from 'react';
-import type { Monaco } from '@monaco-editor/react';
-import CodeEditorMenu from './CodeEditorMenu';
+//import type { Monaco } from '@monaco-editor/react';
+//import CodeEditorMenu from './CodeEditorMenu';
 
 interface CodeEditorProps {
     content: string;
@@ -22,8 +22,8 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     const editorRef = useRef<any>(null);
     const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const [canUndo, setCanUndo] = useState(false);
-    const [canRedo, setCanRedo] = useState(false);
+    const [, setCanUndo] = useState(false);
+    const [, setCanRedo] = useState(false);
     // const [isFocused, setIsFocused] = useState(false);
 
     useEffect(() => {
@@ -33,7 +33,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
         };
     }, []);
 
-    const handleEditorMount = (editor: any, monaco: Monaco) => {
+    const handleEditorMount = (editor: any) => {
         editorRef.current = editor;
         // Subscribe to content changes to refresh undo/redo availability
         contentListenerRef.current?.dispose?.();
@@ -69,19 +69,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
         setCanRedo(hasEditor);
     };
 
-    const handleUndo = () => {
-        if (editorRef.current) {
-            editorRef.current.trigger('keyboard', 'undo', null);
-            updateUndoRedoState();
-        }
-    };
 
-    const handleRedo = () => {
-        if (editorRef.current) {
-            editorRef.current.trigger('keyboard', 'redo', null);
-            updateUndoRedoState();
-        }
-    };
 
     const handleContentChange = (newContent: string) => {
         onChange(newContent);

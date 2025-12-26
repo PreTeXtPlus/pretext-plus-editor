@@ -1,4 +1,4 @@
-import { toggleMenu } from "../components/VisualEditor";
+import toggleMenu from "../components/VisualEditor";
 import { getCursorPos } from "./getCursorPos";
 import { Extension } from "@tiptap/core";
 
@@ -73,7 +73,12 @@ const KeyboardCommands = Extension.create({
           this.editor.commands.setHardBreak();
           return true;
         } else {
-          toggleMenu();
+          toggleMenu({
+            content: JSON.stringify(this.editor.getJSON()),
+            onChange: (newContent) => {
+              this.editor.commands.setContent(newContent);
+            }
+          });
           return true;
           //           this.editor.commands.focus(cursor.pos()+1,true);
           //           return true

@@ -17,43 +17,38 @@ const RemarkLike = Extension.create({
   name: "remarkLike",
 
   addExtensions() {
-    const array = [];
-    for (const element of RemarkLikeElements) {
-      array.push(
-        Node.create({
-          name: element,
-          content: "title? BasicBlock+",
-          group: "block remarkLike",
-          selectable: true,
-          draggable: true,
-          parseHTML() {
-            return [
-              {
-                tag: element,
-              },
-            ];
-          },
-          renderHTML({ HTMLAttributes }) {
-            return [
-              "article",
-              mergeAttributes(
-                { class: `${element} remark-like`, label: element },
-                HTMLAttributes
-              ),
-              0,
-            ];
-          },
-          addNodeView() {
-            return ReactNodeViewRenderer(TheoremLikeComponent);
-          },
-          addInputRules() {
-            return generateInputRules(element, this.type);
-          },
-        })
-      );
-    }
-
-    return array;
+    return RemarkLikeElements.map((element) =>
+      Node.create({
+        name: element,
+        content: "title? BasicBlock+",
+        group: "block remarkLike",
+        selectable: true,
+        draggable: true,
+        parseHTML() {
+          return [
+            {
+              tag: element,
+            },
+          ];
+        },
+        renderHTML({ HTMLAttributes }) {
+          return [
+            "article",
+            mergeAttributes(
+              { class: `${element} remark-like`, label: element },
+              HTMLAttributes
+            ),
+            0,
+          ];
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(TheoremLikeComponent);
+        },
+        addInputRules() {
+          return generateInputRules(element, this.type);
+        },
+      })
+    );
   },
 });
 

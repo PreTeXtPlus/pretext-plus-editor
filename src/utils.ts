@@ -26,7 +26,7 @@ import { whitespace } from "hast-util-whitespace";
 import type { ElementContent, Root, RootContent } from "xast"; // Import ElementContent type
 import { wrappingInputRule } from "@tiptap/core";
 import { KNOWN_TAGS } from "./knownTags";
-import { useEffect, useState } from "react";
+//import { useEffect, useState } from "react";
 
 /*
  * Clean up incoming PreTeXt source to ensure all tags are ones that the visual editor can handle.
@@ -65,10 +65,9 @@ export function cleanPtx(origXml: string) {
 }
 
 export function ptxToJson(xml: string) {
-  let json = {};
   const tree = fromXml(xml);
   console.log(JSON.stringify(buildJsonFromTree(tree), null, 2));
-  return json;
+  return JSON.stringify(buildJsonFromTree(tree), null, 2);
 }
 
 function buildJsonFromTree(tree: Root | RootContent) {

@@ -17,7 +17,7 @@ const AxiomLike = Extension.create({
   name: "axiomLike",
 
   addExtensions() {
-    const array = [];
+    const array: ReturnType<typeof Node.create>[] = [];
     for (const element of AxiomLikeElements) {
       array.push(
         Node.create({

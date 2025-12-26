@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 import { Editor, useEditorState } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import React, { useEffect } from "react";
@@ -10,8 +11,8 @@ export const PtxBubbleMenu = ({ editor }: { editor: Editor }) => {
         return null;
     }
 
-    const [showMenu, setShowMenu] = React.useState(true)
-    const [isEditable, setIsEditable] = React.useState(true)
+    const [showMenu] = React.useState(true)
+    const [isEditable] = React.useState(true)
 
     useEffect(() => {
         if (editor) {
