@@ -8,7 +8,8 @@ interface CodeEditorProps {
     onChange: (value: string | undefined) => void;
 }
 
-let options = {
+const options = {
+    theme: 'vs-light',
     automaticLayout: true,
     minimap: { enabled: false },
     wordWrap: 'on' as const,
@@ -88,14 +89,14 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-            <CodeEditorMenu
+            {/*<CodeEditorMenu
                 content={content}
                 onContentChange={handleContentChange}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
                 canUndo={canUndo}
                 canRedo={canRedo}
-            />
+            />*/}
             <div style={{ flex: 1, width: '100%' }}>
                 <Editor
                     options={options}

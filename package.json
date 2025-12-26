@@ -1,11 +1,12 @@
 {
-  "name": "@pretextbook/editor",
+  "name": "@pretextbook/web-editor",
   "version": "0.0.1",
-  "private": true,
+  "private": false,
   "description": "A web-based editor for PreTeXt documents, with simple preview functionality",
   "keywords": [
     "pretext",
-    "editor"
+    "editor",
+    "tiptap"
   ],
   "homepage": "https://github.com/oscarlevin/pretext-plus-editor#readme",
   "bugs": {
@@ -30,6 +31,7 @@
     "@monaco-editor/react": "^4.7.0",
     "@pretextbook/format": "^0.0.5",
     "@reduxjs/toolkit": "^2.11.2",
+    "@tailwindcss/vite": "^4.1.18",
     "@tiptap/extension-code-block": "^3.14.0",
     "@tiptap/extension-hard-break": "^3.14.0",
     "@tiptap/extension-list": "^3.14.0",
@@ -44,6 +46,7 @@
     "primereact": "^10.9.7",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
+    "tailwindcss": "^4.1.18",
     "unist-util-visit": "^5.0.0",
     "xast-util-from-xml": "^4.0.0",
     "xast-util-to-xml": "^4.0.0"

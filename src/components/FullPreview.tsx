@@ -42,9 +42,17 @@ const FullPreview = ({ content }:FullPreviewProps) => {
 
   return (
     <div className="editor-panel">
-      <p>Full Preview <button onClick={() => preview()}>Build</button></p>
+      <div className="relative mb-2 flex items-center justify-center pt-2">
+        <p className="text-base font-medium m-0 text-center">Full Preview</p>
+        <button
+          className="absolute right-0 rounded-sm px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+          onClick={() => preview()}
+        >
+          Rebuild
+        </button>
+      </div>
       <div>
-        <iframe 
+        <iframe
           style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '70vh' }}
           name="fullPreview"
           src="https://build.pretext.plus" />
