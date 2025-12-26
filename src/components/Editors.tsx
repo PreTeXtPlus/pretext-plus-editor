@@ -4,14 +4,13 @@ import { useState } from "react";
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
 import FullPreview from "./FullPreview";
-import Switcher from "./Switcher";
+import MenuBar from "./MenuBar";
 
 import { defaultContent } from '../defaultContent';
 
 const startingContent = defaultContent;
 
 export interface editorProps {
-    // You can add props here if needed in the future
     content: string;
     onContentChange: (value: string | undefined) => void;
     title?: string;
@@ -46,17 +45,19 @@ const Editors = (props: editorProps) => {
 
     return (
         <div>
-            Title: <input type="text" value={title} onChange={(e) => {
-                setTitle(e.target.value);
-                props.onTitleChange?.(e.target.value);
-            }} />
-            <Switcher isChecked={showFull} onChange={() => setShowFull(!showFull)} />
-            {props.onSaveButton && (
-                <button onClick={props.onSaveButton}>{props.saveButtonLabel || 'Save'}</button>
-            )}
-            {props.onCancelButton && (
-                <button onClick={props.onCancelButton}>{props.cancelButtonLabel || 'Cancel'}</button>
-            )}
+            <MenuBar 
+                isChecked={showFull} 
+                onChange={() => setShowFull(!showFull)}
+                title={title}
+                onTitleChange={(value) => {
+                    setTitle(value);
+                    props.onTitleChange?.(value);
+                }}
+                onSaveButton={props.onSaveButton}
+                saveButtonLabel={props.saveButtonLabel}
+                onCancelButton={props.onCancelButton}
+                cancelButtonLabel={props.cancelButtonLabel}
+            />
             <Splitter style={{height: '80vh', width: '98vw'}}>
                 <SplitterPanel className="flex">
                     <CodeEditor

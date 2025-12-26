@@ -2,7 +2,7 @@
 import { Focus, Gapcursor, UndoRedo } from "@tiptap/extensions";
 import { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from "@tiptap/react";
-import { Editor, Node } from "@tiptap/core";
+import { Node } from "@tiptap/core";
 import { BulletList, OrderedList, ListItem } from '@tiptap/extension-list'
 import { MathDisplay, MathEquation, MathInline } from "../extensions/Math";
 import "katex/dist/katex.min.css";
@@ -16,7 +16,7 @@ import RawPtx from "../extensions/RawPtx";
 import "../styles.scss";
 import { cleanPtx } from "../utils";
 import { json2ptx } from "../json2ptx";
-import { MenuBar } from "./MenuBar";
+//import { MenuBar } from "./TiptapMenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
 import { getCursorPos } from "../extensions/getCursorPos";
@@ -87,85 +87,85 @@ interface VisualEditorProps {
   onChange: (html: string) => void;
 }
 
-const WarningMessage: React.FC<{ isValid: boolean }> = ({ isValid }) => {
-  if (!isValid) {
-    return (
-      <div className="warning-message">
-        <p>
-          Warning: PreTeXt source contains a schema error. You will not be able to edit the content on this panel until that is fixed.
-        </p>
-      </div>
-    );
-  } else {
-    return null;
-  }
-};
+//const WarningMessage: React.FC<{ isValid: boolean }> = ({ isValid }) => {
+//  if (!isValid) {
+//    return (
+//      <div className="warning-message">
+//        <p>
+//          Warning: PreTeXt source contains a schema error. You will not be able to edit the content on this panel until that is fixed.
+//        </p>
+//      </div>
+//    );
+//  } else {
+//    return null;
+//  }
+//};
 
 
-const InfoMessage = ({ editor }: { editor: Editor }) => {
-  const [cursorInfo, setCursorInfo] = useState({
-    pos: 0,
-    parentType: "",
-    depth: 0,
-    prevNodeIsText: false,
-    nextNodeIsText: false,
-    prevNodeSize: 0,
-    nextNodeSize: 0,
-    inTextNode: false,
-    location: "",
-    parentTypeAlt: "",
-  });
+//const InfoMessage = ({ editor }: { editor: Editor }) => {
+//  const [cursorInfo, setCursorInfo] = useState({
+//    pos: 0,
+//    parentType: "",
+//    depth: 0,
+//    prevNodeIsText: false,
+//    nextNodeIsText: false,
+//    prevNodeSize: 0,
+//    nextNodeSize: 0,
+//    inTextNode: false,
+//    location: "",
+//    parentTypeAlt: "",
+//  });
 
-  useEffect(() => {
-    if (!editor) return;
+//  useEffect(() => {
+//    if (!editor) return;
 
-    const updateCursorInfo = () => {
-      const cursor = getCursorPos(editor);
-      const altCursor = editor.state.selection.$anchor;
-      const location = `Line: ${altCursor.start()} Column: ${altCursor.parentOffset}`;
-      setCursorInfo({
-        pos: cursor.pos(),
-        parentType: cursor.parentType(),
-        depth: cursor.depth(),
-        prevNodeIsText: cursor.prevNodeIsText(),
-        nextNodeIsText: cursor.nextNodeIsText(),
-        prevNodeSize: cursor.prevNodeSize(),
-        nextNodeSize: cursor.nextNodeSize(),
-        inTextNode: cursor.inTextNode(),
-        location,
-        parentTypeAlt: altCursor.parent.type.name,
-      });
-    };
+//    const updateCursorInfo = () => {
+//      const cursor = getCursorPos(editor);
+//      const altCursor = editor.state.selection.$anchor;
+//      const location = `Line: ${altCursor.start()} Column: ${altCursor.parentOffset}`;
+//      setCursorInfo({
+//        pos: cursor.pos(),
+//        parentType: cursor.parentType(),
+//        depth: cursor.depth(),
+//        prevNodeIsText: cursor.prevNodeIsText(),
+//        nextNodeIsText: cursor.nextNodeIsText(),
+//        prevNodeSize: cursor.prevNodeSize(),
+//        nextNodeSize: cursor.nextNodeSize(),
+//        inTextNode: cursor.inTextNode(),
+//        location,
+//        parentTypeAlt: altCursor.parent.type.name,
+//      });
+//    };
 
-    updateCursorInfo();
+//    updateCursorInfo();
 
-    editor.on("selectionUpdate", updateCursorInfo);
+//    editor.on("selectionUpdate", updateCursorInfo);
 
-    return () => {
-      editor.off("selectionUpdate", updateCursorInfo);
-    };
-  }, [editor]);
+//    return () => {
+//      editor.off("selectionUpdate", updateCursorInfo);
+//    };
+//  }, [editor]);
 
 
 
-  return (
-    <div className="info">
-      <p>Debugging Info:</p>
-      <ul>
-        <li>Position: {cursorInfo.pos}</li>
-        <li>Parent Type: {cursorInfo.parentType}</li>
-        <li>Depth: {cursorInfo.depth}</li>
-        <li>Node before is text? {cursorInfo.prevNodeIsText ? "Yes" : "No"}</li>
-        <li>Node after is text? {cursorInfo.nextNodeIsText ? "Yes" : "No"}</li>
-        <li>Previous node size: {cursorInfo.prevNodeSize}</li>
-        <li>Next node size: {cursorInfo.nextNodeSize}</li>
-        <li>In text node? {cursorInfo.inTextNode ? "Yes" : "No"}</li>
-        <li>Location: {cursorInfo.location}</li>
-        <li>Parent type: {cursorInfo.parentTypeAlt}</li>
-      </ul>
-    </div>
-  );
-};
+//  return (
+//    <div className="info">
+//      <p>Debugging Info:</p>
+//      <ul>
+//        <li>Position: {cursorInfo.pos}</li>
+//        <li>Parent Type: {cursorInfo.parentType}</li>
+//        <li>Depth: {cursorInfo.depth}</li>
+//        <li>Node before is text? {cursorInfo.prevNodeIsText ? "Yes" : "No"}</li>
+//        <li>Node after is text? {cursorInfo.nextNodeIsText ? "Yes" : "No"}</li>
+//        <li>Previous node size: {cursorInfo.prevNodeSize}</li>
+//        <li>Next node size: {cursorInfo.nextNodeSize}</li>
+//        <li>In text node? {cursorInfo.inTextNode ? "Yes" : "No"}</li>
+//        <li>Location: {cursorInfo.location}</li>
+//        <li>Parent type: {cursorInfo.parentTypeAlt}</li>
+//      </ul>
+//    </div>
+//  );
+//};
 
 interface VisualEditorProps {
   content: string;
@@ -174,7 +174,7 @@ interface VisualEditorProps {
 
 const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
 
-  const [isValid, setIsValid] = useState(true);
+  //const [isValid, setIsValid] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const editor = useEditor({
@@ -209,10 +209,10 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
       if (editor) {
         try {
           editor.commands.setContent(cleanPtx(initialText), { emitUpdate: false });
-          setIsValid(true);
+          //setIsValid(true);
         } catch (error) {
           console.error("Error setting content: ", error);
-          setIsValid(false);
+          //setIsValid(false);
         }
       }
     }
@@ -247,11 +247,14 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
 
   return (
     <div className="editor-panel">
-      <p>Simplified Preview</p>
-      <label style={{ textAlign: "right", paddingRight: "10px" }}>
-        <input type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
-        Edit
+      <div className="relative mb-2 flex items-center justify-center pt-2">
+        <p className="text-base font-medium m-0 text-center">Simple Preview</p>
+        <label className="absolute right-0 font-semibold">
+        <input className="mr-2"
+        type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
+          Edit
       </label>
+      </div>
       <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
       {/* <WarningMessage isValid={isValid} /> */}
       {/* <MenuBar editor={editor} /> */}
