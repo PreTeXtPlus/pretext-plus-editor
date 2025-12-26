@@ -27,8 +27,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.es.js",
       "require": "./dist/index.js"
-    }
+    },
+    "./dist/web-editor.css": "./dist/web-editor.css",
+    "./web-editor.css": "./dist/web-editor.css"
   },
+  "style": "./dist/web-editor.css",
   "files": [
     "dist"
   ],
@@ -38,7 +41,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build --mode lib",
+    "build": "tsc -p tsconfig.build.json && vite build --mode lib",
     "build:demo": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
