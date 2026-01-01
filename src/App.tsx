@@ -9,7 +9,7 @@ import { defaultContent } from './defaultContent';
 import { useState } from 'react';
 
 const handlePreviewRebuild = async (content: string, title: string, postToIframe: (url: string, data: any) => void) => {
-  const token = "y8outLjx9YRm5r"; // In real usage, get a valid token from your backend
+  const token = "demo"; // In real usage, get a valid token from your backend
   const postData = { source: content, title: title, token: token };
   postToIframe('https://build.pretext.plus', postData);
 }
