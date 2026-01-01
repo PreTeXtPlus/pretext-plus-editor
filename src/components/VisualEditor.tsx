@@ -16,6 +16,7 @@ import RawPtx from "../extensions/RawPtx";
 import "../styles.scss";
 import { cleanPtx } from "../utils";
 import { json2ptx } from "../json2ptx";
+import './VisualEditor.css';
 //import { MenuBar } from "./TiptapMenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
@@ -246,11 +247,11 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     , [editor, isEditable]);
 
   return (
-    <div className="editor-panel">
-      <div className="relative mb-2 flex items-center justify-center pt-2">
-        <p className="text-base font-medium m-0 text-center">Simple Preview</p>
-        <label className="absolute right-0 font-semibold">
-        <input className="mr-2"
+    <div className="pretext-plus-editor__visual-editor">
+      <div className="pretext-plus-editor__visual-editor-header">
+        <p className="pretext-plus-editor__visual-editor-title">Simple Preview</p>
+        <label className="pretext-plus-editor__edit-toggle">
+        <input className="pretext-plus-editor__edit-checkbox"
         type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
           Edit
       </label>
