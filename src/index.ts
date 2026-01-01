@@ -1,4 +1,7 @@
 // Main entry point for the npm package
+// Import styles to ensure they are bundled
+import './index.css';
+
 export { default as Editors } from './components/Editors';
 export type { editorProps } from './components/Editors';
 

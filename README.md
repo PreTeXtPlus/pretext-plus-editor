@@ -40,14 +40,20 @@ export default App;
 
 ### Styling
 
-The editor includes CSS styles that must be imported. You have two options:
+**Important:** This package uses Tailwind CSS internally, but **all styles are pre-compiled and bundled** in the CSS file. You don't need to install or configure Tailwind CSS in your project.
 
-**Option 1: Import the CSS file directly** (recommended)
+Simply import the CSS file:
+
 ```tsx
 import '@pretextbook/web-editor/dist/web-editor.css';
 ```
 
-**Option 2: Import in your CSS file**
+Or in your CSS file:
+```css
+@import '@pretextbook/web-editor/dist/web-editor.css';
+```
+
+All button styles, layout, and MenuBar styling will work automatically without any additional setup.
 ```css
 @import '@pretextbook/web-editor/dist/web-editor.css';
 ```

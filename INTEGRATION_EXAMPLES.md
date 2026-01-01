@@ -202,14 +202,18 @@ export default App;
 
 ## With Tailwind CSS
 
+**Note:** This package already includes all Tailwind styles bundled in the CSS file. You do **NOT** need to install Tailwind CSS in your project. The example below shows how the editor works alongside your own Tailwind setup:
+
 ```tsx
-import '@tailwindcss/vite'; // or your tailwind setup
+// No need for: import '@tailwindcss/vite';
 import { Editors } from '@pretextbook/web-editor';
 import '@pretextbook/web-editor/dist/web-editor.css';
 
 export default function Editor() {
   return (
+    // You can use YOUR Tailwind classes here
     <div className="h-screen w-full flex flex-col">
+      {/* The editor's buttons and styling work automatically */}
       <Editors
         content=""
         onContentChange={() => {}}
