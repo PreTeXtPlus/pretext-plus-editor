@@ -30,7 +30,7 @@ const Editors = (props: editorProps) => {
     // `preview` will either be the visual editor or the full preview based on `showFull`
     let preview;
     if (showFull) {
-        preview = <FullPreview content={content} />
+        preview = <FullPreview content={content} title={title} />
     } else {
         preview = (
             <VisualEditor

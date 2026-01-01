@@ -1,8 +1,9 @@
 interface FullPreviewProps {
   content: string;
+  title?: string;
 }
 
-const FullPreview = ({ content }:FullPreviewProps) => {
+const FullPreview = ({ content, title }:FullPreviewProps) => {
   const postToIframe = (url:string, data:any, iframeName:string) => {
     // Create a temporary form element
     const form = document.createElement('form');
@@ -30,14 +31,14 @@ const FullPreview = ({ content }:FullPreviewProps) => {
 
   const preview = () => {
       const source = content;
-      const title = "foobar";
+      const previewTitle = title || "Document Title";
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-expect-error
       let token:string = window.buildToken
       if (token === undefined) {
         token = import.meta.env.VITE_APP_BUILD_TOKEN
       }
-      const postData = { source: source, title: title, token: token };
+      const postData = { source: source, title: previewTitle, token: token };
       postToIframe('https://build.pretext.plus', postData, 'fullPreview');
   }
 
