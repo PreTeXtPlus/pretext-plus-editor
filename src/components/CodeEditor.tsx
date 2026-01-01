@@ -9,7 +9,6 @@ interface CodeEditorProps {
 }
 
 const options = {
-    theme: 'vs-light',
     automaticLayout: true,
     minimap: { enabled: false },
     wordWrap: 'on' as const,
@@ -90,7 +89,6 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
                     options={options}
                     width="100%"
                     height="100%"
-                    theme="vs-dark"
                     language="xml"
                     value={content}
                     onMount={handleEditorMount}

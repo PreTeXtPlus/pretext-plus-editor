@@ -1,0 +1,26 @@
+/* Pretext Plus Editor - Root namespace for all editor styles */
+
+.pretext-plus-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+/* Splitter container */
+.pretext-plus-editor__splitter {
+  height: 80vh;
+  width: 98vw;
+}
+
+/* Editor panel (code editor) */
+.pretext-plus-editor__editor-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Preview panel (visual or full preview) */
+.pretext-plus-editor__preview-panel {
+  display: flex;
+  flex-direction: column;
+}

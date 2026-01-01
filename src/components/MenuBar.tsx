@@ -7,17 +7,62 @@ export interface MenuBarProps {
     saveButtonLabel?: string;
     onCancelButton?: () => void;
     cancelButtonLabel?: string;
+    showPreviewModeToggle?: boolean;
 }
 
+import './MenuBar.css';
+
 const MenuBar = (props: MenuBarProps) => {
+    let previewModeToggle;
+    if (props.showPreviewModeToggle === false) {
+        previewModeToggle = null;
+    } else {
+        previewModeToggle = (
+            <label className='pretext-plus-editor__preview-toggle'>
+                <input
+                    type='checkbox'
+                    checked={!props.isChecked}
+                    onChange={props.onChange}
+                    className='pretext-plus-editor__preview-toggle-input'
+                />
+                <div className='pretext-plus-editor__preview-toggle-container'>
+                    <span className='pretext-plus-editor__preview-toggle-label'>
+                        Simple
+                    </span>
+                    <span
+                        className={`pretext-plus-editor__preview-toggle-slider ${
+                            props.isChecked ? 'pretext-plus-editor__preview-toggle-slider--active' : ''
+                        }`}
+                    >
+                        <span
+                            className={`pretext-plus-editor__preview-toggle-dot ${
+                                props.isChecked ? 'pretext-plus-editor__preview-toggle-dot--active' : ''
+                            }`}
+                        ></span>
+                    </span>
+                    <span className='pretext-plus-editor__preview-toggle-label'>
+                        Full
+                    </span>
+                </div>
+                <span className='pretext-plus-editor__preview-toggle-caption'>Preview Mode</span>
+                <input
+                    type='checkbox'
+                    checked={props.isChecked}
+                    onChange={props.onChange}
+                    className='pretext-plus-editor__preview-toggle-input'
+                />
+            </label>
+        );
+    }
+
     return (
-        <div className="flex items-center justify-between p-4 bg-gray-100 border-b border-gray-300">
-          <div className="left-side flex items-center space-x-4">
+        <div className="pretext-plus-editor__menu-bar">
+          <div className="pretext-plus-editor__menu-left">
             {props.title !== undefined && props.onTitleChange && (
-                <label className="inline-block font-semibold pr-4">
+                <label className="pretext-plus-editor__title-label">
                     Title{' '}
                     <input
-                        className="w-[40vw] p-2 inline-block shadow-sm rounded-md border font-mono border-gray-400 focus:outline-blue-600"
+                        className="pretext-plus-editor__title-input"
                         type='text'
                         value={props.title}
                         onChange={(e) => props.onTitleChange?.(e.target.value)}
@@ -25,52 +70,19 @@ const MenuBar = (props: MenuBarProps) => {
                 </label>
             )}
             </div>
-            <div className="right-side flex items-center space-x-4">
+            <div className="pretext-plus-editor__menu-right">
 
             {props.onSaveButton && (
                 <button
-                className="w-full sm:w-auto rounded-md px-3.5 py-2.5 !bg-green-600 hover:!bg-green-700 !text-white inline-block font-medium cursor-pointer"
+                className="pretext-plus-editor__button pretext-plus-editor__button--save"
                 onClick={props.onSaveButton}>{props.saveButtonLabel || 'Save'}</button>
             )}
             {props.onCancelButton && (
                 <button
-                className="w-full sm:w-auto rounded-md px-3.5 py-2.5 !bg-gray-300 hover:!bg-gray-400 !text-black inline-block font-medium cursor-pointer ml-4"
+                className="pretext-plus-editor__button pretext-plus-editor__button--cancel"
                 onClick={props.onCancelButton}>{props.cancelButtonLabel || 'Cancel'}</button>
             )}
-            <label className='relative inline-flex cursor-pointer select-none items-center flex-col'>
-                <input
-                    type='checkbox'
-                    checked={!props.isChecked}
-                    onChange={props.onChange}
-                    className='sr-only'
-                />
-                <div className='flex items-center gap-2'>
-                    <span className='label flex items-center justify-center text-sm font-medium w-14'>
-                        Simple
-                    </span>
-                    <span
-                        className={`slider flex h-6 w-[48px] items-center rounded-full p-1 duration-200 ${
-                            props.isChecked ? 'bg-[#212b36]' : 'bg-[#CCCCCE]'
-                        }`}
-                    >
-                        <span
-                            className={`dot h-4 w-4 rounded-full bg-white duration-200 ${
-                                props.isChecked ? 'translate-x-[20px]' : ''
-                            }`}
-                        ></span>
-                    </span>
-                    <span className='label flex items-center justify-center text-sm font-medium w-14'>
-                        Full
-                    </span>
-                </div>
-                <span className='mt-1 text-xs font-medium text-gray-600 text-center'>Preview Mode</span>
-                <input
-                    type='checkbox'
-                    checked={props.isChecked}
-                    onChange={props.onChange}
-                    className='sr-only'
-                />
-            </label>
+            {previewModeToggle}
         </div>
         </div>
     )
