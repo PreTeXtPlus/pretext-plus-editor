@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import './FullPreview.css';
 
 interface FullPreviewProps {
@@ -34,6 +34,9 @@ export const postToIframe = (url: string, data: any, iframeName: string) => {
 };
 
 const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
   // Trigger rebuild automatically when component mounts (when switching to full preview)
   useEffect(() => {
     preview();
@@ -42,6 +45,8 @@ const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
   const preview = () => {
       const source = content;
       const previewTitle = title || "Document Title";
+      
+      setIsRebuilding(true);
       
       // If consumer provided a custom rebuild handler, use it
       if (onRebuild) {
@@ -53,6 +58,10 @@ const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
         return;
       }
   }
+
+  const handleIframeLoad = () => {
+    setIsRebuilding(false);
+  };
 
   return (
     <div className="pretext-plus-editor__full-preview">
@@ -66,9 +75,19 @@ const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
         </button>
       </div>
       <div className="pretext-plus-editor__preview-container">
+        {isRebuilding && (
+          <div className="pretext-plus-editor__rebuilding-overlay">
+            <div className="pretext-plus-editor__rebuilding-popup">
+              <div className="pretext-plus-editor__spinner"></div>
+              <p className="pretext-plus-editor__rebuilding-text">Rebuilding...</p>
+            </div>
+          </div>
+        )}
         <iframe
+          ref={iframeRef}
           className="pretext-plus-editor__preview-iframe"
           name="fullPreview"
+          onLoad={handleIframeLoad}
         />
       </div>
     </div>
