@@ -5,6 +5,7 @@ import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
 import FullPreview from "./FullPreview";
 import MenuBar from "./MenuBar";
+import './Editors.css';
 
 import { defaultContent } from '../defaultContent';
 
@@ -19,6 +20,7 @@ export interface editorProps {
     saveButtonLabel?: string;
     onCancelButton?: () => void;
     cancelButtonLabel?: string;
+    onPreviewRebuild?: (content: string, title: string, postToIframe: (url: string, data: any) => void) => void;
 }
 
 const Editors = (props: editorProps) => {
@@ -29,8 +31,12 @@ const Editors = (props: editorProps) => {
 
     // `preview` will either be the visual editor or the full preview based on `showFull`
     let preview;
-    if (showFull) {
-        preview = <FullPreview content={content} title={title} />
+    if (showFull && props.onPreviewRebuild) {
+        preview = <FullPreview 
+            content={content} 
+            title={title} 
+            onRebuild={props.onPreviewRebuild}
+        />
     } else {
         preview = (
             <VisualEditor
@@ -44,7 +50,7 @@ const Editors = (props: editorProps) => {
     }
 
     return (
-        <div>
+        <div className="pretext-plus-editor">
             <MenuBar 
                 isChecked={showFull} 
                 onChange={() => setShowFull(!showFull)}
@@ -57,9 +63,10 @@ const Editors = (props: editorProps) => {
                 saveButtonLabel={props.saveButtonLabel}
                 onCancelButton={props.onCancelButton}
                 cancelButtonLabel={props.cancelButtonLabel}
+                showPreviewModeToggle={props.onPreviewRebuild !== undefined}
             />
-            <Splitter style={{height: '80vh', width: '98vw'}}>
-                <SplitterPanel className="flex">
+            <Splitter className="pretext-plus-editor__splitter">
+                <SplitterPanel className="pretext-plus-editor__editor-panel">
                     <CodeEditor
                     content={content}
                     onChange={( content ) => {
@@ -68,12 +75,10 @@ const Editors = (props: editorProps) => {
                     }}
                     />
                 </SplitterPanel>
-                <SplitterPanel className="flex">
+                <SplitterPanel className="pretext-plus-editor__preview-panel">
                     {preview}
                 </SplitterPanel>
             </Splitter>
-            {/* A text area to communicate with the database */}
-            <textarea value={content} readOnly style={{display: 'none', width: '98vw', height: '20vh', marginTop: '10px'}}></textarea>
         </div>
     )
 }

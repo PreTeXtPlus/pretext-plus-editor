@@ -1,63 +1,75 @@
+import { useEffect } from 'react';
+import './FullPreview.css';
+
 interface FullPreviewProps {
   content: string;
   title?: string;
+  onRebuild: (content: string, title: string, postToIframe: (url: string, data: any) => void) => void;
 }
 
-const FullPreview = ({ content, title }:FullPreviewProps) => {
-  const postToIframe = (url:string, data:any, iframeName:string) => {
-    // Create a temporary form element
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = url;
-    form.target = iframeName; // This must match the iframe's 'name' attribute
-    form.style.display = 'none'; // Keep it hidden
+// Utility function to POST data to an iframe
+export const postToIframe = (url: string, data: any, iframeName: string) => {
+  // Create a temporary form element
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = url;
+  form.target = iframeName; // This must match the iframe's 'name' attribute
+  form.style.display = 'none'; // Keep it hidden
 
-    // Add data as hidden input fields
-    for (const key in data) {
-        if (Object.hasOwnProperty.call(data, key)) {
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = data[key];
-            form.appendChild(input);
-        }
-    }
-
-    // Append form to body, submit it, and then remove it
-    document.body.appendChild(form);
-    form.submit();
-    form.remove(); // Clean up the form after submission
+  // Add data as hidden input fields
+  for (const key in data) {
+      if (Object.hasOwnProperty.call(data, key)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = key;
+          input.value = data[key];
+          form.appendChild(input);
+      }
   }
+
+  // Append form to body, submit it, and then remove it
+  document.body.appendChild(form);
+  form.submit();
+  form.remove(); // Clean up the form after submission
+};
+
+const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
+  // Trigger rebuild automatically when component mounts (when switching to full preview)
+  useEffect(() => {
+    preview();
+  }, []);
 
   const preview = () => {
       const source = content;
       const previewTitle = title || "Document Title";
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error
-      let token:string = window.buildToken
-      if (token === undefined) {
-        token = import.meta.env.VITE_APP_BUILD_TOKEN
+      
+      // If consumer provided a custom rebuild handler, use it
+      if (onRebuild) {
+        // Provide a helper function that posts to our specific iframe
+        const postHelper = (url: string, data: any) => {
+          postToIframe(url, data, 'fullPreview');
+        };
+        onRebuild(source, previewTitle, postHelper);
+        return;
       }
-      const postData = { source: source, title: previewTitle, token: token };
-      postToIframe('https://build.pretext.plus', postData, 'fullPreview');
   }
 
   return (
-    <div className="editor-panel">
-      <div className="relative mb-2 flex items-center justify-center pt-2">
-        <p className="text-base font-medium m-0 text-center">Full Preview</p>
+    <div className="pretext-plus-editor__full-preview">
+      <div className="pretext-plus-editor__preview-header">
+        <p className="pretext-plus-editor__preview-title">Full Preview</p>
         <button
-          className="absolute right-0 rounded-sm px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-colors"
+          className="pretext-plus-editor__rebuild-button"
           onClick={() => preview()}
         >
           Rebuild
         </button>
       </div>
-      <div>
+      <div className="pretext-plus-editor__preview-container">
         <iframe
-          style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '70vh' }}
+          className="pretext-plus-editor__preview-iframe"
           name="fullPreview"
-          src="https://build.pretext.plus" />
+        />
       </div>
     </div>
   );
