@@ -190,6 +190,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     onUpdate: ({ editor }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
+        console.log("Updating content from visual editor", editor.getJSON());
         onChange(formatPretext(json2ptx(editor.getJSON())));
       }, 500);
     }

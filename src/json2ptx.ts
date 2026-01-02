@@ -7,8 +7,17 @@ const tt2ptx = {
   italic: "em",
 };
 
+function encode(text: string) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+}
+
 function json2ptx(json: any) {
-  let ptx = '<?xml version="1.0" encoding="UTF-8"?>\n\n';
+  let ptx = "";
+  // NB we are omitting the XML declaration at the top for now.
+  // let ptx = '<?xml version="1.0" encoding="UTF-8"?>\n\n';
   // Top level node is a ptxFragment, but double check this:
   if (json.type !== "ptxFragment") {
     console.log("Top level node is not a ptxFragment");
@@ -73,9 +82,9 @@ function processNode(json: any) {
           json.marks[0].type in tt2ptx
             ? tt2ptx[json.marks[0].type as keyof typeof tt2ptx]
             : json.marks[0].type;
-        ptx = ptx + "<" + markName + ">" + json.text + "</" + markName + ">";
+        ptx = ptx + "<" + markName + ">" + encode(json.text) + "</" + markName + ">";
       } else {
-        ptx = ptx + json.text;
+        ptx = ptx + encode(json.text);
       }
     } else if (json.type === "hardBreak") {
       ptx = ptx + "\n";
