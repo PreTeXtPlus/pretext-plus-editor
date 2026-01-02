@@ -50,7 +50,13 @@ function processNode(json: any) {
     if (elementName === "rawptx") {
       // rawptx nodes are special, they are the unknown tags that we strip away
       for (const fragment of json.content) {
-        ptx = ptx + processNode(fragment);
+        // fragment should have type text, and we just return its value unchanged
+        if (fragment.type !== "text") {
+          console.log(
+            "Unexpected non-text node inside rawptx: " + JSON.stringify(fragment)
+          );
+        }
+        ptx = ptx + fragment.text;
       }
     } else {
       // all other nodes are processed by adding the correct tag and attributes around its content
@@ -88,7 +94,7 @@ function processNode(json: any) {
       }
     } else if (json.type === "hardBreak") {
       ptx = ptx + "\n";
-    } else  {
+    } else {
       // console.log("Unexpected leaf node type:")
       ptx = ptx + "<!-- Something is missing; got " + JSON.stringify(json) + " -->";
     }

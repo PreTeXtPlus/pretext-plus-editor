@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Focus, Gapcursor, UndoRedo } from "@tiptap/extensions";
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Node } from "@tiptap/core";
-import { BulletList, OrderedList, ListItem } from '@tiptap/extension-list'
+import { BulletList, OrderedList, ListItem } from "@tiptap/extension-list";
 import { MathDisplay, MathEquation, MathInline } from "../extensions/Math";
 import "katex/dist/katex.min.css";
 import Divisions from "../extensions/Divisions";
@@ -16,14 +16,13 @@ import RawPtx from "../extensions/RawPtx";
 import "../styles.scss";
 import { cleanPtx } from "../utils";
 import { json2ptx } from "../json2ptx";
-import './VisualEditor.css';
+import "./VisualEditor.css";
 //import { MenuBar } from "./TiptapMenuBar";
 import { PtxBubbleMenu } from "./BubbleMenu";
 //import { PtxFloatingMenu } from "./FloatingMenu";
 //import { getCursorPos } from "../extensions/getCursorPos";
 import { formatPretext } from "@pretextbook/format";
 //import KeyboardCommands from "../extensions/Keyboard";
-
 
 const Document = Node.create({
   name: "ptxFragment",
@@ -102,7 +101,6 @@ interface VisualEditorProps {
 //  }
 //};
 
-
 //const InfoMessage = ({ editor }: { editor: Editor }) => {
 //  const [cursorInfo, setCursorInfo] = useState({
 //    pos: 0,
@@ -147,8 +145,6 @@ interface VisualEditorProps {
 //    };
 //  }, [editor]);
 
-
-
 //  return (
 //    <div className="info">
 //      <p>Debugging Info:</p>
@@ -174,7 +170,6 @@ interface VisualEditorProps {
 }
 
 const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
-
   //const [isValid, setIsValid] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -190,10 +185,9 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     onUpdate: ({ editor }) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        console.log("Updating content from visual editor", editor.getJSON());
         onChange(formatPretext(json2ptx(editor.getJSON())));
       }, 500);
-    }
+    },
   });
 
   useEffect(() => {
@@ -202,7 +196,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     };
   }, []);
 
-  // The following will update the visual editor when there is an external change to the content.  
+  // The following will update the visual editor when there is an external change to the content.
   const isExternalUpdateRef = useRef(true);
 
   useEffect(() => {
@@ -210,7 +204,9 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
       const initialText = content;
       if (editor) {
         try {
-          editor.commands.setContent(cleanPtx(initialText), { emitUpdate: false });
+          editor.commands.setContent(cleanPtx(initialText), {
+            emitUpdate: false,
+          });
           //setIsValid(true);
         } catch (error) {
           console.error("Error setting content: ", error);
@@ -237,29 +233,33 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     isExternalUpdateRef.current = true;
   }, [content]);
 
-
   const [isEditable, setIsEditable] = useState(false);
 
   useEffect(() => {
     if (editor) {
       editor.setEditable(isEditable, false);
     }
-  }
-    , [editor, isEditable]);
+  }, [editor, isEditable]);
 
   return (
     <div className="pretext-plus-editor__visual-editor">
       <div className="pretext-plus-editor__visual-editor-header">
-        <p className="pretext-plus-editor__visual-editor-title">Simple Preview</p>
+        <p className="pretext-plus-editor__visual-editor-title">
+          Simple Preview
+        </p>
         <label className="pretext-plus-editor__edit-toggle">
-        <input className="pretext-plus-editor__edit-checkbox"
-        type="checkbox" checked={isEditable} onChange={() => setIsEditable(!isEditable)} />
+          <input
+            className="pretext-plus-editor__edit-checkbox"
+            type="checkbox"
+            checked={isEditable}
+            onChange={() => setIsEditable(!isEditable)}
+          />
           Edit
-      </label>
+        </label>
       </div>
       <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
-      {/* <WarningMessage isValid={isValid} /> */}
-      {/* <MenuBar editor={editor} /> */}
+        {/* <WarningMessage isValid={isValid} /> */}
+        {/* <MenuBar editor={editor} /> */}
         <EditorContent editor={editor} />
       </div>
       <PtxBubbleMenu editor={editor} />
