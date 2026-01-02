@@ -34,6 +34,8 @@ function json2ptx(json: any) {
     return "";
   }
   ptx += processNode(json.content[0]);
+  // remove the remaining <ptxdoc> root tags; these are not part of pretext, just used for the visual editor.  
+  ptx = ptx.replace(/^<ptxdoc>\s*/, '\n').replace(/\s*<\/ptxdoc>/, '');
   return ptx;
 }
 

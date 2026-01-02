@@ -5,6 +5,38 @@ import {
   wrappingInputRule,
 } from "@tiptap/core";
 
+const PtxDoc = Node.create({
+  name: "ptxdoc",
+
+  content: "title? (BasicBlock|block|rawptx|division)*",
+
+  group: "root",
+
+  selectable: false,
+  draggable: false,
+
+  defining: false,
+
+  parseHTML() {
+    return [
+      {
+        tag: "ptxdoc",
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "article",
+      mergeAttributes(
+        { class: "ptxdoc", label: "ptxdoc" },
+        HTMLAttributes
+      ),
+      0,
+    ];
+  },
+});
+
 const Introduction = Node.create({
   name: "introduction",
 
@@ -40,6 +72,45 @@ const Introduction = Node.create({
     return [
       wrappingInputRule({
         find: new RegExp(`^#intro\\s$`),
+        type: this.type,
+      }),
+    ];
+  },
+});
+
+const Part = Node.create({
+  name: "part",
+
+  content: "title ((introduction?|chapter+)|(BasicBlock|block|rawptx)+)",
+
+  group: "division",
+
+  selectable: true,
+
+  draggable: true,
+
+  defining: false,
+
+  parseHTML() {
+    return [
+      {
+        tag: "part",
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "section",
+      mergeAttributes({ class: "part", ptxtag: "part" }, HTMLAttributes),
+      0,
+    ];
+  },
+
+  addInputRules() {
+    return [
+      wrappingInputRule({
+        find: new RegExp(`^#part\\s$`),
         type: this.type,
       }),
     ];
@@ -84,6 +155,8 @@ const Chapter = Node.create({
     ];
   },
 });
+
+
 const Section = Node.create({
   name: "section",
   content: "title ((introduction?|subsection+)|(BasicBlock|block|rawptx)+)",
@@ -212,7 +285,7 @@ const Divisions = Extension.create({
   name: "divisions",
 
   addExtensions() {
-    return [Introduction, Chapter, Section, Subsection, Worksheet];
+    return [Introduction, Part, Chapter, Section, Subsection, Worksheet, PtxDoc];
   },
 });
 

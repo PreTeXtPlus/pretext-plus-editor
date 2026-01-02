@@ -33,8 +33,11 @@ import { KNOWN_TAGS } from "./knownTags";
  * Tags that are not recognized are wrapped with the <rawptx> placeholder, that can be rendered back to the original.
  */
 export function cleanPtx(origXml: string) {
+  // Always add the root <ptxdoc> tag to make sure the XML is well-formed.  The visual editor expects exactly this as the root element.
+  let xml = origXml.trim();
+  xml = `<ptxdoc>\n${xml}\n</ptxdoc>`;
   // We use xast to parse the XML into a AST
-  const tree = fromXml(origXml);
+  const tree = fromXml(xml);
   console.log("xast before: ", tree);
   // Visit each node until we find an unknown tag
   visit(tree, (node, index, parent) => {

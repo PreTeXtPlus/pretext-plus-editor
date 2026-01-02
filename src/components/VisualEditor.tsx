@@ -27,7 +27,8 @@ import { formatPretext } from "@pretextbook/format";
 const Document = Node.create({
   name: "ptxFragment",
   topNode: true,
-  content: "title? introduction? chapter* section* subsection* worksheet*",
+  //content: "title? introduction? part* chapter* section* subsection* worksheet*",
+  content: "ptxdoc",
 });
 
 //export function toggleMenu() {
