@@ -173,10 +173,11 @@ interface VisualEditorProps {
 const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
   //const [isValid, setIsValid] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEditableRef = useRef(false);
 
   const editor = useEditor({
     extensions,
-    content: "",
+    content: content,
     onContentError(props) {
       console.log("Content error: ", props.error);
       props.disableCollaboration();
@@ -184,9 +185,12 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     },
     enableContentCheck: true,
     onUpdate: ({ editor }) => {
+      console.log("Editor update detected.");
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        onChange(formatPretext(json2ptx(editor.getJSON())));
+        if (isEditableRef.current) {
+          onChange(formatPretext(json2ptx(editor.getJSON())));
+        }
       }, 500);
     },
   });
@@ -208,6 +212,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
           editor.commands.setContent(cleanPtx(initialText), {
             emitUpdate: false,
           });
+          console.log("External content set in visual editor.");
           //setIsValid(true);
         } catch (error) {
           console.error("Error setting content: ", error);
@@ -237,6 +242,7 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
   const [isEditable, setIsEditable] = useState(false);
 
   useEffect(() => {
+    isEditableRef.current = isEditable;
     if (editor) {
       editor.setEditable(isEditable, false);
     }

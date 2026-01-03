@@ -1,5 +1,5 @@
 import { Splitter, SplitterPanel } from "primereact/splitter";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
@@ -32,9 +32,9 @@ const Editors = (props: editorProps) => {
     // `preview` will either be the visual editor or the full preview based on `showFull`
     let preview;
     if (showFull && props.onPreviewRebuild) {
-        preview = <FullPreview 
-            content={content} 
-            title={title} 
+        preview = <FullPreview
+            content={content}
+            title={title}
             onRebuild={props.onPreviewRebuild}
         />
     } else {
@@ -51,8 +51,8 @@ const Editors = (props: editorProps) => {
 
     return (
         <div className="pretext-plus-editor">
-            <MenuBar 
-                isChecked={showFull} 
+            <MenuBar
+                isChecked={showFull}
                 onChange={() => setShowFull(!showFull)}
                 title={title}
                 onTitleChange={(value) => {
