@@ -35,6 +35,13 @@ import { KNOWN_TAGS } from "./knownTags";
 export function cleanPtx(origXml: string) {
   // Always add the root <ptxdoc> tag to make sure the XML is well-formed.  The visual editor expects exactly this as the root element.
   let xml = origXml.trim();
+  // remove xml declaration if present
+  if (xml.startsWith("<?xml")) {
+    const endDecl = xml.indexOf("?>");
+    if (endDecl !== -1) {
+      xml = xml.slice(endDecl + 2).trim();
+    }
+  }
   xml = `<ptxdoc>\n${xml}\n</ptxdoc>`;
   // We use xast to parse the XML into a AST
   const tree = fromXml(xml);
