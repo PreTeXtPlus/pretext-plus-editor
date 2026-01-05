@@ -12,6 +12,7 @@ import Blocks from "../extensions/Blocks";
 import CodeBlock from "@tiptap/extension-code-block";
 import Title from "../extensions/Title";
 import Definition from "../extensions/Definition";
+import Url from "../extensions/Url";
 import RawPtx from "../extensions/RawPtx";
 import "../styles.scss";
 import { cleanPtx } from "../utils";
@@ -54,6 +55,7 @@ const extensions = [
   Divisions,
   Title,
   Definition,
+  Url,
   RawPtx,
   MathInline,
   MathEquation,
