@@ -55,4 +55,5 @@ export const KNOWN_TAGS = [
   "alert",
   "c",
   "pre",
+  "url",
 ];
