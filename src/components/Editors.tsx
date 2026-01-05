@@ -1,5 +1,6 @@
 import { Splitter, SplitterPanel } from "primereact/splitter";
-import { useState, useRef } from "react";
+import { TabView, TabPanel } from 'primereact/tabview';
+import { useEffect, useState } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
@@ -28,7 +29,26 @@ const Editors = (props: editorProps) => {
     const [content, setContent] = useState(props.content || startingContent);
     const [title, setTitle] = useState(props.title || "Document Title");
     const [showFull, setShowFull] = useState(false);
+    const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
 
+    useEffect(() => {
+        const handleResize = () => {
+            setIsNarrowScreen(window.innerWidth < 800);
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    const codeEditor = (
+        <CodeEditor
+            content={content}
+            onChange={( content ) => {
+                setContent(content || '');
+                props.onContentChange(content);
+            }}
+        />
+    );
     // `preview` will either be the visual editor or the full preview based on `showFull`
     let preview;
     if (showFull && props.onPreviewRebuild) {
@@ -49,6 +69,35 @@ const Editors = (props: editorProps) => {
         )
     }
 
+    let editorDisplays;
+    if (isNarrowScreen) {
+        editorDisplays = (
+            <TabView>
+                <TabPanel header="Editor">
+                    <div style={{ height: "60vh" }}>
+                    {codeEditor}
+                    </div>
+                </TabPanel>
+                <TabPanel header="Preview">
+                    <div style={{ height: "60vh" }}>
+                    {preview}
+                    </div>
+                </TabPanel>
+            </TabView>
+        );
+    } else {
+        editorDisplays = (
+            <Splitter className="pretext-plus-editor__splitter">
+                <SplitterPanel className="pretext-plus-editor__editor-panel">
+                    {codeEditor}
+                </SplitterPanel>
+                <SplitterPanel className="pretext-plus-editor__preview-panel">
+                    {preview}
+                </SplitterPanel>
+            </Splitter>
+        )
+    }
+
     return (
         <div className="pretext-plus-editor">
             <MenuBar
@@ -65,20 +114,7 @@ const Editors = (props: editorProps) => {
                 cancelButtonLabel={props.cancelButtonLabel}
                 showPreviewModeToggle={props.onPreviewRebuild !== undefined}
             />
-            <Splitter className="pretext-plus-editor__splitter">
-                <SplitterPanel className="pretext-plus-editor__editor-panel">
-                    <CodeEditor
-                    content={content}
-                    onChange={( content ) => {
-                        setContent(content || '');
-                        props.onContentChange(content);
-                    }}
-                    />
-                </SplitterPanel>
-                <SplitterPanel className="pretext-plus-editor__preview-panel">
-                    {preview}
-                </SplitterPanel>
-            </Splitter>
+            {editorDisplays}
         </div>
     )
 }

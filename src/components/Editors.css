@@ -7,6 +7,12 @@
   height: 100%;
 }
 
+/* code editor with tabs are still 80vh */
+.pretext-plus-editor__tabview {
+  height: 80vh;
+  width: 98vw;
+}
+
 /* Splitter container */
 .pretext-plus-editor__splitter {
   height: 80vh;
@@ -23,4 +29,25 @@
 .pretext-plus-editor__preview-panel {
   display: flex;
   flex-direction: column;
+}
+
+.pretext-plus-editor__code-editor-tab {
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.pretext-plus-editor .p-tabview {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.pretext-plus-editor .p-tabview-panels {
+    flex: 1;
+    overflow: hidden;
+}
+
+.pretext-plus-editor .p-tabview-panel {
+    height: 100%;
 }

@@ -75,7 +75,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/*<CodeEditorMenu
                 content={content}
                 onContentChange={handleContentChange}
@@ -84,10 +84,9 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
                 canUndo={canUndo}
                 canRedo={canRedo}
             />*/}
-            <div style={{ flex: 1, width: '100%' }}>
+            <div style={{ flex: 1, }}>
                 <Editor
                     options={options}
-                    width="100%"
                     height="100%"
                     language="xml"
                     value={content}
