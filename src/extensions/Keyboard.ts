@@ -29,8 +29,17 @@ const KeyboardCommands = Extension.create({
       },
       // ArrowRight moves the position of the cursor to the next position, which can be the next text position or the next node.
       ArrowRight: () => {
-        this.editor.commands.focus(cursor.pos() + 1, { scrollIntoView: true });
-        return true;
+        if (cursor.nextNodeIsText()) {
+          return false;
+        }
+        if (cursor.depth() > 0) {
+          this.editor.commands.selectParentNode();
+          this.editor.commands.scrollIntoView();
+          return true;
+        } else {
+          this.editor.commands.focus("end", { scrollIntoView: true });
+          return true;
+        }
       },
       // ArrowDown should move the cursor to the next node at the same depth if on a box.  If in a text node, do the default.
       ArrowDown: () => {

@@ -300,30 +300,40 @@
     }
   }
 
-  .node-view.has-focus {
+  .node-view.math {
+    display: inline-grid;
+    grid-template-columns: auto;
+    grid-template-rows: auto;
+    align-items: baseline;
+  }
+
+  .node-view.math.has-focus {
     padding: 0.25rem;
   }
 
-  .node-view .edit-math {
+  .node-view.math.has-focus .edit-math {
+    display: inline !important;
+  }
+
+  .node-view.math .edit-math {
     display: none;
+    grid-column: 1;
+    grid-row: 1;
   }
 
-  .node-view.has-focus .edit-math {
-    display: inline-block;
+  .node-view.math .katex-rendered {
+    grid-column: 1;
+    grid-row: 1;
   }
 
-  .node-view .katex {
-    display: inline-block;
-  }
-
-  .node-view.has-focus .katex {
-    display: none;
+  .node-view.math.has-focus .katex-rendered {
+    display: none !important;
   }
 
   .node-view.display {
-    display: block;
+    display: grid;
     text-align: center;
-    width: 100%;
+    margin: 1em 0;
   }
 }
 
