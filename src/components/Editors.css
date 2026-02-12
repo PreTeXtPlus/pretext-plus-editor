@@ -32,22 +32,22 @@
 }
 
 .pretext-plus-editor__code-editor-tab {
-    height: 80vh;
-    display: flex;
-    flex-direction: column;
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .pretext-plus-editor .p-tabview {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .pretext-plus-editor .p-tabview-panels {
-    flex: 1;
-    overflow: hidden;
+  flex: 1;
+  overflow: hidden;
 }
 
 .pretext-plus-editor .p-tabview-panel {
-    height: 100%;
+  height: 100%;
 }

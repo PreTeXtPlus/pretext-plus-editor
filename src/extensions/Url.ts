@@ -9,7 +9,7 @@ const Url = Node.create({
 
   parseHTML() {
     return [
-      { 
+      {
         tag: "url"
       }
     ];
@@ -26,7 +26,7 @@ const Url = Node.create({
   renderHTML({ HTMLAttributes }) {
     return [
       "a",
-      mergeAttributes({ptxtag: "url"}, HTMLAttributes),
+      mergeAttributes({ ptxtag: "url" }, HTMLAttributes),
       0,
     ];
   }
