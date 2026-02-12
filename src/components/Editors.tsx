@@ -32,7 +32,7 @@ const Editors = (props: editorProps) => {
   //Content state belongs to the "editors" pair, and it is passed down to the two editors as props.
   const [content, setContent] = useState(props.content || startingContent);
   const [title, setTitle] = useState(props.title || "Document Title");
-  const [showFull, setShowFull] = useState(false);
+  const [showFull, setShowFull] = useState(true);
   const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
 
   useEffect(() => {
