@@ -10,7 +10,7 @@ export const MenuBar = ({ editor }: { editor: Editor }) => {
   // Read the current editor's state, and re-render the component when it changes
   const editorState = useEditorState({
     editor,
-    selector: ctx => {
+    selector: (ctx) => {
       return {
         //isBold: ctx.editor.isActive('bold'),
         //canBold: ctx.editor.can().chain().focus().toggleBold().run(),
@@ -34,14 +34,13 @@ export const MenuBar = ({ editor }: { editor: Editor }) => {
         //isBlockquote: ctx.editor.isActive('blockquote'),
         canUndo: ctx.editor.can().chain().focus().undo().run(),
         canRedo: ctx.editor.can().chain().focus().redo().run(),
-      }
+      };
     },
-  })
+  });
 
   return (
     <div className="control-group">
       <div className="button-group">
-
         {/*<button
           onClick={() => editor.chain().focus().toggleWrap('title').run()}
           className={editor.isActive("title") ? "is-active" : ""}
@@ -159,15 +158,21 @@ export const MenuBar = ({ editor }: { editor: Editor }) => {
         </button>
         <button onClick={() => editor.chain().focus().setHorizontalRule().run()}>Horizontal rule</button>
         <button onClick={() => editor.chain().focus().setHardBreak().run()}>Hard break</button>*/}
-        <button onClick={() => editor.chain().focus().undo().run()} disabled={!editorState.canUndo}>
+        <button
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editorState.canUndo}
+        >
           Undo
         </button>
-        <button onClick={() => editor.chain().focus().redo().run()} disabled={!editorState.canRedo}>
+        <button
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editorState.canRedo}
+        >
           Redo
         </button>
       </div>
     </div>
-  )
+  );
 
   //return (
   //  <>

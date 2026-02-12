@@ -1,5 +1,5 @@
 
-const defaultContent:string = `
+const defaultContent: string = `
   <?xml version="1.0" encoding="UTF-8"?>
   <section>
   <title>My Section</title>
@@ -81,7 +81,7 @@ const defaultContent:string = `
   </section>
   `;
 
-const simpleContent:string = `
+const simpleContent: string = `
   <section>
   <title>My Section</title>
   <p>

@@ -1,30 +1,34 @@
-import { useEffect, useState, useRef } from 'react';
-import './FullPreview.css';
+import { useEffect, useState, useRef } from "react";
+import "./FullPreview.css";
 
 interface FullPreviewProps {
   content: string;
   title?: string;
-  onRebuild: (content: string, title: string, postToIframe: (url: string, data: any) => void) => void;
+  onRebuild: (
+    content: string,
+    title: string,
+    postToIframe: (url: string, data: any) => void,
+  ) => void;
 }
 
 // Utility function to POST data to an iframe
 export const postToIframe = (url: string, data: any, iframeName: string) => {
   // Create a temporary form element
-  const form = document.createElement('form');
-  form.method = 'POST';
+  const form = document.createElement("form");
+  form.method = "POST";
   form.action = url;
   form.target = iframeName; // This must match the iframe's 'name' attribute
-  form.style.display = 'none'; // Keep it hidden
+  form.style.display = "none"; // Keep it hidden
 
   // Add data as hidden input fields
   for (const key in data) {
-      if (Object.hasOwnProperty.call(data, key)) {
-          const input = document.createElement('input');
-          input.type = 'hidden';
-          input.name = key;
-          input.value = data[key];
-          form.appendChild(input);
-      }
+    if (Object.hasOwnProperty.call(data, key)) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = key;
+      input.value = data[key];
+      form.appendChild(input);
+    }
   }
 
   // Append form to body, submit it, and then remove it
@@ -33,7 +37,7 @@ export const postToIframe = (url: string, data: any, iframeName: string) => {
   form.remove(); // Clean up the form after submission
 };
 
-const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
+const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
   const [isRebuilding, setIsRebuilding] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -43,21 +47,21 @@ const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
   }, []);
 
   const preview = () => {
-      const source = content;
-      const previewTitle = title || "Document Title";
-      
-      setIsRebuilding(true);
-      
-      // If consumer provided a custom rebuild handler, use it
-      if (onRebuild) {
-        // Provide a helper function that posts to our specific iframe
-        const postHelper = (url: string, data: any) => {
-          postToIframe(url, data, 'fullPreview');
-        };
-        onRebuild(source, previewTitle, postHelper);
-        return;
-      }
-  }
+    const source = content;
+    const previewTitle = title || "Document Title";
+
+    setIsRebuilding(true);
+
+    // If consumer provided a custom rebuild handler, use it
+    if (onRebuild) {
+      // Provide a helper function that posts to our specific iframe
+      const postHelper = (url: string, data: any) => {
+        postToIframe(url, data, "fullPreview");
+      };
+      onRebuild(source, previewTitle, postHelper);
+      return;
+    }
+  };
 
   const handleIframeLoad = () => {
     setIsRebuilding(false);
@@ -79,7 +83,9 @@ const FullPreview = ({ content, title, onRebuild }:FullPreviewProps) => {
           <div className="pretext-plus-editor__rebuilding-overlay">
             <div className="pretext-plus-editor__rebuilding-popup">
               <div className="pretext-plus-editor__spinner"></div>
-              <p className="pretext-plus-editor__rebuilding-text">Rebuilding...</p>
+              <p className="pretext-plus-editor__rebuilding-text">
+                Rebuilding...
+              </p>
             </div>
           </div>
         )}
