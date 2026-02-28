@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import "./FullPreview.css";
 
 interface FullPreviewProps {
@@ -41,12 +41,7 @@ const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
   const [isRebuilding, setIsRebuilding] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Trigger rebuild automatically when component mounts (when switching to full preview)
-  useEffect(() => {
-    preview();
-  }, []);
-
-  const preview = () => {
+  const preview = useCallback(() => {
     const source = content;
     const previewTitle = title || "Document Title";
 
@@ -61,7 +56,14 @@ const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
       onRebuild(source, previewTitle, postHelper);
       return;
     }
-  };
+  }, [content, title, onRebuild]);
+
+  // Trigger rebuild automatically when component mounts (when switching to full preview)
+  // This only runs ONCE on mount, NOT when content/title changes
+  useEffect(() => {
+    preview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleIframeLoad = () => {
     setIsRebuilding(false);

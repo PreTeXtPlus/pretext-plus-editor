@@ -4,9 +4,6 @@ import { Editor, useEditorState } from "@tiptap/react";
 export const MenuBar = ({ editor }: { editor: Editor }) => {
   //const { editor } = useCurrentEditor();
 
-  if (!editor) {
-    return null;
-  }
   // Read the current editor's state, and re-render the component when it changes
   const editorState = useEditorState({
     editor,
@@ -37,6 +34,10 @@ export const MenuBar = ({ editor }: { editor: Editor }) => {
       };
     },
   });
+
+  if (!editor) {
+    return null;
+  }
 
   return (
     <div className="control-group">

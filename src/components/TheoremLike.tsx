@@ -11,7 +11,6 @@ const TheoremLikeComponent = (props: any) => {
       ptxtag={props.node.type.name}
     >
       <div className="block-title">{nameCapitalized}.</div>
-      {/* @ts-ignore */}
       <NodeViewContent className="thm-component-content" />
     </NodeViewWrapper>
   );
