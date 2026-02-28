@@ -61,6 +61,7 @@
     "hast-util-whitespace": "^3.0.0",
     "katex": "^0.16.27",
     "primereact": "^10.9.7",
+    "react-resizable-panels": "^2.1.7",
     "tailwindcss": "^4.1.18",
     "unist-util-visit": "^5.0.0",
     "xast-util-from-xml": "^4.0.0",

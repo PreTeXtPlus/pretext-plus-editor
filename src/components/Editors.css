@@ -5,6 +5,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 /* code editor with tabs are still 80vh */
@@ -23,6 +24,9 @@
 .pretext-plus-editor__editor-panel {
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: visible;
+  z-index: 1;
 }
 
 /* Preview panel (visual or full preview) */
@@ -35,6 +39,50 @@
   height: 80vh;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: visible;
+}
+
+/* Monaco Editor styling - ensure find widget is accessible */
+.pretext-plus-editor .monaco-editor {
+  position: relative;
+  overflow: visible !important;
+}
+
+/* Target Monaco's find widget - make it visible and clickable */
+.monaco-editor .find-widget {
+  z-index: 1000 !important;
+  visibility: visible !important;
+  display: flex !important;
+  pointer-events: auto !important;
+}
+
+.monaco-editor .find-widget.visible {
+  opacity: 1 !important;
+  pointer-events: auto !important;
+}
+
+.monaco-editor .findInputBox {
+  pointer-events: auto !important;
+}
+
+/* Ensure close button is clickable */
+.monaco-editor .find-widget .codicon-close,
+.monaco-editor .find-widget button,
+.monaco-editor .find-widget .close-fw {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+  z-index: 1001 !important;
+}
+
+/* Target the find widget container specifically */
+.monaco-find-widget {
+  z-index: 1000 !important;
+  pointer-events: auto !important;
+}
+
+.monaco-find-widget button {
+  pointer-events: auto !important;
 }
 
 .pretext-plus-editor .p-tabview {
@@ -50,4 +98,54 @@
 
 .pretext-plus-editor .p-tabview-panel {
   height: 100%;
+}
+
+/* Resize handle styling for react-resizable-panels */
+.pretext-plus-editor [data-resize-handle] {
+  background-color: #f0f0f0;
+  cursor: col-resize;
+  width: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 1px solid #ddd;
+  border-right: 1px solid #ddd;
+  transition: background-color 0.2s ease;
+}
+
+.pretext-plus-editor [data-resize-handle]:hover {
+  background-color: #e0e0e0;
+}
+
+.pretext-plus-editor [data-resize-handle]:active {
+  background-color: #d0d0d0;
+}
+
+/* Dots indicator on the resize handle */
+.pretext-plus-editor__resize-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.pretext-plus-editor__resize-dots::before,
+.pretext-plus-editor__resize-dots::after {
+  content: "";
+  width: 2px;
+  height: 2px;
+  background-color: #999;
+  border-radius: 50%;
+  display: block;
+}
+
+.pretext-plus-editor
+  [data-resize-handle]:hover
+  .pretext-plus-editor__resize-dots::before,
+.pretext-plus-editor
+  [data-resize-handle]:hover
+  .pretext-plus-editor__resize-dots::after {
+  background-color: #333;
 }

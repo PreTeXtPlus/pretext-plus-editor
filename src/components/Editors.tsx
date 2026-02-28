@@ -1,5 +1,5 @@
-import { Splitter, SplitterPanel } from "primereact/splitter";
 import { TabView, TabPanel } from "primereact/tabview";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useEffect, useState } from "react";
 
 import CodeEditor from "./CodeEditor";
@@ -89,14 +89,18 @@ const Editors = (props: editorProps) => {
     );
   } else {
     editorDisplays = (
-      <Splitter className="pretext-plus-editor__splitter">
-        <SplitterPanel className="pretext-plus-editor__editor-panel">
+      <PanelGroup
+        direction="horizontal"
+        className="pretext-plus-editor__splitter"
+      >
+        <Panel className="pretext-plus-editor__editor-panel">
           {codeEditor}
-        </SplitterPanel>
-        <SplitterPanel className="pretext-plus-editor__preview-panel">
-          {preview}
-        </SplitterPanel>
-      </Splitter>
+        </Panel>
+        <PanelResizeHandle className="pretext-plus-editor__resize-handle">
+          <div className="pretext-plus-editor__resize-dots"></div>
+        </PanelResizeHandle>
+        <Panel className="pretext-plus-editor__preview-panel">{preview}</Panel>
+      </PanelGroup>
     );
   }
 
