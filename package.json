@@ -8,13 +8,13 @@
     "editor",
     "tiptap"
   ],
-  "homepage": "https://github.com/pretextplus/pretext-plus-editor#readme",
+  "homepage": "https://github.com/PreTeXtPlus/pretext-plus-editor#readme",
   "bugs": {
-    "url": "https://github.com/pretextplus/pretext-plus-editor/issues"
+    "url": "https://github.com/PreTeXtPlus/pretext-plus-editor/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pretextplus/pretext-plus-editor.git"
+    "url": "git+https://github.com/PreTeXtPlus/pretext-plus-editor.git"
   },
   "license": "MIT",
   "author": "Oscar Levin",
