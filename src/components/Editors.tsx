@@ -1,4 +1,3 @@
-import { TabView, TabPanel } from "primereact/tabview";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useEffect, useState } from "react";
 
@@ -34,6 +33,10 @@ const Editors = (props: editorProps) => {
   const [title, setTitle] = useState(props.title || "Document Title");
   const [showFull, setShowFull] = useState(true);
   const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
+  const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
+  const editorTabId = "pretext-plus-tab-editor";
+  const previewTabId = "pretext-plus-tab-preview";
+  const tabPanelId = "pretext-plus-tabpanel";
 
   useEffect(() => {
     const handleResize = () => {
@@ -78,14 +81,48 @@ const Editors = (props: editorProps) => {
   let editorDisplays;
   if (isNarrowScreen) {
     editorDisplays = (
-      <TabView>
-        <TabPanel header="Editor">
-          <div style={{ height: "60vh" }}>{codeEditor}</div>
-        </TabPanel>
-        <TabPanel header="Preview">
-          <div style={{ height: "60vh" }}>{preview}</div>
-        </TabPanel>
-      </TabView>
+      <div className="pretext-plus-editor__tabs">
+        <div className="pretext-plus-editor__tab-list" role="tablist">
+          <button
+            type="button"
+            id={editorTabId}
+            role="tab"
+            aria-controls={tabPanelId}
+            aria-selected={activeTab === "editor"}
+            tabIndex={activeTab === "editor" ? 0 : -1}
+            className={`pretext-plus-editor__tab-button ${
+              activeTab === "editor" ? "is-active" : ""
+            }`}
+            onClick={() => setActiveTab("editor")}
+          >
+            Editor
+          </button>
+          <button
+            type="button"
+            id={previewTabId}
+            role="tab"
+            aria-controls={tabPanelId}
+            aria-selected={activeTab === "preview"}
+            tabIndex={activeTab === "preview" ? 0 : -1}
+            className={`pretext-plus-editor__tab-button ${
+              activeTab === "preview" ? "is-active" : ""
+            }`}
+            onClick={() => setActiveTab("preview")}
+          >
+            Preview
+          </button>
+        </div>
+        <div
+          id={tabPanelId}
+          className="pretext-plus-editor__tab-panel"
+          role="tabpanel"
+          aria-labelledby={activeTab === "editor" ? editorTabId : previewTabId}
+        >
+          <div style={{ height: "60vh" }}>
+            {activeTab === "editor" ? codeEditor : preview}
+          </div>
+        </div>
+      </div>
     );
   } else {
     editorDisplays = (

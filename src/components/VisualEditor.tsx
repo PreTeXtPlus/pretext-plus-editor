@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Focus, Gapcursor, UndoRedo } from "@tiptap/extensions";
 import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
