@@ -32,8 +32,33 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     };
   }, []);
 
+  // When the content prop changes from an external source, update the editor
+  // model only if it actually differs from what the editor currently contains.
+  // This prevents cursor jumps caused by the parent re-rendering with the same
+  // value the user just typed.
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const model = editor.getModel();
+    if (!model) return;
+    if (model.getValue() !== content) {
+      const position = editor.getPosition();
+      const selections = editor.getSelections();
+      model.setValue(content);
+      if (position) editor.setPosition(position);
+      if (selections) editor.setSelections(selections);
+    }
+  }, [content]);
+
   const handleEditorMount = (editor: any) => {
     editorRef.current = editor;
+    // Ensure the newly mounted editor has the latest content in case the
+    // component was remounted while content changed without triggering the
+    // content-sync effect (editorRef.current was null at that point).
+    const model = editor.getModel();
+    if (model && model.getValue() !== content) {
+      model.setValue(content);
+    }
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
@@ -91,7 +116,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
           options={options}
           height="100%"
           language="xml"
-          value={content}
+          defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value) => {
             if (debounceRef.current) clearTimeout(debounceRef.current);
