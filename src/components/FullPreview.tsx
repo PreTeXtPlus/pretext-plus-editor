@@ -15,10 +15,25 @@ interface FullPreviewProps {
 const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
   const [isRebuilding, setIsRebuilding] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const savedScrollPosition = useRef<{ x: number; y: number } | null>(null);
 
   const preview = useCallback(() => {
     const source = content;
     const previewTitle = title || "Document Title";
+
+    // Save current scroll position before rebuilding
+    try {
+      const iframeWindow = iframeRef.current?.contentWindow;
+      if (iframeWindow) {
+        savedScrollPosition.current = {
+          x: iframeWindow.scrollX,
+          y: iframeWindow.scrollY,
+        };
+      }
+    } catch {
+      // Cross-origin iframe; scroll position cannot be accessed
+      savedScrollPosition.current = null;
+    }
 
     setIsRebuilding(true);
 
@@ -42,6 +57,18 @@ const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
 
   const handleIframeLoad = () => {
     setIsRebuilding(false);
+    // Restore scroll position after rebuild
+    if (savedScrollPosition.current) {
+      try {
+        iframeRef.current?.contentWindow?.scrollTo(
+          savedScrollPosition.current.x,
+          savedScrollPosition.current.y,
+        );
+      } catch {
+        // Cross-origin iframe; scroll position cannot be restored
+      }
+      savedScrollPosition.current = null;
+    }
   };
 
   return (
