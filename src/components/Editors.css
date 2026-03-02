@@ -69,54 +69,14 @@
   overflow: visible;
 }
 
-/* Monaco Editor styling - ensure find widget is accessible */
-.pretext-plus-editor .monaco-editor {
-  position: relative;
-  overflow: visible !important;
-}
-
-/* Target Monaco's find widget - make it visible and clickable */
-.monaco-editor .find-widget {
-  z-index: 1000 !important;
-  visibility: visible !important;
-  display: flex !important;
-  pointer-events: auto !important;
-}
-
-.monaco-editor .find-widget.visible {
-  opacity: 1 !important;
-  pointer-events: auto !important;
-}
-
-.monaco-editor .findInputBox {
-  pointer-events: auto !important;
-}
-
-/* Ensure close button is clickable */
-.monaco-editor .find-widget .codicon-close,
-.monaco-editor .find-widget button,
-.monaco-editor .find-widget .close-fw {
-  pointer-events: auto !important;
-  cursor: pointer !important;
-  z-index: 1001 !important;
-}
-
-/* Target the find widget container specifically */
-.monaco-find-widget {
-  z-index: 1000 !important;
-  pointer-events: auto !important;
-}
-
-.monaco-find-widget button {
-  pointer-events: auto !important;
-}
-
 /* Fix: Monaco button hover tooltips (workbench-hover-container) appear above the
  * find bar by default, covering the close button and making it inaccessible.
  * Force the tooltip context-view to render below the find bar (height: 33px)
  * by overriding the JavaScript-set inline top value with !important. */
-.monaco-editor .context-view.monaco-component:has(.workbench-hover-container) {
-  top: 35px !important;
+.workbench-hover-container {
+  position: fixed !important;
+  top: 60px !important;
+  z-index: 1000;
 }
 
 /* Resize handle styling for react-resizable-panels */
