@@ -6,6 +6,8 @@ import { useState, useRef, useEffect } from "react";
 interface CodeEditorProps {
   content: string;
   onChange: (value: string | undefined) => void;
+  onRebuild?: () => void;
+  onSave?: () => void;
 }
 
 const options = {
@@ -17,12 +19,22 @@ const options = {
   padding: { top: 10, bottom: 10 },
 };
 
-const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
+const CodeEditor = ({ content, onChange, onRebuild, onSave }: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, setCanUndo] = useState(false);
   const [, setCanRedo] = useState(false);
+  const onRebuildRef = useRef(onRebuild);
+  const onSaveRef = useRef(onSave);
+
+  useEffect(() => {
+    onRebuildRef.current = onRebuild;
+  }, [onRebuild]);
+
+  useEffect(() => {
+    onSaveRef.current = onSave;
+  }, [onSave]);
   // const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -50,7 +62,7 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     }
   }, [content]);
 
-  const handleEditorMount = (editor: any) => {
+  const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
@@ -64,16 +76,17 @@ const CodeEditor = ({ content, onChange }: CodeEditorProps) => {
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
       updateUndoRedoState();
     });
-    // // Subscribe to focus/blur events
-    // editor.onDidFocusEditorWidget(() => {
-    //     console.log("Editor focused");
-    //     setIsFocused(true);
-    // });
-    // editor.onDidBlurEditorWidget(() => {
-    //     console.log("Editor blurred");
-    //     setIsFocused(false);
-    // });
     updateUndoRedoState();
+
+    // Register Ctrl+Enter to trigger a full rebuild
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
+      onRebuildRef.current?.();
+    });
+
+    // Register Ctrl+S to save (and rebuild if a rebuild handler is set)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      onSaveRef.current?.();
+    });
   };
 
   const updateUndoRedoState = () => {

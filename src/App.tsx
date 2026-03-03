@@ -27,6 +27,7 @@ function App() {
         saveButtonLabel="Save and ..."
         onCancelButton={() => console.log("Cancel clicked")}
         cancelButtonLabel="Cancel"
+        onSave={() => console.log("Save triggered via keyboard")}
         onPreviewRebuild={handlePreviewRebuild}
       />
       <textarea

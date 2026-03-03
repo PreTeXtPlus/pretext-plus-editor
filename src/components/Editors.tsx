@@ -1,9 +1,9 @@
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
-import FullPreview from "./FullPreview";
+import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import MenuBar from "./MenuBar";
 import "./Editors.css";
 
@@ -20,6 +20,7 @@ export interface editorProps {
   saveButtonLabel?: string;
   onCancelButton?: () => void;
   cancelButtonLabel?: string;
+  onSave?: () => void;
   onPreviewRebuild?: (
     content: string,
     title: string,
@@ -37,6 +38,27 @@ const Editors = (props: editorProps) => {
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
+  const fullPreviewRef = useRef<FullPreviewHandle>(null);
+
+  const triggerRebuild = () => {
+    fullPreviewRef.current?.rebuild();
+  };
+
+  const triggerSaveAndRebuild = () => {
+    props.onSave?.();
+    fullPreviewRef.current?.rebuild();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (isCtrl && e.key === "Enter" && props.onPreviewRebuild) {
+      e.preventDefault();
+      triggerRebuild();
+    } else if (isCtrl && e.key === "s") {
+      e.preventDefault();
+      triggerSaveAndRebuild();
+    }
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -54,6 +76,8 @@ const Editors = (props: editorProps) => {
         setContent(content || "");
         props.onContentChange(content);
       }}
+      onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
+      onSave={triggerSaveAndRebuild}
     />
   );
   // `preview` will either be the visual editor or the full preview based on `showFull`
@@ -61,6 +85,7 @@ const Editors = (props: editorProps) => {
   if (showFull && props.onPreviewRebuild) {
     preview = (
       <FullPreview
+        ref={fullPreviewRef}
         content={content}
         title={title}
         onRebuild={props.onPreviewRebuild}
@@ -142,7 +167,7 @@ const Editors = (props: editorProps) => {
   }
 
   return (
-    <div className="pretext-plus-editor">
+    <div className="pretext-plus-editor" onKeyDown={handleKeyDown}>
       <MenuBar
         isChecked={showFull}
         onChange={() => setShowFull(!showFull)}

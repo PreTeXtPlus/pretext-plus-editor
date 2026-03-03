@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import "./FullPreview.css";
 import { postToIframe } from "./postToIframe";
 
@@ -12,7 +12,12 @@ interface FullPreviewProps {
   ) => void;
 }
 
-const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
+export interface FullPreviewHandle {
+  rebuild: () => void;
+}
+
+const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
+  ({ content, title, onRebuild }, ref) => {
   const [isRebuilding, setIsRebuilding] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const savedScrollPosition = useRef<{ x: number; y: number } | null>(null);
@@ -54,6 +59,8 @@ const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
     preview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useImperativeHandle(ref, () => ({ rebuild: preview }), [preview]);
 
   const handleIframeLoad = () => {
     setIsRebuilding(false);
@@ -102,6 +109,8 @@ const FullPreview = ({ content, title, onRebuild }: FullPreviewProps) => {
       </div>
     </div>
   );
-};
+});
+
+FullPreview.displayName = "FullPreview";
 
 export default FullPreview;
