@@ -20,6 +20,7 @@ export interface editorProps {
   saveButtonLabel?: string;
   onCancelButton?: () => void;
   cancelButtonLabel?: string;
+  onSave?: () => void;
   onPreviewRebuild?: (
     content: string,
     title: string,
@@ -44,7 +45,7 @@ const Editors = (props: editorProps) => {
   };
 
   const triggerSaveAndRebuild = () => {
-    props.onSaveButton?.();
+    props.onSave?.();
     fullPreviewRef.current?.rebuild();
   };
 

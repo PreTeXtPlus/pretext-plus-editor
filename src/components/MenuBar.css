@@ -113,10 +113,10 @@
 .pretext-plus-editor__preview-toggle-slider {
   display: flex;
   align-items: center;
-  height: 1rem;
-  width: 2rem;
+  height: 1em;
+  width: 2em;
   border-radius: 3px;
-  padding: 3px;
+  padding: 4px;
   background-color: #ccccce;
   transition: background-color 0.2s ease;
 }
@@ -126,15 +126,15 @@
 }
 
 .pretext-plus-editor__preview-toggle-dot {
-  height: 1rem;
-  width: 1rem;
+  height: 0.75em;
+  width: 0.75em;
   border-radius: 2px;
   background-color: white;
   transition: transform 0.2s ease;
 }
 
 .pretext-plus-editor__preview-toggle-dot--active {
-  transform: translateX(1rem);
+  transform: translateX(0.8em);
 }
 
 .pretext-plus-editor__preview-toggle-caption {
