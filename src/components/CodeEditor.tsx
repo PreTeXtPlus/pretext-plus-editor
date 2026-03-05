@@ -1,5 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { useState, useRef, useEffect } from "react";
+import { registerCodeEditorCompletions } from "./codeEditorCompletions";
 //import type { Monaco } from '@monaco-editor/react';
 //import CodeEditorMenu from './CodeEditorMenu';
 
@@ -13,6 +14,7 @@ interface CodeEditorProps {
 const options = {
   automaticLayout: true,
   minimap: { enabled: false },
+  acceptSuggestionOnCommitCharacter: false,
   wordWrap: "on" as const,
   insertSpaces: true,
   tabSize: 2,
@@ -22,6 +24,7 @@ const options = {
 const CodeEditor = ({ content, onChange, onRebuild, onSave }: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [, setCanUndo] = useState(false);
   const [, setCanRedo] = useState(false);
@@ -40,6 +43,7 @@ const CodeEditor = ({ content, onChange, onRebuild, onSave }: CodeEditorProps) =
   useEffect(() => {
     return () => {
       contentListenerRef.current?.dispose?.();
+      completionProviderRef.current?.dispose?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
@@ -87,6 +91,9 @@ const CodeEditor = ({ content, onChange, onRebuild, onSave }: CodeEditorProps) =
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       onSaveRef.current?.();
     });
+
+    completionProviderRef.current?.dispose?.();
+    completionProviderRef.current = registerCodeEditorCompletions(monaco);
   };
 
   const updateUndoRedoState = () => {
