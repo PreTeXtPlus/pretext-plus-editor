@@ -15,13 +15,19 @@ const options = {
   automaticLayout: true,
   minimap: { enabled: false },
   acceptSuggestionOnCommitCharacter: false,
+  quickSuggestions: false,
   wordWrap: "on" as const,
   insertSpaces: true,
   tabSize: 2,
   padding: { top: 10, bottom: 10 },
 };
 
-const CodeEditor = ({ content, onChange, onRebuild, onSave }: CodeEditorProps) => {
+const CodeEditor = ({
+  content,
+  onChange,
+  onRebuild,
+  onSave,
+}: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);

@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.4",
-    "@monaco-editor/react": "^4.7.0",
+    "@monaco-editor/react": "^4.8.0-rc.3",
     "@pretextbook/completions": "^0.0.3",
     "@pretextbook/format": "^0.0.5",
     "@tailwindcss/vite": "^4.1.18",
