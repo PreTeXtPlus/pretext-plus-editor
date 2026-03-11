@@ -52,7 +52,6 @@ export {
 
 // Export other useful components if needed
 export { default as CodeEditor } from "./components/CodeEditor";
-export { default as VisualEditor } from "./components/VisualEditor";
 export { default as FullPreview } from "./components/FullPreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";
 export { default as DocinfoEditor } from "./components/DocinfoEditor";
