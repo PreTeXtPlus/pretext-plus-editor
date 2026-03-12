@@ -2,7 +2,8 @@ import { Editor } from "@monaco-editor/react";
 import { useState, useRef, useEffect } from "react";
 import { registerCodeEditorCompletions } from "./codeEditorCompletions";
 //import type { Monaco } from '@monaco-editor/react';
-//import CodeEditorMenu from './CodeEditorMenu';
+import CodeEditorMenu from "./CodeEditorMenu";
+import LatexImportDialog from "./LatexImportDialog";
 
 interface CodeEditorProps {
   content: string;
@@ -32,8 +33,9 @@ const CodeEditor = ({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [, setCanUndo] = useState(false);
-  const [, setCanRedo] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
 
@@ -127,16 +129,30 @@ const CodeEditor = ({
     onChange(newContent);
   };
 
+  const handleUndo = () => {
+    editorRef.current?.trigger("", "undo");
+    updateUndoRedoState();
+  };
+
+  const handleRedo = () => {
+    editorRef.current?.trigger("", "redo");
+    updateUndoRedoState();
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/*<CodeEditorMenu
-                content={content}
-                onContentChange={handleContentChange}
-                onUndo={handleUndo}
-                onRedo={handleRedo}
-                canUndo={canUndo}
-                canRedo={canRedo}
-            />*/}
+      <CodeEditorMenu
+        content={content}
+        onContentChange={handleContentChange}
+        onOpenLatexImport={() => setIsLatexDialogOpen(true)}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
+      {isLatexDialogOpen ? (
+        <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
+      ) : null}
       <div style={{ flex: 1 }}>
         <Editor
           options={options}

@@ -1,10 +1,11 @@
 import React from "react";
 import "./CodeEditorMenu.css";
-//import { formatPretext } from '@pretextbook/format';
+import { formatPretext } from "@pretextbook/format";
 
 interface CodeEditorMenuProps {
   content: string;
   onContentChange: (newContent: string) => void;
+  onOpenLatexImport: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -12,47 +13,35 @@ interface CodeEditorMenuProps {
 }
 
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
-  //content,
-  //onContentChange,
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
+  content,
+  onContentChange,
+  onOpenLatexImport,
 }) => {
-  // const handleFormat = () => {
-  //     try {
-  //         // Format with indentation
-  //         onContentChange(formatPretext(content));
-  //     } catch (error) {
-  //         console.error('Error formatting:', error);
-  //         alert('Error formatting XML');
-  //     }
-  // };
+  const handleFormat = () => {
+    try {
+      // Format with indentation
+      onContentChange(formatPretext(content));
+    } catch (error) {
+      console.error("Error formatting:", error);
+      alert("Error formatting XML");
+    }
+  };
 
   return (
-    <div className="code-editor-menu">
-      {/* <button
-                className="menu-button"
-                onClick={handleFormat}
-                title="Format the XML content"
-            >
-                Format
-            </button> */}
+    <div className="pretext-plus-editor__code-editor-menu">
       <button
-        className="menu-button"
-        onClick={onUndo}
-        disabled={!canUndo}
-        title="Undo the last action"
+        className="pretext-plus-editor__menu-button"
+        onClick={handleFormat}
+        title="Format the XML content"
       >
-        Undo
+        Format
       </button>
       <button
-        className="menu-button"
-        onClick={onRedo}
-        disabled={!canRedo}
-        title="Redo the last action"
+        className="pretext-plus-editor__menu-button"
+        onClick={onOpenLatexImport}
+        title="Import LaTeX"
       >
-        Redo
+        Import LaTeX
       </button>
     </div>
   );
