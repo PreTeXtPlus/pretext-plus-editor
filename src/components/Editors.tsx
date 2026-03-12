@@ -1,4 +1,4 @@
-import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+import { Group, Panel, Separator } from "react-resizable-panels";
 import { useEffect, useRef, useState } from "react";
 
 import CodeEditor from "./CodeEditor";
@@ -151,18 +151,15 @@ const Editors = (props: editorProps) => {
     );
   } else {
     editorDisplays = (
-      <PanelGroup
-        direction="horizontal"
-        className="pretext-plus-editor__splitter"
-      >
+      <Group orientation="horizontal" className="pretext-plus-editor__splitter">
         <Panel className="pretext-plus-editor__editor-panel">
           {codeEditor}
         </Panel>
-        <PanelResizeHandle className="pretext-plus-editor__resize-handle">
+        <Separator className="pretext-plus-editor__resize-handle">
           <div className="pretext-plus-editor__resize-dots"></div>
-        </PanelResizeHandle>
+        </Separator>
         <Panel className="pretext-plus-editor__preview-panel">{preview}</Panel>
-      </PanelGroup>
+      </Group>
     );
   }
 
