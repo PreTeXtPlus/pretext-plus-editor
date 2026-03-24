@@ -47,7 +47,7 @@ const createEditorContentState = ({
   editorProps,
   "content" | "sourceFormat" | "pretextContent"
 >): EditorContentState => {
-  const sourceContent = content || startingContent;
+  const sourceContent = content ?? startingContent;
   const resolvedSourceFormat = sourceFormat ?? "pretext";
   const derivedPretext =
     resolvedSourceFormat === "pretext"
