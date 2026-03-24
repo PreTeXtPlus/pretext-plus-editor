@@ -7,13 +7,19 @@ import LatexImportDialog from "./LatexImportDialog";
 import type { SourceFormat } from "../types/editor";
 
 interface CodeEditorProps {
+  /** The current source content to display. */
   content: string;
+  /** Determines the Monaco language mode (`"xml"` for PreTeXt, `"latex"` for LaTeX). */
   sourceFormat: SourceFormat;
+  /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
+  /** If provided, Ctrl+Enter in the editor triggers this callback. */
   onRebuild?: () => void;
+  /** If provided, Ctrl+S in the editor triggers this callback. */
   onSave?: () => void;
 }
 
+/** Static Monaco editor options shared across all instances of this component. */
 const options = {
   automaticLayout: true,
   minimap: { enabled: false },
@@ -25,6 +31,17 @@ const options = {
   padding: { top: 10, bottom: 10 },
 };
 
+/**
+ * Monaco-based code editor with an attached toolbar.
+ *
+ * Manages its own undo/redo state so the toolbar buttons stay in sync with
+ * the editor model.  `onRebuild` and `onSave` callbacks are stored in refs
+ * so keyboard shortcuts registered at mount time always call the latest
+ * version without needing to re-register.
+ *
+ * Content is synced from props only when the prop value differs from what the
+ * editor model already contains, to prevent cursor jumps on re-render.
+ */
 const CodeEditor = ({
   content,
   sourceFormat,
@@ -120,6 +137,11 @@ const CodeEditor = ({
         : null;
   };
 
+  /**
+   * Reads the Monaco model's undo/redo availability and updates state.
+   * Falls back to enabling both buttons whenever an editor instance exists,
+   * because some Monaco builds don't expose `canUndo`/`canRedo` on the model.
+   */
   const updateUndoRedoState = () => {
     const model = editorRef.current?.getModel?.();
     if (

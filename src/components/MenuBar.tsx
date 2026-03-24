@@ -2,17 +2,42 @@ import type { SourceFormat } from "../types/editor";
 import "./MenuBar.css";
 
 export interface MenuBarProps {
+  /**
+   * Whether the "Full" preview mode is active.
+   * The toggle slider reflects `isChecked === true` → Full, `false` → Simple.
+   */
   isChecked: boolean;
+  /** Called when the user clicks the Simple/Full preview mode toggle. */
   onChange: () => void;
+  /** Current document title shown in the editable title field. */
   title?: string;
+  /** Badge label indicating the source format (`"pretext"` or `"latex"`). */
   sourceFormat?: SourceFormat;
+  /**
+   * If provided, a "Convert to PreTeXt" button is shown.
+   * Called when the user clicks that button to promote the derived PreTeXt
+   * to the canonical source.
+   */
   onConvertToPretext?: () => void;
+  /**
+   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Should be `false` when conversion has failed (i.e. a `pretextError` exists).
+   */
   canConvertToPretext?: boolean;
+  /** Called when the user changes the title field value. */
   onTitleChange?: (value: string) => void;
+  /** If provided, a Save button is rendered. */
   onSaveButton?: () => void;
+  /** Label for the Save button.  Defaults to `"Save"`. */
   saveButtonLabel?: string;
+  /** If provided, a Cancel button is rendered. */
   onCancelButton?: () => void;
+  /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /**
+   * When `false`, the Simple/Full preview mode toggle is hidden entirely.
+   * Defaults to showing the toggle.
+   */
   showPreviewModeToggle?: boolean;
 }
 

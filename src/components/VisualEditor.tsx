@@ -162,12 +162,37 @@ const extensions = [
 //};
 
 interface VisualEditorProps {
+  /** PreTeXt XML string to render and (optionally) edit. */
   content: string;
+  /**
+   * Called (debounced 500 ms) with the updated PreTeXt XML whenever the user
+   * edits content.  Only fired when editing is enabled.
+   */
   onChange: (html: string) => void;
+  /**
+   * Whether editing is permitted.  Defaults to `true`.
+   * When `false`, the "Edit" toggle is hidden and the editor stays read-only.
+   */
   canEdit?: boolean;
+  /**
+   * Message displayed instead of the "Edit" toggle when `canEdit` is `false`.
+   * Explains to the user why editing is unavailable (e.g. LaTeX source mode).
+   */
   editDisabledReason?: string;
 }
 
+/**
+ * Tiptap-based visual (WYSIWYG) preview/editor for PreTeXt content.
+ *
+ * In read-only mode it renders a styled preview of the PreTeXt XML.
+ * When the user enables the "Edit" toggle, editing becomes active and
+ * changes are serialised back to PreTeXt via `json2ptx` and reported to
+ * the parent via `onChange`.
+ *
+ * External content changes (e.g. the user typing in the code editor) are
+ * applied via `setContent` only when the update did not originate inside
+ * this component, preventing feedback loops.
+ */
 const VisualEditor = ({
   content,
   onChange,

@@ -18,20 +18,61 @@ import type {
 const startingContent = defaultContent;
 
 export interface editorProps {
+  /** The source content string (PreTeXt XML or LaTeX). */
   content: string;
+  /**
+   * The format of `content`.  Defaults to `"pretext"` when omitted.
+   * When set to `"latex"`, the editor displays a LaTeX code editor and
+   * derives a read-only PreTeXt preview via conversion.
+   */
   sourceFormat?: SourceFormat;
+  /**
+   * Pre-computed PreTeXt XML corresponding to `content`.
+   * Providing this avoids running the conversion on first render when the
+   * host already has a cached result.  Only meaningful when
+   * `sourceFormat` is not `"pretext"`.
+   */
   pretextContent?: string;
+  /**
+   * Called whenever the source content changes (user edits in the code
+   * editor or WYSIWYG editor).
+   *
+   * @param value - The new source string (`undefined` is passed by Monaco on
+   *   certain edge cases; treat it as an empty string).
+   * @param meta - The full derived {@link EditorContentChange} state at the
+   *   time of the change, including the converted PreTeXt and any error.
+   */
   onContentChange: (
     value: string | undefined,
     meta?: EditorContentChange,
   ) => void;
+  /** Document title shown in the menu bar title field. */
   title?: string;
+  /** Called when the user edits the title field. */
   onTitleChange?: (value: string) => void;
+  /** If provided, a Save button is rendered in the menu bar. */
   onSaveButton?: () => void;
+  /** Label for the Save button.  Defaults to `"Save"`. */
   saveButtonLabel?: string;
+  /** If provided, a Cancel button is rendered in the menu bar. */
   onCancelButton?: () => void;
+  /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /**
+   * If provided, `onSave` is called on Ctrl+S in addition to `onSaveButton`.
+   * Useful when the host wants a keyboard shortcut to trigger saving without
+   * necessarily showing an explicit Save button.
+   */
   onSave?: () => void;
+  /**
+   * If provided, the right-hand panel shows a full iframe-based preview
+   * instead of the Tiptap visual editor, and a rebuild button / Ctrl+Enter
+   * shortcut become active.
+   *
+   * @param content - The current PreTeXt XML to render.
+   * @param title - The current document title.
+   * @param postToIframe - Helper to post a message into the preview iframe.
+   */
   onPreviewRebuild?: (
     content: string,
     title: string,
@@ -39,6 +80,15 @@ export interface editorProps {
   ) => void;
 }
 
+/**
+ * Builds the initial {@link EditorContentState} from the props passed to
+ * {@link Editors}.  Runs once per render cycle via `useMemo`.
+ *
+ * If the source is already PreTeXt, `pretextContent` mirrors `sourceContent`
+ * with no conversion.  For other formats the function either uses the
+ * caller-supplied `pretextContent` (avoiding redundant work) or runs the
+ * conversion via {@link derivePretextContent}.
+ */
 const createEditorContentState = ({
   content,
   sourceFormat,
@@ -62,6 +112,15 @@ const createEditorContentState = ({
   };
 };
 
+/**
+ * Top-level editor component that wires together the Monaco code editor and
+ * the right-hand preview panel (either Tiptap visual editor or full iframe
+ * preview).  Also owns the menu bar and responsive layout logic.
+ *
+ * Content state is derived from props on every render via `useMemo` so the
+ * parent always controls the source of truth; the component itself holds no
+ * long-lived content state.
+ */
 const Editors = (props: editorProps) => {
   //Content state belongs to the "editors" pair, and it is passed down to the two editors as props.
   const { content, sourceFormat, pretextContent } = props;
@@ -85,15 +144,22 @@ const Editors = (props: editorProps) => {
       : undefined);
   const previewUnavailable = contentState.pretextError !== undefined;
 
+  /** Triggers a full-page preview rebuild without saving. */
   const triggerRebuild = () => {
     fullPreviewRef.current?.rebuild();
   };
 
+  /** Calls the host's `onSave` callback then triggers a preview rebuild. */
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
     fullPreviewRef.current?.rebuild();
   };
 
+  /**
+   * Keyboard shortcuts captured at the root editor div:
+   * - Ctrl/Cmd+Enter → rebuild preview (when `onPreviewRebuild` is set).
+   * - Ctrl/Cmd+S     → save and rebuild.
+   */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && e.key === "Enter" && props.onPreviewRebuild) {
@@ -114,6 +180,13 @@ const Editors = (props: editorProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  /**
+   * Called by either sub-editor when the user changes the source content.
+   * Re-derives the PreTeXt content (or records an error) then propagates the
+   * full state snapshot to the host via `onContentChange`.
+   *
+   * @param sourceContent - The new raw source string from the editor.
+   */
   const updateContentState = (sourceContent: string | undefined) => {
     const normalizedSourceContent = sourceContent || "";
     const derivedPretext =
@@ -131,6 +204,11 @@ const Editors = (props: editorProps) => {
     props.onContentChange(normalizedSourceContent, nextState);
   };
 
+  /**
+   * Promotes the derived PreTeXt content to be the new canonical source,
+   * switching `sourceFormat` to `"pretext"`.  Only callable when conversion
+   * has succeeded (i.e. `pretextError` is undefined).
+   */
   const handleConvertToPretext = () => {
     if (contentState.pretextError) {
       return;
