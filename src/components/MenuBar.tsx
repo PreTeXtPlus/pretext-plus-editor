@@ -1,7 +1,13 @@
+import type { SourceFormat } from "../types/editor";
+import "./MenuBar.css";
+
 export interface MenuBarProps {
   isChecked: boolean;
   onChange: () => void;
   title?: string;
+  sourceFormat?: SourceFormat;
+  onConvertToPretext?: () => void;
+  canConvertToPretext?: boolean;
   onTitleChange?: (value: string) => void;
   onSaveButton?: () => void;
   saveButtonLabel?: string;
@@ -9,8 +15,6 @@ export interface MenuBarProps {
   cancelButtonLabel?: string;
   showPreviewModeToggle?: boolean;
 }
-
-import "./MenuBar.css";
 
 const MenuBar = (props: MenuBarProps) => {
   let previewModeToggle;
@@ -75,8 +79,21 @@ const MenuBar = (props: MenuBarProps) => {
             />
           </label>
         )}
+        <span className="pretext-plus-editor__source-badge">
+          Source: {props.sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
+        </span>
       </div>
       <div className="pretext-plus-editor__menu-right">
+        {props.onConvertToPretext && (
+          <button
+            className="pretext-plus-editor__button pretext-plus-editor__button--convert"
+            onClick={props.onConvertToPretext}
+            disabled={props.canConvertToPretext === false}
+            title="Promote the current derived PreTeXt into the canonical source"
+          >
+            Convert to PreTeXt
+          </button>
+        )}
         {props.onSaveButton && (
           <button
             className="pretext-plus-editor__button pretext-plus-editor__button--save"

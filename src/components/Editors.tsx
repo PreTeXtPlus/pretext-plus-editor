@@ -1,5 +1,5 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
@@ -7,13 +7,24 @@ import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import MenuBar from "./MenuBar";
 import "./Editors.css";
 
+import { derivePretextContent } from "../contentConversion";
 import { defaultContent } from "../defaultContent";
+import type {
+  EditorContentChange,
+  EditorContentState,
+  SourceFormat,
+} from "../types/editor";
 
 const startingContent = defaultContent;
 
 export interface editorProps {
   content: string;
-  onContentChange: (value: string | undefined) => void;
+  sourceFormat?: SourceFormat;
+  pretextContent?: string;
+  onContentChange: (
+    value: string | undefined,
+    meta?: EditorContentChange,
+  ) => void;
   title?: string;
   onTitleChange?: (value: string) => void;
   onSaveButton?: () => void;
@@ -28,10 +39,34 @@ export interface editorProps {
   ) => void;
 }
 
+const createEditorContentState = ({
+  content,
+  sourceFormat,
+  pretextContent,
+}: Pick<
+  editorProps,
+  "content" | "sourceFormat" | "pretextContent"
+>): EditorContentState => {
+  const sourceContent = content || startingContent;
+  const resolvedSourceFormat = sourceFormat ?? "pretext";
+  const derivedPretext =
+    resolvedSourceFormat === "pretext"
+      ? { pretextContent: sourceContent, pretextError: undefined }
+      : pretextContent !== undefined
+        ? { pretextContent, pretextError: undefined }
+        : derivePretextContent(sourceContent, resolvedSourceFormat);
+  return {
+    sourceContent,
+    sourceFormat: resolvedSourceFormat,
+    ...derivedPretext,
+  };
+};
+
 const Editors = (props: editorProps) => {
   //Content state belongs to the "editors" pair, and it is passed down to the two editors as props.
-  const [content, setContent] = useState(props.content || startingContent);
-  const [title, setTitle] = useState(props.title || "Document Title");
+  const contentState: EditorContentState = createEditorContentState(props);
+  const [internalTitle, setInternalTitle] = useState(props.title || "Document Title");
+  const title = props.title ?? internalTitle;
   const [showFull, setShowFull] = useState(true);
   const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
@@ -39,6 +74,12 @@ const Editors = (props: editorProps) => {
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
+  const previewContent =
+    contentState.pretextContent ??
+    (contentState.sourceFormat === "pretext"
+      ? contentState.sourceContent
+      : undefined);
+  const previewUnavailable = contentState.pretextError !== undefined;
 
   const triggerRebuild = () => {
     fullPreviewRef.current?.rebuild();
@@ -69,24 +110,65 @@ const Editors = (props: editorProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const updateContentState = (sourceContent: string | undefined) => {
+    const normalizedSourceContent = sourceContent || "";
+    const derivedPretext =
+      contentState.sourceFormat === "pretext"
+        ? { pretextContent: normalizedSourceContent, pretextError: undefined }
+        : derivePretextContent(
+            normalizedSourceContent,
+            contentState.sourceFormat,
+          );
+    const nextState: EditorContentState = {
+      sourceContent: normalizedSourceContent,
+      sourceFormat: contentState.sourceFormat,
+      ...derivedPretext,
+    };
+    props.onContentChange(normalizedSourceContent, nextState);
+  };
+
+  const handleConvertToPretext = () => {
+    if (contentState.pretextError) {
+      return;
+    }
+    const convertedPretext = contentState.pretextContent || "";
+    const nextState: EditorContentState = {
+      sourceContent: convertedPretext,
+      sourceFormat: "pretext",
+      pretextContent: convertedPretext,
+      pretextError: undefined,
+    };
+    props.onContentChange(convertedPretext, nextState);
+  };
+
   const codeEditor = (
     <CodeEditor
-      content={content}
-      onChange={(content) => {
-        setContent(content || "");
-        props.onContentChange(content);
-      }}
+      content={contentState.sourceContent}
+      sourceFormat={contentState.sourceFormat}
+      onChange={updateContentState}
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
     />
   );
   // `preview` will either be the visual editor or the full preview based on `showFull`
-  let preview;
-  if (showFull && props.onPreviewRebuild) {
+  let preview: ReactNode;
+  if (previewUnavailable) {
+    preview = (
+      <div className="pretext-plus-editor__preview-placeholder">
+        <p className="pretext-plus-editor__preview-placeholder-title">
+          Preview unavailable
+        </p>
+        <p>
+          {contentState.pretextError ||
+            "Could not generate PreTeXt preview content."}
+        </p>
+      </div>
+    );
+  } else if (showFull && props.onPreviewRebuild) {
     preview = (
       <FullPreview
         ref={fullPreviewRef}
-        content={content}
+        content={previewContent || ""}
         title={title}
         onRebuild={props.onPreviewRebuild}
       />
@@ -94,16 +176,17 @@ const Editors = (props: editorProps) => {
   } else {
     preview = (
       <VisualEditor
-        content={content}
+        content={previewContent || ""}
+        canEdit={contentState.sourceFormat === "pretext"}
+        editDisabledReason="Convert this LaTeX source to PreTeXt before enabling visual editing."
         onChange={(content) => {
-          setContent(content || "");
-          props.onContentChange(content);
+          updateContentState(content);
         }}
       />
     );
   }
 
-  let editorDisplays;
+  let editorDisplays: ReactNode;
   if (isNarrowScreen) {
     editorDisplays = (
       <div className="pretext-plus-editor__tabs">
@@ -169,8 +252,15 @@ const Editors = (props: editorProps) => {
         isChecked={showFull}
         onChange={() => setShowFull(!showFull)}
         title={title}
+        sourceFormat={contentState.sourceFormat}
+        onConvertToPretext={
+          contentState.sourceFormat === "latex"
+            ? handleConvertToPretext
+            : undefined
+        }
+        canConvertToPretext={contentState.pretextError === undefined}
         onTitleChange={(value) => {
-          setTitle(value);
+          setInternalTitle(value);
           props.onTitleChange?.(value);
         }}
         onSaveButton={props.onSaveButton}

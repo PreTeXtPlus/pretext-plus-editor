@@ -1,9 +1,11 @@
 import React from "react";
 import "./CodeEditorMenu.css";
 import { formatPretext } from "@pretextbook/format";
+import type { SourceFormat } from "../types/editor";
 
 interface CodeEditorMenuProps {
   content: string;
+  sourceFormat: SourceFormat;
   onContentChange: (newContent: string) => void;
   onOpenLatexImport: () => void;
   onUndo: () => void;
@@ -14,6 +16,7 @@ interface CodeEditorMenuProps {
 
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   content,
+  sourceFormat,
   onContentChange,
   onOpenLatexImport,
 }) => {
@@ -32,9 +35,14 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
       <button
         className="pretext-plus-editor__menu-button"
         onClick={handleFormat}
-        title="Format the XML content"
+        title={
+          sourceFormat === "pretext"
+            ? "Format the PreTeXt source"
+            : "Formatting is only available for PreTeXt source"
+        }
+        disabled={sourceFormat !== "pretext"}
       >
-        Format
+        Format PreTeXt
       </button>
       <button
         className="pretext-plus-editor__menu-button"

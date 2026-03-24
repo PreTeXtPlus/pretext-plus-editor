@@ -6,8 +6,10 @@ import {
   type DragEvent,
 } from "react";
 import { Editor } from "@monaco-editor/react";
-import { latexToPretext } from "@pretextbook/latex-pretext";
-import { formatPretext } from "@pretextbook/format";
+import {
+  convertLatexToPretext,
+  getConversionErrorMessage,
+} from "../contentConversion";
 import "./LatexImportDialog.css";
 
 interface LatexImportDialogProps {
@@ -56,13 +58,11 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
     }
 
     try {
-      const converted = String(latexToPretext(trimmedLatex)).trim();
-      const formatted = formatPretext(converted);
-      setConvertedOutput(formatted);
+      setConvertedOutput(convertLatexToPretext(trimmedLatex));
       setCopyStatus("idle");
     } catch (error) {
       console.error("Error converting LaTeX:", error);
-      alert("Error converting or formatting PreTeXt output");
+      alert(getConversionErrorMessage(error));
     }
   };
 

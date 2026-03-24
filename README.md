@@ -19,12 +19,17 @@ import '@pretextbook/web-editor/dist/web-editor.css';
 
 function App() {
   const [content, setContent] = useState('');
+  const [sourceFormat, setSourceFormat] = useState<'pretext' | 'latex'>('pretext');
   const [title, setTitle] = useState('My Document');
 
   return (
     <Editors
       content={content}
-      onContentChange={setContent}
+      sourceFormat={sourceFormat}
+      onContentChange={(value, meta) => {
+        setContent(value || '');
+        setSourceFormat(meta?.sourceFormat || 'pretext');
+      }}
       title={title}
       onTitleChange={setTitle}
       onSaveButton={() => console.log('Save clicked')}
@@ -63,17 +68,44 @@ All button styles, layout, and MenuBar styling will work automatically without a
 The `Editors` component accepts the following props:
 
 ```tsx
+type SourceFormat = 'pretext' | 'latex';
+
+interface EditorContentChange {
+  sourceContent: string;
+  sourceFormat: SourceFormat;
+  pretextContent?: string;
+  pretextError?: string;
+}
+
 interface editorProps {
-  content: string;                          // The current PreTeXt content
-  onContentChange: (value: string | undefined) => void;  // Called when content changes
+  content: string;                          // The canonical source content
+  sourceFormat?: SourceFormat;              // The canonical source format
+  pretextContent?: string;                  // Optional derived PreTeXt for previewing LaTeX sources
+  onContentChange: (value: string | undefined, meta?: EditorContentChange) => void;
   title?: string;                           // Document title
   onTitleChange?: (value: string) => void;  // Called when title changes
   onSaveButton?: () => void;                // Save button callback
   saveButtonLabel?: string;                 // Custom save button text
   onCancelButton?: () => void;              // Cancel button callback
   cancelButtonLabel?: string;               // Custom cancel button text
+  onSave?: () => void;                      // Keyboard save callback
+  onPreviewRebuild?: (content: string, title: string, postToIframe: (url: string, data: any) => void) => void;
 }
 ```
+
+For LaTeX-authored documents, the editor can now derive previewable PreTeXt on the fly. The simple preview remains read-only until the document is explicitly converted to PreTeXt source.
+
+When a document is in LaTeX mode, the toolbar exposes a `Convert to PreTeXt` action. That action replaces the canonical source with the latest generated PreTeXt so the visual editor can become editable.
+
+### Persistence recommendation
+
+For consuming apps, the recommended storage model is:
+
+- store one canonical source: `content` plus `sourceFormat`
+- optionally store derived `pretextContent` as a cache for LaTeX-authored documents
+- do not treat LaTeX and PreTeXt as two independently editable canonical sources
+
+Once a user clicks `Convert to PreTeXt`, the canonical source should become PreTeXt. If your product needs an audit trail, keep the original LaTeX separately in your own persistence layer.
 
 ## Features
 

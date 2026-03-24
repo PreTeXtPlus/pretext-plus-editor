@@ -4,9 +4,11 @@ import { registerCodeEditorCompletions } from "./codeEditorCompletions";
 //import type { Monaco } from '@monaco-editor/react';
 import CodeEditorMenu from "./CodeEditorMenu";
 import LatexImportDialog from "./LatexImportDialog";
+import type { SourceFormat } from "../types/editor";
 
 interface CodeEditorProps {
   content: string;
+  sourceFormat: SourceFormat;
   onChange: (value: string | undefined) => void;
   onRebuild?: () => void;
   onSave?: () => void;
@@ -25,11 +27,13 @@ const options = {
 
 const CodeEditor = ({
   content,
+  sourceFormat,
   onChange,
   onRebuild,
   onSave,
 }: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,6 +51,14 @@ const CodeEditor = ({
     onSaveRef.current = onSave;
   }, [onSave]);
   // const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    completionProviderRef.current?.dispose?.();
+    completionProviderRef.current =
+      sourceFormat === "pretext" && monacoRef.current
+        ? registerCodeEditorCompletions(monacoRef.current)
+        : null;
+  }, [sourceFormat]);
 
   useEffect(() => {
     return () => {
@@ -76,6 +88,7 @@ const CodeEditor = ({
 
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
     // content-sync effect (editorRef.current was null at that point).
@@ -101,7 +114,10 @@ const CodeEditor = ({
     });
 
     completionProviderRef.current?.dispose?.();
-    completionProviderRef.current = registerCodeEditorCompletions(monaco);
+    completionProviderRef.current =
+      sourceFormat === "pretext"
+        ? registerCodeEditorCompletions(monaco)
+        : null;
   };
 
   const updateUndoRedoState = () => {
@@ -143,6 +159,7 @@ const CodeEditor = ({
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
         content={content}
+        sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
         onOpenLatexImport={() => setIsLatexDialogOpen(true)}
         onUndo={handleUndo}
@@ -157,7 +174,7 @@ const CodeEditor = ({
         <Editor
           options={options}
           height="100%"
-          language="xml"
+          language={sourceFormat === "latex" ? "latex" : "xml"}
           defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value) => {

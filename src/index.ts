@@ -4,6 +4,16 @@ import './index.css';
 
 export { default as Editors } from './components/Editors';
 export type { editorProps } from './components/Editors';
+export {
+  convertLatexToPretext,
+  derivePretextContent,
+  detectSourceFormat,
+} from './contentConversion';
+export type {
+  EditorContentChange,
+  EditorContentState,
+  SourceFormat,
+} from './types/editor';
 
 // Export other useful components if needed
 export { default as CodeEditor } from './components/CodeEditor';
