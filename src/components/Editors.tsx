@@ -1,5 +1,5 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
@@ -64,7 +64,11 @@ const createEditorContentState = ({
 
 const Editors = (props: editorProps) => {
   //Content state belongs to the "editors" pair, and it is passed down to the two editors as props.
-  const contentState: EditorContentState = createEditorContentState(props);
+  const { content, sourceFormat, pretextContent } = props;
+  const contentState: EditorContentState = useMemo(
+    () => createEditorContentState({ content, sourceFormat, pretextContent }),
+    [content, sourceFormat, pretextContent],
+  );
   const [internalTitle, setInternalTitle] = useState(props.title || "Document Title");
   const title = props.title ?? internalTitle;
   const [showFull, setShowFull] = useState(true);
