@@ -156,6 +156,14 @@
   background-color: #4b5563;
 }
 
+.pretext-plus-editor__latex-dialog-button--danger {
+  background-color: #b91c1c;
+}
+
+.pretext-plus-editor__latex-dialog-button--danger:hover:not(:disabled) {
+  background-color: #991b1b;
+}
+
 @media (max-width: 700px) {
   .pretext-plus-editor__latex-dialog-overlay {
     padding: 1vh 1vw;

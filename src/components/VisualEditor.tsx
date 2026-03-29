@@ -84,11 +84,6 @@ const extensions = [
   //},
 ];
 
-interface VisualEditorProps {
-  content: string;
-  onChange: (html: string) => void;
-}
-
 //const WarningMessage: React.FC<{ isValid: boolean }> = ({ isValid }) => {
 //  if (!isValid) {
 //    return (
@@ -167,14 +162,48 @@ interface VisualEditorProps {
 //};
 
 interface VisualEditorProps {
+  /** PreTeXt XML string to render and (optionally) edit. */
   content: string;
+  /**
+   * Called (debounced 500 ms) with the updated PreTeXt XML whenever the user
+   * edits content.  Only fired when editing is enabled.
+   */
   onChange: (html: string) => void;
+  /**
+   * Whether editing is permitted.  Defaults to `true`.
+   * When `false`, the "Edit" toggle is hidden and the editor stays read-only.
+   */
+  canEdit?: boolean;
+  /**
+   * Message displayed instead of the "Edit" toggle when `canEdit` is `false`.
+   * Explains to the user why editing is unavailable (e.g. LaTeX source mode).
+   */
+  editDisabledReason?: string;
 }
 
-const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
+/**
+ * Tiptap-based visual (WYSIWYG) preview/editor for PreTeXt content.
+ *
+ * In read-only mode it renders a styled preview of the PreTeXt XML.
+ * When the user enables the "Edit" toggle, editing becomes active and
+ * changes are serialised back to PreTeXt via `json2ptx` and reported to
+ * the parent via `onChange`.
+ *
+ * External content changes (e.g. the user typing in the code editor) are
+ * applied via `setContent` only when the update did not originate inside
+ * this component, preventing feedback loops.
+ */
+const VisualEditor = ({
+  content,
+  onChange,
+  canEdit = true,
+  editDisabledReason,
+}: VisualEditorProps) => {
   //const [isValid, setIsValid] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEditableRef = useRef(false);
+  const [isEditable, setIsEditable] = useState(false);
+  const isEditingEnabled = canEdit && isEditable;
 
   const editor = useEditor({
     extensions,
@@ -240,14 +269,12 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
     isExternalUpdateRef.current = true;
   }, [content]);
 
-  const [isEditable, setIsEditable] = useState(false);
-
   useEffect(() => {
-    isEditableRef.current = isEditable;
+    isEditableRef.current = isEditingEnabled;
     if (editor) {
-      editor.setEditable(isEditable, false);
+      editor.setEditable(isEditingEnabled, false);
     }
-  }, [editor, isEditable]);
+  }, [editor, isEditingEnabled]);
 
   return (
     <div className="pretext-plus-editor__visual-editor">
@@ -255,22 +282,28 @@ const VisualEditor = ({ content, onChange }: VisualEditorProps) => {
         <p className="pretext-plus-editor__visual-editor-title">
           Simple Preview
         </p>
-        <label className="pretext-plus-editor__edit-toggle">
-          <input
-            className="pretext-plus-editor__edit-checkbox"
-            type="checkbox"
-            checked={isEditable}
-            onChange={() => setIsEditable(!isEditable)}
-          />
-          Edit
-        </label>
+        {canEdit ? (
+          <label className="pretext-plus-editor__edit-toggle">
+            <input
+              className="pretext-plus-editor__edit-checkbox"
+              type="checkbox"
+              checked={isEditable}
+              onChange={() => setIsEditable(!isEditable)}
+            />
+            Edit
+          </label>
+        ) : (
+          <p className="pretext-plus-editor__visual-editor-hint">
+            {editDisabledReason || "Read-only preview"}
+          </p>
+        )}
       </div>
-      <div className={(isEditable ? "editable" : "read-only") + " ptx-page"}>
+      <div className={(isEditingEnabled ? "editable" : "read-only") + " ptx-page"}>
         {/* <WarningMessage isValid={isValid} /> */}
         {/* <MenuBar editor={editor} /> */}
         <EditorContent editor={editor} />
       </div>
-      <PtxBubbleMenu editor={editor} />
+      {canEdit ? <PtxBubbleMenu editor={editor} /> : null}
       {/*<InfoMessage editor={editor} />*/}
     </div>
   );

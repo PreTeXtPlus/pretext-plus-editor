@@ -1,16 +1,31 @@
+import "./MenuBar.css";
+
 export interface MenuBarProps {
+  /**
+   * Whether the "Full" preview mode is active.
+   * The toggle slider reflects `isChecked === true` → Full, `false` → Simple.
+   */
   isChecked: boolean;
+  /** Called when the user clicks the Simple/Full preview mode toggle. */
   onChange: () => void;
+  /** Current document title shown in the editable title field. */
   title?: string;
+  /** Called when the user changes the title field value. */
   onTitleChange?: (value: string) => void;
+  /** If provided, a Save button is rendered. */
   onSaveButton?: () => void;
+  /** Label for the Save button.  Defaults to `"Save"`. */
   saveButtonLabel?: string;
+  /** If provided, a Cancel button is rendered. */
   onCancelButton?: () => void;
+  /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /**
+   * When `false`, the Simple/Full preview mode toggle is hidden entirely.
+   * Defaults to showing the toggle.
+   */
   showPreviewModeToggle?: boolean;
 }
-
-import "./MenuBar.css";
 
 const MenuBar = (props: MenuBarProps) => {
   let previewModeToggle;

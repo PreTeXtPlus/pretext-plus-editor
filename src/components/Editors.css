@@ -66,6 +66,24 @@
   flex-direction: column;
 }
 
+.pretext-plus-editor__preview-placeholder {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1.5rem;
+  border-left: 1px solid #ddd;
+  background-color: #fafafa;
+  color: #374151;
+}
+
+.pretext-plus-editor__preview-placeholder-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .pretext-plus-editor__code-editor-tab {
   height: 80vh;
   display: flex;

@@ -6,14 +6,24 @@ import {
   type DragEvent,
 } from "react";
 import { Editor } from "@monaco-editor/react";
-import { latexToPretext } from "@pretextbook/latex-pretext";
-import { formatPretext } from "@pretextbook/format";
+import {
+  convertLatexToPretext,
+  getConversionErrorMessage,
+} from "../contentConversion";
 import "./LatexImportDialog.css";
 
 interface LatexImportDialogProps {
+  /** Called when the dialog should close (Cancel button, Escape key, or after "Copy and Close"). */
   onClose: () => void;
 }
 
+/**
+ * Modal dialog that lets the user paste, open, or drag-and-drop a `.tex` file,
+ * convert it to PreTeXt, and copy the result to the clipboard.
+ *
+ * The dialog does not modify the editor content directly; it relies on the
+ * user copying the output and pasting it wherever needed.
+ */
 const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
   const [latexInput, setLatexInput] = useState("");
   const [convertedOutput, setConvertedOutput] = useState("");
@@ -56,13 +66,11 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
     }
 
     try {
-      const converted = String(latexToPretext(trimmedLatex)).trim();
-      const formatted = formatPretext(converted);
-      setConvertedOutput(formatted);
+      setConvertedOutput(convertLatexToPretext(trimmedLatex));
       setCopyStatus("idle");
     } catch (error) {
       console.error("Error converting LaTeX:", error);
-      alert("Error converting or formatting PreTeXt output");
+      alert(getConversionErrorMessage(error));
     }
   };
 
@@ -82,6 +90,12 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
     }
   };
 
+  /**
+   * Reads a `.tex` file selected via the file picker or drag-and-drop,
+   * loads its text into the LaTeX input editor, and resets conversion output.
+   *
+   * @param file - The File object to read.
+   */
   const readLatexFile = (file: File) => {
     if (!file.name.toLowerCase().endsWith(".tex")) {
       alert("Please choose a .tex file");

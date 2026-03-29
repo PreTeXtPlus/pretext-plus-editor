@@ -1,17 +1,41 @@
 import { Editor } from "@monaco-editor/react";
 import { useState, useRef, useEffect } from "react";
 import { registerCodeEditorCompletions } from "./codeEditorCompletions";
-//import type { Monaco } from '@monaco-editor/react';
 import CodeEditorMenu from "./CodeEditorMenu";
 import LatexImportDialog from "./LatexImportDialog";
+import ConvertToPretextDialog from "./ConvertToPretextDialog";
+import type { SourceFormat } from "../types/editor";
 
 interface CodeEditorProps {
+  /** The current source content to display. */
   content: string;
+  /** Determines the Monaco language mode (`"xml"` for PreTeXt, `"latex"` for LaTeX). */
+  sourceFormat: SourceFormat;
+  /** Called (debounced 500 ms) whenever the user edits the content. */
   onChange: (value: string | undefined) => void;
+  /** If provided, Ctrl+Enter in the editor triggers this callback. */
   onRebuild?: () => void;
+  /** If provided, Ctrl+S in the editor triggers this callback. */
   onSave?: () => void;
+  /**
+   * If provided, a "Convert to PreTeXt" button is shown in the toolbar.
+   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   */
+  onConvertToPretext?: () => void;
+  /**
+   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Should be `false` when conversion has failed.
+   */
+  canConvertToPretext?: boolean;
+  /**
+   * The already-converted PreTeXt content.  Shown in the confirmation dialog
+   * so the user can review before committing.  Only meaningful when
+   * `sourceFormat` is `"latex"`.
+   */
+  pretextContent?: string;
 }
 
+/** Static Monaco editor options shared across all instances of this component. */
 const options = {
   automaticLayout: true,
   minimap: { enabled: false },
@@ -23,19 +47,36 @@ const options = {
   padding: { top: 10, bottom: 10 },
 };
 
+/**
+ * Monaco-based code editor with an attached toolbar.
+ *
+ * Manages its own undo/redo state so the toolbar buttons stay in sync with
+ * the editor model.  `onRebuild` and `onSave` callbacks are stored in refs
+ * so keyboard shortcuts registered at mount time always call the latest
+ * version without needing to re-register.
+ *
+ * Content is synced from props only when the prop value differs from what the
+ * editor model already contains, to prevent cursor jumps on re-render.
+ */
 const CodeEditor = ({
   content,
+  sourceFormat,
   onChange,
   onRebuild,
   onSave,
+  onConvertToPretext,
+  canConvertToPretext,
+  pretextContent,
 }: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
+  const monacoRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
+  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
 
@@ -47,6 +88,14 @@ const CodeEditor = ({
     onSaveRef.current = onSave;
   }, [onSave]);
   // const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    completionProviderRef.current?.dispose?.();
+    completionProviderRef.current =
+      sourceFormat === "pretext" && monacoRef.current
+        ? registerCodeEditorCompletions(monacoRef.current)
+        : null;
+  }, [sourceFormat]);
 
   useEffect(() => {
     return () => {
@@ -76,6 +125,7 @@ const CodeEditor = ({
 
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
+    monacoRef.current = monaco;
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
     // content-sync effect (editorRef.current was null at that point).
@@ -101,9 +151,17 @@ const CodeEditor = ({
     });
 
     completionProviderRef.current?.dispose?.();
-    completionProviderRef.current = registerCodeEditorCompletions(monaco);
+    completionProviderRef.current =
+      sourceFormat === "pretext"
+        ? registerCodeEditorCompletions(monaco)
+        : null;
   };
 
+  /**
+   * Reads the Monaco model's undo/redo availability and updates state.
+   * Falls back to enabling both buttons whenever an editor instance exists,
+   * because some Monaco builds don't expose `canUndo`/`canRedo` on the model.
+   */
   const updateUndoRedoState = () => {
     const model = editorRef.current?.getModel?.();
     if (
@@ -143,21 +201,34 @@ const CodeEditor = ({
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <CodeEditorMenu
         content={content}
+        sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
         onOpenLatexImport={() => setIsLatexDialogOpen(true)}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        onConvertToPretext={
+          onConvertToPretext ? () => setIsConvertDialogOpen(true) : undefined
+        }
+        canConvertToPretext={canConvertToPretext}
       />
       {isLatexDialogOpen ? (
         <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
+      ) : null}
+      {isConvertDialogOpen && onConvertToPretext ? (
+        <ConvertToPretextDialog
+          latexSource={content}
+          pretextContent={pretextContent ?? ""}
+          onConfirm={onConvertToPretext}
+          onClose={() => setIsConvertDialogOpen(false)}
+        />
       ) : null}
       <div style={{ flex: 1 }}>
         <Editor
           options={options}
           height="100%"
-          language="xml"
+          language={sourceFormat === "latex" ? "latex" : "xml"}
           defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value) => {

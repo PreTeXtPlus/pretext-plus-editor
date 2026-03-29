@@ -42,6 +42,17 @@
   outline-offset: 2px;
 }
 
+.pretext-plus-editor__source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background-color: #e5e7eb;
+  color: #1f2937;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
 /* Button Styles */
 .pretext-plus-editor__button {
   width: 100%;
@@ -68,6 +79,15 @@
   background-color: #15803d;
 }
 
+.pretext-plus-editor__button--convert {
+  background-color: #2563eb;
+  color: white;
+}
+
+.pretext-plus-editor__button--convert:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
 .pretext-plus-editor__button--cancel {
   background-color: #d1d5db;
   color: black;
@@ -76,6 +96,11 @@
 
 .pretext-plus-editor__button--cancel:hover {
   background-color: #9ca3af;
+}
+
+.pretext-plus-editor__button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Preview Mode Toggle */
