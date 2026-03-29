@@ -4,12 +4,7 @@ import { defaultContent } from "./defaultContent";
 import { useState } from "react";
 import type { SourceFormat } from "./types/editor";
 
-const latexDemoContent = String.raw`\documentclass{article}
-\title{Testing LaTeX Source Mode}
-\author{PreTeXt Plus}
-\begin{document}
-\maketitle
-
+const latexDemoContent = String.raw`
 \section{Introduction}
 
 This is a short LaTeX document for testing the new source-format workflow.

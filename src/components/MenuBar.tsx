@@ -1,4 +1,3 @@
-import type { SourceFormat } from "../types/editor";
 import "./MenuBar.css";
 
 export interface MenuBarProps {
@@ -11,19 +10,6 @@ export interface MenuBarProps {
   onChange: () => void;
   /** Current document title shown in the editable title field. */
   title?: string;
-  /** Badge label indicating the source format (`"pretext"` or `"latex"`). */
-  sourceFormat?: SourceFormat;
-  /**
-   * If provided, a "Convert to PreTeXt" button is shown.
-   * Called when the user clicks that button to promote the derived PreTeXt
-   * to the canonical source.
-   */
-  onConvertToPretext?: () => void;
-  /**
-   * Controls whether the "Convert to PreTeXt" button is enabled.
-   * Should be `false` when conversion has failed (i.e. a `pretextError` exists).
-   */
-  canConvertToPretext?: boolean;
   /** Called when the user changes the title field value. */
   onTitleChange?: (value: string) => void;
   /** If provided, a Save button is rendered. */
@@ -104,21 +90,8 @@ const MenuBar = (props: MenuBarProps) => {
             />
           </label>
         )}
-        <span className="pretext-plus-editor__source-badge">
-          Source: {props.sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
-        </span>
       </div>
       <div className="pretext-plus-editor__menu-right">
-        {props.onConvertToPretext && (
-          <button
-            className="pretext-plus-editor__button pretext-plus-editor__button--convert"
-            onClick={props.onConvertToPretext}
-            disabled={props.canConvertToPretext === false}
-            title="Promote the current derived PreTeXt into the canonical source"
-          >
-            Convert to PreTeXt
-          </button>
-        )}
         {props.onSaveButton && (
           <button
             className="pretext-plus-editor__button pretext-plus-editor__button--save"

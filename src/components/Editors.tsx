@@ -230,6 +230,13 @@ const Editors = (props: editorProps) => {
       onChange={updateContentState}
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
+      onConvertToPretext={
+        contentState.sourceFormat === "latex"
+          ? handleConvertToPretext
+          : undefined
+      }
+      canConvertToPretext={contentState.pretextError === undefined}
+      pretextContent={contentState.pretextContent}
     />
   );
   // `preview` will either be the visual editor or the full preview based on `showFull`
@@ -260,7 +267,7 @@ const Editors = (props: editorProps) => {
       <VisualEditor
         content={previewContent || ""}
         canEdit={contentState.sourceFormat === "pretext"}
-        editDisabledReason="Convert this LaTeX source to PreTeXt before enabling visual editing."
+        editDisabledReason=""
         onChange={(content) => {
           updateContentState(content);
         }}
@@ -334,13 +341,6 @@ const Editors = (props: editorProps) => {
         isChecked={showFull}
         onChange={() => setShowFull(!showFull)}
         title={title}
-        sourceFormat={contentState.sourceFormat}
-        onConvertToPretext={
-          contentState.sourceFormat === "latex"
-            ? handleConvertToPretext
-            : undefined
-        }
-        canConvertToPretext={contentState.pretextError === undefined}
         onTitleChange={(value) => {
           setInternalTitle(value);
           props.onTitleChange?.(value);

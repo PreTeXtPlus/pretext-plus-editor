@@ -20,6 +20,16 @@ interface CodeEditorMenuProps {
   canUndo: boolean;
   /** Whether the redo button should be enabled. */
   canRedo: boolean;
+  /**
+   * If provided, a "Convert to PreTeXt" button is shown.
+   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   */
+  onConvertToPretext?: () => void;
+  /**
+   * Controls whether the "Convert to PreTeXt" button is enabled.
+   * Should be `false` when conversion has failed.
+   */
+  canConvertToPretext?: boolean;
 }
 
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
@@ -27,10 +37,11 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   sourceFormat,
   onContentChange,
   onOpenLatexImport,
+  onConvertToPretext,
+  canConvertToPretext,
 }) => {
   const handleFormat = () => {
     try {
-      // Format with indentation
       onContentChange(formatPretext(content));
     } catch (error) {
       console.error("Error formatting:", error);
@@ -40,25 +51,36 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
 
   return (
     <div className="pretext-plus-editor__code-editor-menu">
-      <button
-        className="pretext-plus-editor__menu-button"
-        onClick={handleFormat}
-        title={
-          sourceFormat === "pretext"
-            ? "Format the PreTeXt source"
-            : "Formatting is only available for PreTeXt source"
-        }
-        disabled={sourceFormat !== "pretext"}
-      >
-        Format PreTeXt
-      </button>
-      <button
-        className="pretext-plus-editor__menu-button"
-        onClick={onOpenLatexImport}
-        title="Import LaTeX"
-      >
-        Import LaTeX
-      </button>
+      {sourceFormat === "latex" ? (
+        <button
+          className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+          onClick={onConvertToPretext}
+          disabled={canConvertToPretext === false}
+          title="Promote the current derived PreTeXt into the canonical source"
+        >
+          Convert to PreTeXt
+        </button>
+      ) : (
+        <>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={handleFormat}
+            title="Format the PreTeXt source"
+          >
+            Format PreTeXt
+          </button>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenLatexImport}
+            title="Import LaTeX"
+          >
+            Import LaTeX
+          </button>
+        </>
+      )}
+      <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
+        {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
+      </span>
     </div>
   );
 };
