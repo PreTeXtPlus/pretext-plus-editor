@@ -319,7 +319,7 @@ const Editors = (props: editorProps) => {
           role="tabpanel"
           aria-labelledby={activeTab === "editor" ? editorTabId : previewTabId}
         >
-          <div style={{ height: "60vh" }}>
+          <div style={{ height: "100%" }}>
             {activeTab === "editor" ? codeEditor : preview}
           </div>
         </div>
