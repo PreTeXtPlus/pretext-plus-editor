@@ -5,8 +5,8 @@ export type SourceFormat = "pretext" | "latex";
 
 /**
  * Represents the full content state of the editor at any point in time.
- * When `sourceFormat` is `"pretext"`, `pretextContent` mirrors `sourceContent`.
- * When `sourceFormat` is `"latex"`, `pretextContent` holds the converted XML,
+ * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.
+ * When `sourceFormat` is `"latex"`, `pretextSource` holds the converted XML,
  * or `pretextError` holds an error description if conversion failed.
  */
 export interface EditorContentState {
@@ -15,8 +15,8 @@ export interface EditorContentState {
   /** The format of `sourceContent`. */
   sourceFormat: SourceFormat;
   /** The PreTeXt XML derived from `sourceContent` (present when conversion succeeded). */
-  pretextContent?: string;
-  /** Human-readable error set when conversion fails.  When present, `pretextContent` is undefined. */
+  pretextSource?: string;
+  /** Human-readable error set when conversion fails.  When present, `pretextSource` is undefined. */
   pretextError?: string;
 }
 
@@ -26,16 +26,16 @@ export type EditorContentChange = EditorContentState;
 /** Returned by {@link derivePretextContent}. Exactly one of the two fields will be set. */
 export interface DerivedPretextResult {
   /** The converted (or pass-through) PreTeXt XML string. */
-  pretextContent?: string;
+  pretextSource?: string;
   /** Human-readable error when conversion fails. */
   pretextError?: string;
 }
 
 /**
- * Inspects `content` and returns the most likely {@link SourceFormat}.
+ * Inspects `source` and returns the most likely {@link SourceFormat}.
  * Returns `"latex"` when LaTeX markers are detected, otherwise `"pretext"`.
  */
-export function detectSourceFormat(content: string): SourceFormat;
+export function detectSourceFormat(source: string): SourceFormat;
 
 /**
  * Converts a LaTeX document string to formatted PreTeXt XML.
@@ -56,11 +56,11 @@ export function derivePretextContent(
 /** Props accepted by the top-level {@link Editors} component. */
 export interface editorProps {
   /** The source content string (PreTeXt XML or LaTeX). */
-  content: string;
-  /** The format of `content`.  Defaults to `"pretext"` when omitted. */
+  source: string;
+  /** The format of `source`.  Defaults to `"pretext"` when omitted. */
   sourceFormat?: SourceFormat;
-  /** Pre-computed PreTeXt XML for `content`; avoids redundant conversion on first render. */
-  pretextContent?: string;
+  /** Pre-computed PreTeXt XML for `source`; avoids redundant conversion on first render. */
+  pretextSource?: string;
   /**
    * Called whenever the source content changes.
    * @param value - The new source string.
@@ -89,7 +89,7 @@ export interface editorProps {
    * Ctrl+Enter / rebuild controls become active.
    */
   onPreviewRebuild?: (
-    content: string,
+    source: string,
     title: string,
     postToIframe: (url: string, data: any) => void,
   ) => void;

@@ -15,34 +15,34 @@ Inline math such as $a^2+b^2=c^2$ should round-trip through the preview pipeline
 \end{document}`;
 
 const handlePreviewRebuild = async (
-  content: string,
+  source: string,
   title: string,
   postToIframe: (url: string, data: any) => void,
 ) => {
   const token = "demo"; // In real usage, get a valid token from your backend
-  const postData = { source: content, title: title, token: token };
+  const postData = { source: source, title: title, token: token };
   postToIframe("https://build.pretext.plus", postData);
 };
 
 function App() {
-  const [content, setContent] = useState(defaultContent);
+  const [source, setSource] = useState(defaultContent);
   const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pretext");
-  const [pretextContent, setPretextContent] = useState<string | undefined>(
+  const [pretextSource, setPretextSource] = useState<string | undefined>(
     defaultContent,
   );
   const [title, setTitle] = useState("Document Title");
 
   const loadPretextDemo = () => {
-    setContent(defaultContent);
+    setSource(defaultContent);
     setSourceFormat("pretext");
-    setPretextContent(defaultContent);
+    setPretextSource(defaultContent);
     setTitle("Document Title");
   };
 
   const loadLatexDemo = () => {
-    setContent(latexDemoContent);
+    setSource(latexDemoContent);
     setSourceFormat("latex");
-    setPretextContent(undefined);
+    setPretextSource(undefined);
     setTitle("Testing LaTeX Source Mode");
   };
 
@@ -60,13 +60,13 @@ function App() {
         </button>
       </div>
       <Editors
-        content={content}
+        source={source}
         sourceFormat={sourceFormat}
-        pretextContent={pretextContent}
+        pretextSource={pretextSource}
         onContentChange={(value, meta) => {
-          setContent(value || "");
+          setSource(value || "");
           setSourceFormat(meta?.sourceFormat || "pretext");
-          setPretextContent(meta?.pretextContent);
+          setPretextSource(meta?.pretextSource);
         }}
         title={title}
         onTitleChange={(value) => setTitle(value || "Document Title")}
@@ -88,7 +88,7 @@ function App() {
         }}
       ></textarea>
       <textarea
-        value={content}
+        value={source}
         readOnly
         style={{
           display: "none",

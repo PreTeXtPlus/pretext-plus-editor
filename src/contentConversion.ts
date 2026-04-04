@@ -5,7 +5,7 @@ import type { SourceFormat } from "./types/editor";
 /** Returned by {@link derivePretextContent}. Exactly one of the two fields will be set. */
 export interface DerivedPretextResult {
   /** The converted (or pass-through) PreTeXt XML string. */
-  pretextContent?: string;
+  pretextSource?: string;
   /** Human-readable error when conversion fails. */
   pretextError?: string;
 }
@@ -25,7 +25,7 @@ const LATEX_FORMAT_MARKERS = [
 ];
 
 /**
- * Inspects `content` and returns the most likely {@link SourceFormat}.
+ * Inspects `source` and returns the most likely {@link SourceFormat}.
  *
  * Rules (applied in order):
  * 1. Empty/whitespace-only → `"pretext"` (safe default).
@@ -33,8 +33,8 @@ const LATEX_FORMAT_MARKERS = [
  * 3. Contains any {@link LATEX_FORMAT_MARKERS} → `"latex"`.
  * 4. Otherwise → `"pretext"`.
  */
-export function detectSourceFormat(content: string): SourceFormat {
-  const trimmedContent = content.trim();
+export function detectSourceFormat(source: string): SourceFormat {
+  const trimmedContent = source.trim();
   if (!trimmedContent) {
     return "pretext";
   }
@@ -86,18 +86,18 @@ export function getConversionErrorMessage(error: unknown): string {
  *
  * @param sourceContent - The raw source string.
  * @param sourceFormat - The format of `sourceContent`.
- * @returns A {@link DerivedPretextResult} with either `pretextContent` or `pretextError`.
+ * @returns A {@link DerivedPretextResult} with either `pretextSource` or `pretextError`.
  */
 export function derivePretextContent(
   sourceContent: string,
   sourceFormat: SourceFormat,
 ): DerivedPretextResult {
   if (sourceFormat === "pretext") {
-    return { pretextContent: sourceContent };
+    return { pretextSource: sourceContent };
   }
 
   try {
-    return { pretextContent: convertLatexToPretext(sourceContent) };
+    return { pretextSource: convertLatexToPretext(sourceContent) };
   } catch (error) {
     return { pretextError: getConversionErrorMessage(error) };
   }

@@ -6,7 +6,7 @@ interface ConvertToPretextDialogProps {
   /** The current LaTeX source to display (read-only) on the left. */
   latexSource: string;
   /** The already-converted PreTeXt to display (read-only) on the right. */
-  pretextContent: string;
+  pretextSource: string;
   /** Called when the user confirms the conversion. */
   onConfirm: () => void;
   /** Called when the dialog should close without converting. */
@@ -31,7 +31,7 @@ const editorOptions = {
  */
 const ConvertToPretextDialog = ({
   latexSource,
-  pretextContent,
+  pretextSource,
   onConfirm,
   onClose,
 }: ConvertToPretextDialogProps) => {
@@ -112,7 +112,7 @@ const ConvertToPretextDialog = ({
                 options={editorOptions}
                 height="100%"
                 language="xml"
-                value={pretextContent}
+                value={pretextSource}
               />
             </div>
           </div>

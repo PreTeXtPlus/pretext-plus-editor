@@ -13,28 +13,30 @@ npm install @pretextbook/web-editor
 ### Basic Setup
 
 ```tsx
-import React, { useState } from 'react';
-import { Editors } from '@pretextbook/web-editor';
-import '@pretextbook/web-editor/dist/web-editor.css';
+import React, { useState } from "react";
+import { Editors } from "@pretextbook/web-editor";
+import "@pretextbook/web-editor/dist/web-editor.css";
 
 function App() {
-  const [content, setContent] = useState('');
-  const [sourceFormat, setSourceFormat] = useState<'pretext' | 'latex'>('pretext');
-  const [title, setTitle] = useState('My Document');
+  const [source, setSource] = useState("");
+  const [sourceFormat, setSourceFormat] = useState<"pretext" | "latex">(
+    "pretext",
+  );
+  const [title, setTitle] = useState("My Document");
 
   return (
     <Editors
-      content={content}
+      source={source}
       sourceFormat={sourceFormat}
       onContentChange={(value, meta) => {
-        setContent(value || '');
-        setSourceFormat(meta?.sourceFormat || 'pretext');
+        setSource(value || "");
+        setSourceFormat(meta?.sourceFormat || "pretext");
       }}
       title={title}
       onTitleChange={setTitle}
-      onSaveButton={() => console.log('Save clicked')}
+      onSaveButton={() => console.log("Save clicked")}
       saveButtonLabel="Save"
-      onCancelButton={() => console.log('Cancel clicked')}
+      onCancelButton={() => console.log("Cancel clicked")}
       cancelButtonLabel="Cancel"
     />
   );
@@ -50,17 +52,19 @@ export default App;
 Simply import the CSS file:
 
 ```tsx
-import '@pretextbook/web-editor/dist/web-editor.css';
+import "@pretextbook/web-editor/dist/web-editor.css";
 ```
 
 Or in your CSS file:
+
 ```css
-@import '@pretextbook/web-editor/dist/web-editor.css';
+@import "@pretextbook/web-editor/dist/web-editor.css";
 ```
 
 All button styles, layout, and MenuBar styling will work automatically without any additional setup.
+
 ```css
-@import '@pretextbook/web-editor/dist/web-editor.css';
+@import "@pretextbook/web-editor/dist/web-editor.css";
 ```
 
 ## Props
@@ -68,28 +72,35 @@ All button styles, layout, and MenuBar styling will work automatically without a
 The `Editors` component accepts the following props:
 
 ```tsx
-type SourceFormat = 'pretext' | 'latex';
+type SourceFormat = "pretext" | "latex";
 
 interface EditorContentChange {
   sourceContent: string;
   sourceFormat: SourceFormat;
-  pretextContent?: string;
+  pretextSource?: string;
   pretextError?: string;
 }
 
 interface editorProps {
-  content: string;                          // The canonical source content
-  sourceFormat?: SourceFormat;              // The canonical source format
-  pretextContent?: string;                  // Optional derived PreTeXt for previewing LaTeX sources
-  onContentChange: (value: string | undefined, meta?: EditorContentChange) => void;
-  title?: string;                           // Document title
-  onTitleChange?: (value: string) => void;  // Called when title changes
-  onSaveButton?: () => void;                // Save button callback
-  saveButtonLabel?: string;                 // Custom save button text
-  onCancelButton?: () => void;              // Cancel button callback
-  cancelButtonLabel?: string;               // Custom cancel button text
-  onSave?: () => void;                      // Keyboard save callback
-  onPreviewRebuild?: (content: string, title: string, postToIframe: (url: string, data: any) => void) => void;
+  source: string; // The canonical source content
+  sourceFormat?: SourceFormat; // The canonical source format
+  pretextSource?: string; // Optional derived PreTeXt for previewing LaTeX sources
+  onContentChange: (
+    value: string | undefined,
+    meta?: EditorContentChange,
+  ) => void;
+  title?: string; // Document title
+  onTitleChange?: (value: string) => void; // Called when title changes
+  onSaveButton?: () => void; // Save button callback
+  saveButtonLabel?: string; // Custom save button text
+  onCancelButton?: () => void; // Cancel button callback
+  cancelButtonLabel?: string; // Custom cancel button text
+  onSave?: () => void; // Keyboard save callback
+  onPreviewRebuild?: (
+    source: string,
+    title: string,
+    postToIframe: (url: string, data: any) => void,
+  ) => void;
 }
 ```
 
@@ -101,8 +112,8 @@ When a document is in LaTeX mode, the toolbar exposes a `Convert to PreTeXt` act
 
 For consuming apps, the recommended storage model is:
 
-- store one canonical source: `content` plus `sourceFormat`
-- optionally store derived `pretextContent` as a cache for LaTeX-authored documents
+- store one canonical source: `source` plus `sourceFormat`
+- optionally store derived `pretextSource` as a cache for LaTeX-authored documents
 - do not treat LaTeX and PreTeXt as two independently editable canonical sources
 
 Once a user clicks `Convert to PreTeXt`, the canonical source should become PreTeXt. If your product needs an audit trail, keep the original LaTeX separately in your own persistence layer.
@@ -120,6 +131,7 @@ Once a user clicks `Convert to PreTeXt`, the canonical source should become PreT
 ## Peer Dependencies
 
 This package requires:
+
 - `react` >= 16.8.0
 - `react-dom` >= 16.8.0
 
@@ -157,4 +169,3 @@ See [PUBLISHING.md](./PUBLISHING.md) for instructions on publishing to npm.
 ## License
 
 MIT
-

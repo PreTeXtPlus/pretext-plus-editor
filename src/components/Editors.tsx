@@ -4,8 +4,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
-import LatexImportDialog from "./LatexImportDialog";
-import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import MenuBar from "./MenuBar";
 import "./Editors.css";
 
@@ -21,20 +19,20 @@ const startingContent = defaultContent;
 
 export interface editorProps {
   /** The source content string (PreTeXt XML or LaTeX). */
-  content: string;
+  source: string;
   /**
-   * The format of `content`.  Defaults to `"pretext"` when omitted.
+   * The format of `source`.  Defaults to `"pretext"` when omitted.
    * When set to `"latex"`, the editor displays a LaTeX code editor and
    * derives a read-only PreTeXt preview via conversion.
    */
   sourceFormat?: SourceFormat;
   /**
-   * Pre-computed PreTeXt XML corresponding to `content`.
+   * Pre-computed PreTeXt XML corresponding to `source`.
    * Providing this avoids running the conversion on first render when the
    * host already has a cached result.  Only meaningful when
    * `sourceFormat` is not `"pretext"`.
    */
-  pretextContent?: string;
+  pretextSource?: string;
   /**
    * Called whenever the source content changes (user edits in the code
    * editor or WYSIWYG editor).
@@ -71,12 +69,12 @@ export interface editorProps {
    * instead of the Tiptap visual editor, and a rebuild button / Ctrl+Enter
    * shortcut become active.
    *
-   * @param content - The current PreTeXt XML to render.
+   * @param source - The current PreTeXt XML to render.
    * @param title - The current document title.
    * @param postToIframe - Helper to post a message into the preview iframe.
    */
   onPreviewRebuild?: (
-    content: string,
+    source: string,
     title: string,
     postToIframe: (url: string, data: any) => void,
   ) => void;
@@ -86,27 +84,27 @@ export interface editorProps {
  * Builds the initial {@link EditorContentState} from the props passed to
  * {@link Editors}.  Runs once per render cycle via `useMemo`.
  *
- * If the source is already PreTeXt, `pretextContent` mirrors `sourceContent`
+ * If the source is already PreTeXt, `pretextSource` mirrors `sourceContent`
  * with no conversion.  For other formats the function either uses the
- * caller-supplied `pretextContent` (avoiding redundant work) or runs the
+ * caller-supplied `pretextSource` (avoiding redundant work) or runs the
  * conversion via {@link derivePretextContent}.
  */
 const createEditorContentState = ({
-  content,
+  source: source,
   sourceFormat,
-  pretextContent,
+  pretextSource: pretextSource,
 }: Pick<
   editorProps,
-  "content" | "sourceFormat" | "pretextContent"
+  "source" | "sourceFormat" | "pretextSource"
 >): EditorContentState => {
-  const sourceContent = content ?? startingContent;
+  const sourceContent = source ?? startingContent;
   const resolvedSourceFormat = sourceFormat ?? "pretext";
   const derivedPretext =
     resolvedSourceFormat === "pretext"
-      ? { pretextContent: sourceContent, pretextError: undefined }
-      : pretextContent !== undefined
-        ? { pretextContent, pretextError: undefined }
-        : derivePretextContent(sourceContent, resolvedSourceFormat);
+      ? { pretextSource: sourceContent, pretextError: undefined }
+      : pretextSource !== undefined
+      ? { pretextSource, pretextError: undefined }
+      : derivePretextContent(sourceContent, resolvedSourceFormat);
   return {
     sourceContent,
     sourceFormat: resolvedSourceFormat,
@@ -125,24 +123,29 @@ const createEditorContentState = ({
  */
 const Editors = (props: editorProps) => {
   //Content state belongs to the "editors" pair, and it is passed down to the two editors as props.
-  const { content, sourceFormat, pretextContent } = props;
+  const { source: source, sourceFormat, pretextSource: pretextSource } = props;
   const contentState: EditorContentState = useMemo(
-    () => createEditorContentState({ content, sourceFormat, pretextContent }),
-    [content, sourceFormat, pretextContent],
+    () =>
+      createEditorContentState({
+        source: source,
+        sourceFormat,
+        pretextSource: pretextSource,
+      }),
+    [source, sourceFormat, pretextSource],
   );
-  const [internalTitle, setInternalTitle] = useState(props.title || "Document Title");
+  const [internalTitle, setInternalTitle] = useState(
+    props.title || "Document Title",
+  );
   const title = props.title ?? internalTitle;
   const [showFull, setShowFull] = useState(true);
   const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
-  const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
-  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
   const previewContent =
-    contentState.pretextContent ??
+    contentState.pretextSource ??
     (contentState.sourceFormat === "pretext"
       ? contentState.sourceContent
       : undefined);
@@ -195,7 +198,7 @@ const Editors = (props: editorProps) => {
     const normalizedSourceContent = sourceContent || "";
     const derivedPretext =
       contentState.sourceFormat === "pretext"
-        ? { pretextContent: normalizedSourceContent, pretextError: undefined }
+        ? { pretextSource: normalizedSourceContent, pretextError: undefined }
         : derivePretextContent(
             normalizedSourceContent,
             contentState.sourceFormat,
@@ -217,11 +220,11 @@ const Editors = (props: editorProps) => {
     if (contentState.pretextError) {
       return;
     }
-    const convertedPretext = contentState.pretextContent || "";
+    const convertedPretext = contentState.pretextSource || "";
     const nextState: EditorContentState = {
       sourceContent: convertedPretext,
       sourceFormat: "pretext",
-      pretextContent: convertedPretext,
+      pretextSource: convertedPretext,
       pretextError: undefined,
     };
     props.onContentChange(convertedPretext, nextState);
@@ -234,13 +237,13 @@ const Editors = (props: editorProps) => {
       onChange={updateContentState}
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
-      onOpenLatexImport={() => setIsLatexDialogOpen(true)}
-      onOpenConvertToPretext={
+      onConvertToPretext={
         contentState.sourceFormat === "latex"
-          ? () => setIsConvertDialogOpen(true)
+          ? handleConvertToPretext
           : undefined
       }
       canConvertToPretext={contentState.pretextError === undefined}
+      pretextSource={contentState.pretextSource ?? ""}
     />
   );
   // `preview` will either be the visual editor or the full preview based on `showFull`
@@ -357,17 +360,6 @@ const Editors = (props: editorProps) => {
       />
       <div className="pretext-plus-editor__editor-displays">
         {editorDisplays}
-        {isLatexDialogOpen ? (
-          <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
-        ) : null}
-        {isConvertDialogOpen ? (
-          <ConvertToPretextDialog
-            latexSource={contentState.sourceContent}
-            pretextContent={contentState.pretextContent ?? ""}
-            onConfirm={handleConvertToPretext}
-            onClose={() => setIsConvertDialogOpen(false)}
-          />
-        ) : null}
       </div>
     </div>
   );
