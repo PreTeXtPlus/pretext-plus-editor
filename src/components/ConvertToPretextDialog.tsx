@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
-import "./LatexImportDialog.css";
+import "./dialog.css";
 
 interface ConvertToPretextDialogProps {
   /** The current LaTeX source to display (read-only) on the left. */
@@ -49,26 +49,23 @@ const ConvertToPretextDialog = ({
   };
 
   return (
-    <div
-      className="pretext-plus-editor__latex-dialog-overlay"
-      onClick={onClose}
-    >
+    <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
       <div
-        className="pretext-plus-editor__latex-dialog"
+        className="pretext-plus-editor__dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-convert-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pretext-plus-editor__latex-dialog-header">
+        <div className="pretext-plus-editor__dialog-header">
           <div>
             <h2
               id="pretext-plus-editor-convert-dialog-title"
-              className="pretext-plus-editor__latex-dialog-title"
+              className="pretext-plus-editor__dialog-title"
             >
               Convert project to PreTeXt
             </h2>
-            <p className="pretext-plus-editor__latex-dialog-copy">
+            <p className="pretext-plus-editor__dialog-copy">
               This will replace your LaTeX source with the converted PreTeXt
               shown below.{" "}
               <strong>WARNING: This action cannot be undone.</strong>
@@ -76,7 +73,7 @@ const ConvertToPretextDialog = ({
           </div>
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-close"
+            className="pretext-plus-editor__dialog-close"
             onClick={onClose}
             aria-label="Close convert to PreTeXt dialog"
           >
@@ -84,14 +81,14 @@ const ConvertToPretextDialog = ({
           </button>
         </div>
 
-        <div className="pretext-plus-editor__latex-dialog-content">
-          <div className="pretext-plus-editor__latex-dialog-section">
-            <div className="pretext-plus-editor__latex-dialog-label-row">
-              <label className="pretext-plus-editor__latex-dialog-label">
+        <div className="pretext-plus-editor__dialog-content">
+          <div className="pretext-plus-editor__dialog-section">
+            <div className="pretext-plus-editor__dialog-label-row">
+              <label className="pretext-plus-editor__dialog-label">
                 Current LaTeX Source
               </label>
             </div>
-            <div className="pretext-plus-editor__latex-dialog-editor">
+            <div className="pretext-plus-editor__dialog-editor">
               <Editor
                 options={editorOptions}
                 height="100%"
@@ -101,13 +98,13 @@ const ConvertToPretextDialog = ({
             </div>
           </div>
 
-          <div className="pretext-plus-editor__latex-dialog-section">
-            <div className="pretext-plus-editor__latex-dialog-label-row">
-              <label className="pretext-plus-editor__latex-dialog-label">
+          <div className="pretext-plus-editor__dialog-section">
+            <div className="pretext-plus-editor__dialog-label-row">
+              <label className="pretext-plus-editor__dialog-label">
                 Converted PreTeXt
               </label>
             </div>
-            <div className="pretext-plus-editor__latex-dialog-editor">
+            <div className="pretext-plus-editor__dialog-editor">
               <Editor
                 options={editorOptions}
                 height="100%"
@@ -118,17 +115,17 @@ const ConvertToPretextDialog = ({
           </div>
         </div>
 
-        <div className="pretext-plus-editor__latex-dialog-actions">
+        <div className="pretext-plus-editor__dialog-actions">
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-button pretext-plus-editor__latex-dialog-button--secondary"
+            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-button pretext-plus-editor__latex-dialog-button--danger"
+            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--danger"
             onClick={handleConfirm}
           >
             Convert to PreTeXt

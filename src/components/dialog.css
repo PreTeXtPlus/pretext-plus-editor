@@ -1,4 +1,4 @@
-.pretext-plus-editor__latex-dialog-overlay {
+.pretext-plus-editor__dialog-overlay {
   position: absolute;
   inset: 0;
   z-index: 2000;
@@ -9,7 +9,7 @@
   background: rgba(15, 23, 42, 0.76);
 }
 
-.pretext-plus-editor__latex-dialog {
+.pretext-plus-editor__dialog {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -21,7 +21,7 @@
   box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);
 }
 
-.pretext-plus-editor__latex-dialog-content {
+.pretext-plus-editor__dialog-content {
   flex: 1;
   min-height: 0;
   display: grid;
@@ -29,20 +29,53 @@
   gap: 1rem;
 }
 
-.pretext-plus-editor__latex-dialog-section {
+.pretext-plus-editor__dialog-content--single {
+  grid-template-columns: 1fr;
+}
+
+.pretext-plus-editor__dialog-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__dialog-tab {
+  padding: 6px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.pretext-plus-editor__dialog-tab:hover {
+  color: #0f172a;
+}
+
+.pretext-plus-editor__dialog-tab--active {
+  color: #0e639c;
+  border-bottom-color: #0e639c;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-section {
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.pretext-plus-editor__latex-dialog-label-row {
+.pretext-plus-editor__dialog-label-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.pretext-plus-editor__latex-dialog-link-button {
+.pretext-plus-editor__dialog-link-button {
   border: none;
   background: transparent;
   color: #0e639c;
@@ -52,52 +85,52 @@
   padding: 0;
 }
 
-.pretext-plus-editor__latex-dialog-link-button:hover {
+.pretext-plus-editor__dialog-link-button:hover {
   text-decoration: underline;
 }
 
-.pretext-plus-editor__latex-dialog-file-input {
+.pretext-plus-editor__dialog-file-input {
   display: none;
 }
 
-.pretext-plus-editor__latex-dialog-helper-copy {
+.pretext-plus-editor__dialog-helper-copy {
   margin: 0;
   color: #64748b;
   font-size: 0.78rem;
 }
 
-.pretext-plus-editor__latex-dialog-label {
+.pretext-plus-editor__dialog-label {
   color: #334155;
   font-size: 0.85rem;
   font-weight: 600;
 }
 
-.pretext-plus-editor__latex-dialog-status {
+.pretext-plus-editor__dialog-status {
   color: #0f766e;
   font-size: 0.8rem;
   font-weight: 600;
 }
 
-.pretext-plus-editor__latex-dialog-header {
+.pretext-plus-editor__dialog-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
 }
 
-.pretext-plus-editor__latex-dialog-title {
+.pretext-plus-editor__dialog-title {
   margin: 0;
   color: #0f172a;
   font-size: 1.4rem;
 }
 
-.pretext-plus-editor__latex-dialog-copy {
+.pretext-plus-editor__dialog-copy {
   margin: 0.4rem 0 0;
   color: #475569;
   max-width: 70ch;
 }
 
-.pretext-plus-editor__latex-dialog-close {
+.pretext-plus-editor__dialog-close {
   border: none;
   background: transparent;
   color: #334155;
@@ -106,7 +139,7 @@
   font-weight: 600;
 }
 
-.pretext-plus-editor__latex-dialog-editor {
+.pretext-plus-editor__dialog-editor {
   flex: 1;
   width: 100%;
   min-height: 0;
@@ -116,18 +149,18 @@
   background: #fff;
 }
 
-.pretext-plus-editor__latex-dialog-editor--drag {
+.pretext-plus-editor__dialog-editor--drag {
   border-color: #0e639c;
   background: #f0f9ff;
 }
 
-.pretext-plus-editor__latex-dialog-actions {
+.pretext-plus-editor__dialog-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
 }
 
-.pretext-plus-editor__latex-dialog-button {
+.pretext-plus-editor__dialog-button {
   padding: 6px 16px;
   background-color: #0e639c;
   color: #fff;
@@ -138,52 +171,52 @@
   font-weight: 500;
 }
 
-.pretext-plus-editor__latex-dialog-button:hover:not(:disabled) {
+.pretext-plus-editor__dialog-button:hover:not(:disabled) {
   background-color: #1177bb;
 }
 
-.pretext-plus-editor__latex-dialog-button:disabled {
+.pretext-plus-editor__dialog-button:disabled {
   background-color: #555;
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.pretext-plus-editor__latex-dialog-button--secondary {
+.pretext-plus-editor__dialog-button--secondary {
   background-color: #6b7280;
 }
 
-.pretext-plus-editor__latex-dialog-button--secondary:hover:not(:disabled) {
+.pretext-plus-editor__dialog-button--secondary:hover:not(:disabled) {
   background-color: #4b5563;
 }
 
-.pretext-plus-editor__latex-dialog-button--danger {
+.pretext-plus-editor__dialog-button--danger {
   background-color: #b91c1c;
 }
 
-.pretext-plus-editor__latex-dialog-button--danger:hover:not(:disabled) {
+.pretext-plus-editor__dialog-button--danger:hover:not(:disabled) {
   background-color: #991b1b;
 }
 
 @media (max-width: 700px) {
-  .pretext-plus-editor__latex-dialog-overlay {
+  .pretext-plus-editor__dialog-overlay {
     padding: 1vh 1vw;
   }
 
-  .pretext-plus-editor__latex-dialog {
+  .pretext-plus-editor__dialog {
     width: 98%;
     height: 96%;
     padding: 1rem;
   }
 
-  .pretext-plus-editor__latex-dialog-content {
+  .pretext-plus-editor__dialog-content {
     grid-template-columns: 1fr;
   }
 
-  .pretext-plus-editor__latex-dialog-header {
+  .pretext-plus-editor__dialog-header {
     flex-direction: column;
   }
 
-  .pretext-plus-editor__latex-dialog-close {
+  .pretext-plus-editor__dialog-close {
     align-self: flex-end;
   }
 }

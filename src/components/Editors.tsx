@@ -6,6 +6,7 @@ import VisualEditor from "./VisualEditor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
+import DocinfoEditor from "./DocinfoEditor";
 import MenuBar from "./MenuBar";
 import "./Editors.css";
 
@@ -35,6 +36,11 @@ export interface editorProps {
    * `sourceFormat` is not `"pretext"`.
    */
   pretextSource?: string;
+  /**
+   * The docinfo element for a pretext document, which can contain macros and similar
+   * document wide information.
+   */
+  docinfo?: string;
   /**
    * Called whenever the source content changes (user edits in the code
    * editor or WYSIWYG editor).
@@ -144,6 +150,8 @@ const Editors = (props: editorProps) => {
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
   const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
+  const [isDocinfoEditorOpen, setIsDocinfoEditorOpen] = useState(false);
+  const [internalDocinfo, setInternalDocinfo] = useState(props.docinfo ?? "");
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
@@ -242,6 +250,7 @@ const Editors = (props: editorProps) => {
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onOpenLatexImport={() => setIsLatexDialogOpen(true)}
+      onOpenDocinfoEditor={() => setIsDocinfoEditorOpen(true)}
       onOpenConvertToPretext={
         contentState.sourceFormat === "latex"
           ? () => setIsConvertDialogOpen(true)
@@ -373,6 +382,21 @@ const Editors = (props: editorProps) => {
             pretextSource={contentState.pretextSource ?? ""}
             onConfirm={handleConvertToPretext}
             onClose={() => setIsConvertDialogOpen(false)}
+          />
+        ) : null}
+        {isDocinfoEditorOpen ? (
+          <DocinfoEditor
+            docinfo={props.docinfo ?? internalDocinfo}
+            onClose={(value) => {
+              setIsDocinfoEditorOpen(false);
+              if (value !== undefined) {
+                setInternalDocinfo(value);
+                props.onContentChange(contentState.sourceContent, {
+                  ...contentState,
+                  docinfo: value,
+                });
+              }
+            }}
           />
         ) : null}
       </div>

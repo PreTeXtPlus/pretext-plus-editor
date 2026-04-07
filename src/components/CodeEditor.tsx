@@ -17,6 +17,8 @@ interface CodeEditorProps {
   onSave?: () => void;
   /** Called when the user clicks "Import LaTeX" in the toolbar. */
   onOpenLatexImport: () => void;
+  /** Called when the user clicks "Edit Macros" in the toolbar. */
+  onOpenDocinfoEditor: () => void;
   /**
    * If provided, a "Convert to PreTeXt" button is shown in the toolbar.
    * Called when the user clicks to open the conversion confirmation dialog.
@@ -59,6 +61,7 @@ const CodeEditor = ({
   onRebuild,
   onSave,
   onOpenLatexImport,
+  onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
 }: CodeEditorProps) => {
@@ -194,6 +197,7 @@ const CodeEditor = ({
         sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
         onOpenLatexImport={onOpenLatexImport}
+        onOpenDocinfoEditor={onOpenDocinfoEditor}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
