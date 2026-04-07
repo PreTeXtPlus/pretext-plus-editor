@@ -12,6 +12,8 @@ interface CodeEditorMenuProps {
   onContentChange: (newContent: string) => void;
   /** Called when the user clicks "Import LaTeX" to open the import dialog. */
   onOpenLatexImport: () => void;
+  /** Called when the user clicks "Edit Macros" to open the docinfo editor. */
+  onOpenDocinfoEditor: () => void;
   /** Triggers an undo in the Monaco editor.  Passed through from the parent. */
   onUndo: () => void;
   /** Triggers a redo in the Monaco editor.  Passed through from the parent. */
@@ -37,6 +39,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   sourceFormat,
   onContentChange,
   onOpenLatexImport,
+  onOpenDocinfoEditor,
   onConvertToPretext,
   canConvertToPretext,
 }) => {
@@ -51,33 +54,42 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
 
   return (
     <div className="pretext-plus-editor__code-editor-menu">
-      {sourceFormat === "latex" ? (
+      <>
+        {sourceFormat === "latex" ? (
+          <button
+            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+            onClick={onConvertToPretext}
+            disabled={canConvertToPretext === false}
+            title="Promote the current derived PreTeXt into the canonical source"
+          >
+            Convert to PreTeXt
+          </button>
+        ) : (
+          <>
+            <button
+              className="pretext-plus-editor__menu-button"
+              onClick={handleFormat}
+              title="Format the PreTeXt source"
+            >
+              Format PreTeXt
+            </button>
+            <button
+              className="pretext-plus-editor__menu-button"
+              onClick={onOpenLatexImport}
+              title="Import LaTeX"
+            >
+              Import LaTeX
+            </button>
+          </>
+        )}
         <button
-          className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-          onClick={onConvertToPretext}
-          disabled={canConvertToPretext === false}
-          title="Promote the current derived PreTeXt into the canonical source"
+          className="pretext-plus-editor__menu-button"
+          onClick={onOpenDocinfoEditor}
+          title="Edit Macros"
         >
-          Convert to PreTeXt
+          Edit Macros
         </button>
-      ) : (
-        <>
-          <button
-            className="pretext-plus-editor__menu-button"
-            onClick={handleFormat}
-            title="Format the PreTeXt source"
-          >
-            Format PreTeXt
-          </button>
-          <button
-            className="pretext-plus-editor__menu-button"
-            onClick={onOpenLatexImport}
-            title="Import LaTeX"
-          >
-            Import LaTeX
-          </button>
-        </>
-      )}
+      </>
       <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
         {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
       </span>

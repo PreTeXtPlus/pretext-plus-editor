@@ -10,7 +10,7 @@ import {
   convertLatexToPretext,
   getConversionErrorMessage,
 } from "../contentConversion";
-import "./LatexImportDialog.css";
+import "./dialog.css";
 
 interface LatexImportDialogProps {
   /** Called when the dialog should close (Cancel button, Escape key, or after "Copy and Close"). */
@@ -146,32 +146,29 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
   };
 
   return (
-    <div
-      className="pretext-plus-editor__latex-dialog-overlay"
-      onClick={onClose}
-    >
+    <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
       <div
-        className="pretext-plus-editor__latex-dialog"
+        className="pretext-plus-editor__dialog"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="pretext-plus-editor-latex-dialog-title"
+        aria-labelledby="pretext-plus-editor-dialog-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="pretext-plus-editor__latex-dialog-header">
+        <div className="pretext-plus-editor__dialog-header">
           <div>
             <h2
-              id="pretext-plus-editor-latex-dialog-title"
-              className="pretext-plus-editor__latex-dialog-title"
+              id="pretext-plus-editor-dialog-title"
+              className="pretext-plus-editor__dialog-title"
             >
               Convert LaTeX
             </h2>
-            <p className="pretext-plus-editor__latex-dialog-copy">
+            <p className="pretext-plus-editor__dialog-copy">
               Paste LaTeX, convert it to PreTeXt, then copy the result.
             </p>
           </div>
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-close"
+            className="pretext-plus-editor__dialog-close"
             onClick={onClose}
             aria-label="Close LaTeX import dialog"
           >
@@ -179,15 +176,15 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
           </button>
         </div>
 
-        <div className="pretext-plus-editor__latex-dialog-content">
-          <div className="pretext-plus-editor__latex-dialog-section">
-            <div className="pretext-plus-editor__latex-dialog-label-row">
-              <label className="pretext-plus-editor__latex-dialog-label">
+        <div className="pretext-plus-editor__dialog-content">
+          <div className="pretext-plus-editor__dialog-section">
+            <div className="pretext-plus-editor__dialog-label-row">
+              <label className="pretext-plus-editor__dialog-label">
                 LaTeX Input
               </label>
               <button
                 type="button"
-                className="pretext-plus-editor__latex-dialog-link-button"
+                className="pretext-plus-editor__dialog-link-button"
                 onClick={() => fileInputRef.current?.click()}
               >
                 Open .tex File
@@ -196,15 +193,13 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
                 ref={fileInputRef}
                 type="file"
                 accept=".tex,text/x-tex"
-                className="pretext-plus-editor__latex-dialog-file-input"
+                className="pretext-plus-editor__dialog-file-input"
                 onChange={handleFileInputChange}
               />
             </div>
             <div
-              className={`pretext-plus-editor__latex-dialog-editor ${
-                isDragActive
-                  ? "pretext-plus-editor__latex-dialog-editor--drag"
-                  : ""
+              className={`pretext-plus-editor__dialog-editor ${
+                isDragActive ? "pretext-plus-editor__dialog-editor--drag" : ""
               }`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -222,23 +217,23 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
                 onChange={(value) => setLatexInput(value || "")}
               />
             </div>
-            <p className="pretext-plus-editor__latex-dialog-helper-copy">
+            <p className="pretext-plus-editor__dialog-helper-copy">
               Paste LaTeX, open a `.tex` file, or drag one onto this editor.
             </p>
           </div>
 
-          <div className="pretext-plus-editor__latex-dialog-section">
-            <div className="pretext-plus-editor__latex-dialog-label-row">
-              <label className="pretext-plus-editor__latex-dialog-label">
+          <div className="pretext-plus-editor__dialog-section">
+            <div className="pretext-plus-editor__dialog-label-row">
+              <label className="pretext-plus-editor__dialog-label">
                 Converted PreTeXt
               </label>
               {copyStatus === "copied" ? (
-                <span className="pretext-plus-editor__latex-dialog-status">
+                <span className="pretext-plus-editor__dialog-status">
                   Copied
                 </span>
               ) : null}
             </div>
-            <div className="pretext-plus-editor__latex-dialog-editor">
+            <div className="pretext-plus-editor__dialog-editor">
               <Editor
                 options={{ ...editorOptions, readOnly: true }}
                 height="100%"
@@ -249,17 +244,17 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
           </div>
         </div>
 
-        <div className="pretext-plus-editor__latex-dialog-actions">
+        <div className="pretext-plus-editor__dialog-actions">
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-button pretext-plus-editor__latex-dialog-button--secondary"
+            className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
             onClick={onClose}
           >
             Cancel
           </button>
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-button"
+            className="pretext-plus-editor__dialog-button"
             onClick={handleConvert}
             disabled={!latexInput.trim()}
           >
@@ -267,7 +262,7 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
           </button>
           <button
             type="button"
-            className="pretext-plus-editor__latex-dialog-button"
+            className="pretext-plus-editor__dialog-button"
             onClick={handleCopy}
             disabled={!convertedOutput}
           >
