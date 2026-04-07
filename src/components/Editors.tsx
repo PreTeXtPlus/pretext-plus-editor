@@ -36,6 +36,11 @@ export interface editorProps {
    */
   pretextSource?: string;
   /**
+   * The docinfo element for a pretext document, which can contain macros and similar
+   * document wide information.
+  */
+  docinfo?: string;
+  /**
    * Called whenever the source content changes (user edits in the code
    * editor or WYSIWYG editor).
    *
