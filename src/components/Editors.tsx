@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import CodeEditor from "./CodeEditor";
 import VisualEditor from "./VisualEditor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
+import LatexImportDialog from "./LatexImportDialog";
+import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import MenuBar from "./MenuBar";
 import "./Editors.css";
 
@@ -140,6 +142,8 @@ const Editors = (props: editorProps) => {
   const [showFull, setShowFull] = useState(true);
   const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
   const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
+  const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
+  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
@@ -237,13 +241,13 @@ const Editors = (props: editorProps) => {
       onChange={updateContentState}
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
-      onConvertToPretext={
+      onOpenLatexImport={() => setIsLatexDialogOpen(true)}
+      onOpenConvertToPretext={
         contentState.sourceFormat === "latex"
-          ? handleConvertToPretext
+          ? () => setIsConvertDialogOpen(true)
           : undefined
       }
       canConvertToPretext={contentState.pretextError === undefined}
-      pretextSource={contentState.pretextSource ?? ""}
     />
   );
   // `preview` will either be the visual editor or the full preview based on `showFull`
@@ -360,6 +364,17 @@ const Editors = (props: editorProps) => {
       />
       <div className="pretext-plus-editor__editor-displays">
         {editorDisplays}
+        {isLatexDialogOpen ? (
+          <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
+        ) : null}
+        {isConvertDialogOpen ? (
+          <ConvertToPretextDialog
+            latexSource={contentState.sourceContent}
+            pretextSource={contentState.pretextSource ?? ""}
+            onConfirm={handleConvertToPretext}
+            onClose={() => setIsConvertDialogOpen(false)}
+          />
+        ) : null}
       </div>
     </div>
   );

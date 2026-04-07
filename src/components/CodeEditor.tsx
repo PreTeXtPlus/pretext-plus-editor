@@ -2,8 +2,6 @@ import { Editor } from "@monaco-editor/react";
 import { useState, useRef, useEffect } from "react";
 import { registerCodeEditorCompletions } from "./codeEditorCompletions";
 import CodeEditorMenu from "./CodeEditorMenu";
-import LatexImportDialog from "./LatexImportDialog";
-import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import type { SourceFormat } from "../types/editor";
 
 interface CodeEditorProps {
@@ -17,22 +15,18 @@ interface CodeEditorProps {
   onRebuild?: () => void;
   /** If provided, Ctrl+S in the editor triggers this callback. */
   onSave?: () => void;
+  /** Called when the user clicks "Import LaTeX" in the toolbar. */
+  onOpenLatexImport: () => void;
   /**
    * If provided, a "Convert to PreTeXt" button is shown in the toolbar.
-   * Called when the user clicks to promote the derived PreTeXt to the canonical source.
+   * Called when the user clicks to open the conversion confirmation dialog.
    */
-  onConvertToPretext?: () => void;
+  onOpenConvertToPretext?: () => void;
   /**
    * Controls whether the "Convert to PreTeXt" button is enabled.
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
-  /**
-   * The already-converted PreTeXt content.  Shown in the confirmation dialog
-   * so the user can review before committing.  Only meaningful when
-   * `sourceFormat` is `"latex"`.
-   */
-  pretextSource?: string;
 }
 
 /** Static Monaco editor options shared across all instances of this component. */
@@ -64,9 +58,9 @@ const CodeEditor = ({
   onChange,
   onRebuild,
   onSave,
-  onConvertToPretext,
+  onOpenLatexImport,
+  onOpenConvertToPretext,
   canConvertToPretext,
-  pretextSource,
 }: CodeEditorProps) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -75,8 +69,6 @@ const CodeEditor = ({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
-  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
 
@@ -201,27 +193,14 @@ const CodeEditor = ({
         content={content}
         sourceFormat={sourceFormat}
         onContentChange={handleContentChange}
-        onOpenLatexImport={() => setIsLatexDialogOpen(true)}
+        onOpenLatexImport={onOpenLatexImport}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
-        onConvertToPretext={
-          onConvertToPretext ? () => setIsConvertDialogOpen(true) : undefined
-        }
+        onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
       />
-      {isLatexDialogOpen ? (
-        <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
-      ) : null}
-      {isConvertDialogOpen && onConvertToPretext ? (
-        <ConvertToPretextDialog
-          latexSource={content}
-          pretextSource={pretextSource ?? ""}
-          onConfirm={onConvertToPretext}
-          onClose={() => setIsConvertDialogOpen(false)}
-        />
-      ) : null}
       <div style={{ flex: 1 }}>
         <Editor
           options={options}
