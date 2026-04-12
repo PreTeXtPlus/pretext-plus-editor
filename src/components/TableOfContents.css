@@ -345,79 +345,11 @@
   color: #dc2626;
 }
 
-/* ── Add-divider between sections ────────────────────── */
-.pretext-plus-editor__toc-add-divider {
-  /* Reserve visible height so the + bar is easy to click */
-  height: 22px;
-  display: flex;
-  align-items: center;
-  padding: 0 6px;
-  list-style: none;
-  gap: 4px;
-}
-
-.pretext-plus-editor__toc-add-bar {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  height: 22px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.12s;
-}
-
-.pretext-plus-editor__toc-add-divider:hover .pretext-plus-editor__toc-add-bar {
-  opacity: 1;
-}
-
-.pretext-plus-editor__toc-add-bar-line {
-  flex: 1;
-  height: 1px;
-  background: #2563eb;
-  border-radius: 1px;
-}
-
-.pretext-plus-editor__toc-add-bar-plus {
-  font-size: 0.75rem;
-  color: #2563eb;
-  font-weight: 700;
-  line-height: 1;
-  flex-shrink: 0;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid #2563eb;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* Merge button shown in the add-divider between two plain sections */
-.pretext-plus-editor__toc-merge-btn {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  cursor: pointer;
-  padding: 0 4px;
-  font-size: 0.85rem;
-  color: #888;
-  line-height: 22px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.12s, color 0.1s;
-}
-
-.pretext-plus-editor__toc-add-divider:hover .pretext-plus-editor__toc-merge-btn {
-  opacity: 1;
-}
-
-.pretext-plus-editor__toc-merge-btn:hover {
-  color: #2563eb;
-  border-color: #2563eb;
+/* ── Merge-target highlight (drag-to-merge) ──────────── */
+.pretext-plus-editor__toc-item--merge-target > .pretext-plus-editor__toc-item-row {
+  background: #fef3c7;
+  outline: 2px dashed #d97706;
+  outline-offset: -2px;
 }
 
 /* ── No-sections placeholder ────────────────────────── */

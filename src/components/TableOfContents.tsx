@@ -7,6 +7,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -45,10 +46,10 @@ export interface TableOfContentsProps {
   ) => void;
   onReorderSections: (sections: DocumentSection[]) => void;
   /**
-   * Called when the user requests to merge the section with the given id into
-   * the section that immediately follows it.
+   * Called when the user drags one section onto another to merge them.
+   * `sourceId` is appended to the end of `targetId`.
    */
-  onMergeWithNext?: (id: string) => void;
+  onMergeSections?: (sourceId: string, targetId: string) => void;
   /**
    * Called when the user wants to convert the (currently unsectioned) document
    * into a single section and switch to sectioned mode.
@@ -70,7 +71,7 @@ export interface TableOfContentsProps {
 
 const TYPE_LABELS: Record<string, string> = {
   introduction: "Intro",
-  conclusion: "Concl",
+  conclusion: "Conc",
   section: "§",
   worksheet: "WS",
   handout: "HO",
@@ -125,6 +126,7 @@ interface EditDraft {
 interface SortableItemProps {
   section: DocumentSection;
   isActive: boolean;
+  isMergeTarget: boolean;
   editDraft: EditDraft | null;
   onSelect: () => void;
   onStartEdit: () => void;
@@ -140,6 +142,7 @@ interface SortableItemProps {
 const SortableItem = ({
   section,
   isActive,
+  isMergeTarget,
   editDraft,
   onSelect,
   onStartEdit,
@@ -177,6 +180,7 @@ const SortableItem = ({
         isActive ? "pretext-plus-editor__toc-item--active" : "",
         isDragging ? "pretext-plus-editor__toc-item--dragging" : "",
         isEditing ? "pretext-plus-editor__toc-item--editing" : "",
+        isMergeTarget ? "pretext-plus-editor__toc-item--merge-target" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -245,7 +249,9 @@ const SortableItem = ({
             <input
               type="text"
               value={editDraft.title}
-              onChange={(e) => onDraftChange({ ...editDraft, title: e.target.value })}
+              onChange={(e) =>
+                onDraftChange({ ...editDraft, title: e.target.value })
+              }
               onKeyDown={(e) => {
                 if (e.key === "Enter") onEditCommit();
                 if (e.key === "Escape") onEditCancel();
@@ -260,7 +266,10 @@ const SortableItem = ({
                 <select
                   value={editDraft.type}
                   onChange={(e) =>
-                    onDraftChange({ ...editDraft, type: e.target.value as DocumentSectionType })
+                    onDraftChange({
+                      ...editDraft,
+                      type: e.target.value as DocumentSectionType,
+                    })
                   }
                 >
                   {REGULAR_DIVISION_TYPES.map((t) => (
@@ -276,7 +285,9 @@ const SortableItem = ({
                   type="text"
                   value={editDraft.xmlId}
                   placeholder="optional"
-                  onChange={(e) => onDraftChange({ ...editDraft, xmlId: e.target.value })}
+                  onChange={(e) =>
+                    onDraftChange({ ...editDraft, xmlId: e.target.value })
+                  }
                 />
               </label>
               <label className="pretext-plus-editor__toc-edit-field">
@@ -285,7 +296,9 @@ const SortableItem = ({
                   type="text"
                   value={editDraft.label}
                   placeholder="optional"
-                  onChange={(e) => onDraftChange({ ...editDraft, label: e.target.value })}
+                  onChange={(e) =>
+                    onDraftChange({ ...editDraft, label: e.target.value })
+                  }
                 />
               </label>
             </>
@@ -313,40 +326,6 @@ const SortableItem = ({
 };
 
 // ---------------------------------------------------------------------------
-// AddDivider — the "+" bar shown between sections
-// ---------------------------------------------------------------------------
-interface AddDividerProps {
-  afterId: string | null;
-  onAdd: (afterId: string | null) => void;
-  /** When provided, a merge button is shown next to the + button. */
-  onMerge?: () => void;
-}
-const AddDivider = ({ afterId, onAdd, onMerge }: AddDividerProps) => (
-  <li className="pretext-plus-editor__toc-add-divider" aria-hidden="true">
-    <button
-      type="button"
-      className="pretext-plus-editor__toc-add-bar"
-      onClick={() => onAdd(afterId)}
-      title="Add section here"
-    >
-      <span className="pretext-plus-editor__toc-add-bar-line" />
-      <span className="pretext-plus-editor__toc-add-bar-plus">+</span>
-      <span className="pretext-plus-editor__toc-add-bar-line" />
-    </button>
-    {onMerge && (
-      <button
-        type="button"
-        className="pretext-plus-editor__toc-merge-btn"
-        onClick={onMerge}
-        title="Merge sections above and below"
-      >
-        ⊕
-      </button>
-    )}
-  </li>
-);
-
-// ---------------------------------------------------------------------------
 // Main TableOfContents component
 // ---------------------------------------------------------------------------
 const TableOfContents = (props: TableOfContentsProps) => {
@@ -362,7 +341,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onRemoveSection,
     onUpdateSection,
     onReorderSections,
-    onMergeWithNext,
+    onMergeSections,
     onAddFirstSection,
     onRefresh,
     editMode,
@@ -372,9 +351,8 @@ const TableOfContents = (props: TableOfContentsProps) => {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
-  const isLatex = sections.some(
-    (s) => !s.content.trimStart().startsWith("<"),
-  );
+  const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
+  const isLatex = sections.some((s) => !s.content.trimStart().startsWith("<"));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -430,12 +408,40 @@ const TableOfContents = (props: TableOfContentsProps) => {
   };
 
   // ---------------------------------------------------------------------------
-  // Drag end handler
+  // Drag handlers
   // ---------------------------------------------------------------------------
+  const handleDragMove = (event: DragMoveEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !isRegularDivision(over.id as string)) {
+      setMergeTargetId(null);
+      return;
+    }
+    // Check if the active item's center is in the middle 50% of the over item.
+    const activeRect = active.rect.current.translated;
+    if (!activeRect) { setMergeTargetId(null); return; }
+    const activeCenter = activeRect.top + activeRect.height / 2;
+    const overRect = over.rect;
+    const mergeZoneTop = overRect.top + overRect.height * 0.25;
+    const mergeZoneBottom = overRect.top + overRect.height * 0.75;
+    if (activeCenter >= mergeZoneTop && activeCenter <= mergeZoneBottom) {
+      setMergeTargetId(over.id as string);
+    } else {
+      setMergeTargetId(null);
+    }
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setMergeTargetId(null);
     if (!over || active.id === over.id) return;
 
+    // If the active item's center was in the merge zone when released, merge.
+    if (mergeTargetId === over.id && onMergeSections) {
+      onMergeSections(active.id as string, over.id as string);
+      return;
+    }
+
+    // Otherwise reorder.
     const oldIndex = sections.findIndex((s) => s.id === active.id);
     const newIndex = sections.findIndex((s) => s.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
@@ -472,68 +478,26 @@ const TableOfContents = (props: TableOfContentsProps) => {
   }
 
   // ---------------------------------------------------------------------------
-  // Build the interleaved list: items + add-dividers
+  // Build the section list
   // ---------------------------------------------------------------------------
-  // Pre-compute the last regular-division id before each section (for merge logic).
-  const prevPlainSectionIds: (string | null)[] = sections.map((_, i) => {
-    for (let j = i - 1; j >= 0; j--) {
-      if (isRegularDivision(sections[j].type)) return sections[j].id;
-    }
-    return null;
-  });
-  const lastPlainSectionId: string | null =
-    [...sections].reverse().find((s) => isRegularDivision(s.type))?.id ?? null;
-
-  const items: React.ReactNode[] = sections.flatMap((section, i) => {
-    const isDraggable = isRegularDivision(section.type);
-    const prevId = prevPlainSectionIds[i];
-    const canMergeAbove =
-      !readonly &&
-      onMergeWithNext !== undefined &&
-      isDraggable &&
-      prevId !== null;
-
-    const divider =
-      !readonly && isDraggable ? (
-        <AddDivider
-          key={`div-before-${section.id}`}
-          afterId={prevId}
-          onAdd={onAddSection}
-          onMerge={canMergeAbove ? () => onMergeWithNext!(prevId!) : undefined}
-        />
-      ) : null;
-
-    const item = (
-      <SortableItem
-        key={section.id}
-        section={section}
-        isActive={section.id === currentSectionId}
-        editDraft={editingId === section.id ? editDraft : null}
-        onSelect={() => onSelectSection(section.id)}
-        onStartEdit={() => startEdit(section)}
-        onRemove={() => handleRemove(section)}
-        onDraftChange={setEditDraft}
-        onEditCommit={commitEdit}
-        onEditCancel={cancelEdit}
-        canRemove={true}
-        readonly={readonly}
-        isLatex={isLatex}
-      />
-    );
-
-    return divider ? [divider, item] : [item];
-  });
-
-  // Final add-divider after the last plain section (before conclusion if any)
-  if (!readonly && lastPlainSectionId !== null) {
-    items.push(
-      <AddDivider
-        key="div-after-last"
-        afterId={lastPlainSectionId}
-        onAdd={onAddSection}
-      />,
-    );
-  }
+  const items: React.ReactNode[] = sections.map((section) => (
+    <SortableItem
+      key={section.id}
+      section={section}
+      isActive={section.id === currentSectionId}
+      isMergeTarget={mergeTargetId === section.id}
+      editDraft={editingId === section.id ? editDraft : null}
+      onSelect={() => onSelectSection(section.id)}
+      onStartEdit={() => startEdit(section)}
+      onRemove={() => handleRemove(section)}
+      onDraftChange={setEditDraft}
+      onEditCommit={commitEdit}
+      onEditCancel={cancelEdit}
+      canRemove={true}
+      readonly={readonly}
+      isLatex={isLatex}
+    />
+  ));
 
   return (
     <div className="pretext-plus-editor__toc">
@@ -578,6 +542,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
       >
         <SortableContext

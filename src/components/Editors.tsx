@@ -625,17 +625,16 @@ const Editors = (props: editorProps) => {
    * Merge the section with the given id into its successor section.
    * The merged section keeps the title and id of the first.
    */
-  const handleMergeSection = (id: string) => {
-    const idx = sections.findIndex((s) => s.id === id);
-    if (idx === -1 || idx >= sections.length - 1) return;
-    const merged = mergeTwoSections(sections[idx], sections[idx + 1], isLatexDoc);
-    const nextSections = [
-      ...sections.slice(0, idx),
-      merged,
-      ...sections.slice(idx + 2),
-    ];
+  const handleMergeSection = (sourceId: string, targetId: string) => {
+    const sourceIdx = sections.findIndex((s) => s.id === sourceId);
+    const targetIdx = sections.findIndex((s) => s.id === targetId);
+    if (sourceIdx === -1 || targetIdx === -1) return;
+    const merged = mergeTwoSections(sections[targetIdx], sections[sourceIdx], isLatexDoc);
+    const nextSections = sections
+      .filter((s) => s.id !== sourceId)
+      .map((s) => (s.id === targetId ? merged : s));
     setSections(nextSections);
-    if (currentSectionId === sections[idx + 1].id) {
+    if (currentSectionId === sourceId) {
       setCurrentSectionId(merged.id);
     }
     props.onSectionsChange?.(nextSections);
@@ -744,7 +743,7 @@ const Editors = (props: editorProps) => {
       onRemoveSection={handleRemoveSection}
       onUpdateSection={handleUpdateSectionMetadata}
       onReorderSections={handleReorderSections}
-      onMergeWithNext={handleMergeSection}
+      onMergeSections={handleMergeSection}
       onAddFirstSection={handleAddFirstSection}
       onRefresh={editMode === "sectioned" ? handleRefreshSections : undefined}
       editMode={editMode}
