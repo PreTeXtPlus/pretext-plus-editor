@@ -22,7 +22,6 @@ import type { DocumentSection } from "../types/sections";
 import {
   splitDocument,
   mergeDocument,
-  updateSectionTitle,
   createNewSection,
   createIntroduction,
   createConclusion,
@@ -37,6 +36,7 @@ import {
   wrapDocumentAsSection,
   wrapLatexDocumentAsSection,
   mergeTwoSections,
+  updateSectionMetadata,
   wrapSectionAsDocument,
   wrapLatexSectionAsDocument,
 } from "../sectionUtils";
@@ -454,10 +454,16 @@ const Editors = (props: editorProps) => {
     );
     setSections(nextSections);
     props.onSectionChange?.(updatedSection);
-    const merged = isLatex
-      ? mergeLatexDocument(documentWrapper, nextSections)
-      : mergeDocument(documentWrapper, nextSections);
-    updateContentState(merged);
+    try {
+      const merged = isLatex
+        ? mergeLatexDocument(documentWrapper, nextSections)
+        : mergeDocument(documentWrapper, nextSections);
+      updateContentState(merged);
+    } catch {
+      // Section XML is currently invalid (e.g. user is mid-edit of a tag name).
+      // Keep the section content updated in state, but don't attempt to re-merge
+      // the broken XML into the full document — it will sync when fixed.
+    }
   };
 
   /**
@@ -582,20 +588,35 @@ const Editors = (props: editorProps) => {
     }
   };
 
-  const handleRenameSection = (id: string, newTitle: string) => {
+  /**
+   * Update a section's title, type, xml:id, and/or label from the TOC editor.
+   * Replaces the standalone rename handler for PreTeXt documents.
+   */
+  const handleUpdateSectionMetadata = (
+    id: string,
+    changes: {
+      title?: string;
+      type?: DocumentSection["type"];
+      xmlId?: string | null;
+      label?: string | null;
+    },
+  ) => {
     const nextSections = sections.map((s) => {
       if (s.id !== id) return s;
-      return {
-        ...s,
-        title: newTitle,
-        content: isLatexDoc
-          ? updateLatexSectionTitle(s.content, newTitle)
-          : updateSectionTitle(s.content, newTitle),
-      };
+      if (isLatexDoc) {
+        // LaTeX documents: only title is editable via the metadata form.
+        const newTitle = changes.title ?? s.title;
+        return {
+          ...s,
+          title: newTitle,
+          content: updateLatexSectionTitle(s.content, newTitle),
+        };
+      }
+      return updateSectionMetadata(s, changes);
     });
     setSections(nextSections);
-    const renamed = nextSections.find((s) => s.id === id);
-    if (renamed) props.onSectionChange?.(renamed);
+    const updated = nextSections.find((s) => s.id === id);
+    if (updated) props.onSectionChange?.(updated);
     props.onSectionsChange?.(nextSections);
     const merged = doMerge(nextSections);
     updateContentState(merged);
@@ -729,7 +750,7 @@ const Editors = (props: editorProps) => {
       onAddIntroduction={handleAddIntroduction}
       onAddConclusion={handleAddConclusion}
       onRemoveSection={handleRemoveSection}
-      onRenameSection={handleRenameSection}
+      onUpdateSection={handleUpdateSectionMetadata}
       onReorderSections={handleReorderSections}
       onMergeWithNext={handleMergeSection}
       onAddFirstSection={handleAddFirstSection}

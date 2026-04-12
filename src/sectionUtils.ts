@@ -860,6 +860,113 @@ export function mergeTwoSections(
 }
 
 // ---------------------------------------------------------------------------
+// Section attribute utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract `xml:id` and `label` attributes from the root element of a section
+ * content string.  Returns empty strings when the attributes are absent.
+ */
+export function getSectionAttributes(content: string): {
+  xmlId: string;
+  label: string;
+} {
+  try {
+    const tree: Root = fromXml(content);
+    const el = tree.children.find((n) => n.type === "element") as
+      | Element
+      | undefined;
+    if (!el) return { xmlId: "", label: "" };
+    return {
+      xmlId: (el.attributes?.["xml:id"] as string) ?? "",
+      label: (el.attributes?.["label"] as string) ?? "",
+    };
+  } catch {
+    return { xmlId: "", label: "" };
+  }
+}
+
+/**
+ * Update the title, tag name (type), `xml:id`, and `label` of a section.
+ *
+ * Pass `null` for `xmlId` or `label` to remove the attribute entirely.
+ * Omit a key (or pass `undefined`) to leave it unchanged.
+ *
+ * Returns a new `DocumentSection` with updated `content`, `title`, and `type`.
+ */
+export function updateSectionMetadata(
+  section: DocumentSection,
+  changes: {
+    title?: string;
+    type?: DocumentSectionType;
+    xmlId?: string | null;
+    label?: string | null;
+  },
+): DocumentSection {
+  const newType = changes.type ?? section.type;
+  const newTitle = changes.title ?? section.title;
+
+  try {
+    const tree: Root = fromXml(section.content);
+    const el = tree.children.find((n) => n.type === "element") as
+      | Element
+      | undefined;
+
+    if (!el) {
+      // Fallback: return section with type/title updated but content unchanged.
+      return { ...section, title: newTitle, type: newType };
+    }
+
+    // Update tag name (type).
+    const newEl: Element = { ...el, name: newType, attributes: { ...el.attributes } };
+
+    // Update xml:id attribute.
+    if (changes.xmlId !== undefined) {
+      if (changes.xmlId === null || changes.xmlId === "") {
+        delete newEl.attributes["xml:id"];
+      } else {
+        newEl.attributes["xml:id"] = changes.xmlId;
+      }
+    }
+
+    // Update label attribute.
+    if (changes.label !== undefined) {
+      if (changes.label === null || changes.label === "") {
+        delete newEl.attributes["label"];
+      } else {
+        newEl.attributes["label"] = changes.label;
+      }
+    }
+
+    // Update <title> child element.
+    const titleIndex = newEl.children.findIndex(
+      (c) => c.type === "element" && (c as Element).name === "title",
+    );
+    const titleNode: Element = {
+      type: "element",
+      name: "title",
+      attributes: {},
+      children: [{ type: "text", value: newTitle }],
+    };
+    if (titleIndex === -1) {
+      newEl.children = [titleNode, ...newEl.children];
+    } else {
+      newEl.children = [
+        ...newEl.children.slice(0, titleIndex),
+        titleNode,
+        ...newEl.children.slice(titleIndex + 1),
+      ];
+    }
+
+    const newContent = toXml({ type: "root", children: [newEl] } as Root);
+    return { ...section, title: newTitle, type: newType, content: newContent };
+  } catch {
+    // If parsing fails just update the in-memory fields without touching content.
+    return { ...section, title: newTitle, type: newType };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Section-as-document wrapping utilities (for section-scoped preview builds)
 // ---------------------------------------------------------------------------
 

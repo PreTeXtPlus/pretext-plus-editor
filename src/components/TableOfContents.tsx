@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -16,7 +16,8 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { DocumentSection } from "../types/sections";
+import type { DocumentSection, DocumentSectionType } from "../types/sections";
+import { getSectionAttributes } from "../sectionUtils";
 import "./TableOfContents.css";
 
 export interface TableOfContentsProps {
@@ -29,7 +30,19 @@ export interface TableOfContentsProps {
   onAddIntroduction: () => void;
   onAddConclusion: () => void;
   onRemoveSection: (id: string) => void;
-  onRenameSection: (id: string, newTitle: string) => void;
+  /**
+   * Called when the user commits changes from the inline edit form.
+   * `changes` may include a new title, type, xml:id, and/or label.
+   */
+  onUpdateSection: (
+    id: string,
+    changes: {
+      title?: string;
+      type?: DocumentSectionType;
+      xmlId?: string | null;
+      label?: string | null;
+    },
+  ) => void;
   onReorderSections: (sections: DocumentSection[]) => void;
   /**
    * Called when the user requests to merge the section with the given id into
@@ -73,41 +86,73 @@ function isRegularDivision(type: string): boolean {
   return type !== "introduction" && type !== "conclusion";
 }
 
+/** All division types that can appear in the TOC as regular sections. */
+const REGULAR_DIVISION_TYPES: DocumentSectionType[] = [
+  "section",
+  "worksheet",
+  "handout",
+  "exercises",
+  "references",
+  "glossary",
+  "solutions",
+  "reading-questions",
+];
+
+const TYPE_FULL_LABELS: Record<string, string> = {
+  section: "Section",
+  worksheet: "Worksheet",
+  handout: "Handout",
+  exercises: "Exercises",
+  references: "References",
+  glossary: "Glossary",
+  solutions: "Solutions",
+  "reading-questions": "Reading Questions",
+  introduction: "Introduction",
+  conclusion: "Conclusion",
+};
+
+/** Draft state for the inline section edit form. */
+interface EditDraft {
+  title: string;
+  type: DocumentSectionType;
+  xmlId: string;
+  label: string;
+}
+
 // ---------------------------------------------------------------------------
 // SortableItem — a single draggable section row
 // ---------------------------------------------------------------------------
 interface SortableItemProps {
   section: DocumentSection;
   isActive: boolean;
-  isEditing: boolean;
-  editingValue: string;
-  inputRef: React.RefObject<HTMLInputElement | null>;
+  editDraft: EditDraft | null;
   onSelect: () => void;
   onStartEdit: () => void;
   onRemove: () => void;
-  onEditChange: (v: string) => void;
+  onDraftChange: (draft: EditDraft) => void;
   onEditCommit: () => void;
-  onEditKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onEditCancel: () => void;
   canRemove: boolean;
   readonly: boolean;
+  isLatex: boolean;
 }
 
 const SortableItem = ({
   section,
   isActive,
-  isEditing,
-  editingValue,
-  inputRef,
+  editDraft,
   onSelect,
   onStartEdit,
   onRemove,
-  onEditChange,
+  onDraftChange,
   onEditCommit,
-  onEditKeyDown,
+  onEditCancel,
   canRemove,
   readonly,
+  isLatex,
 }: SortableItemProps) => {
   const isDraggable = !readonly && isRegularDivision(section.type);
+  const isEditing = editDraft !== null;
   const {
     attributes,
     listeners,
@@ -115,7 +160,7 @@ const SortableItem = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: section.id, disabled: !isDraggable });
+  } = useSortable({ id: section.id, disabled: !isDraggable || isEditing });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -131,72 +176,136 @@ const SortableItem = ({
         `pretext-plus-editor__toc-item--${section.type}`,
         isActive ? "pretext-plus-editor__toc-item--active" : "",
         isDragging ? "pretext-plus-editor__toc-item--dragging" : "",
+        isEditing ? "pretext-plus-editor__toc-item--editing" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {isDraggable && (
-        <span
-          className="pretext-plus-editor__toc-drag-handle"
-          title="Drag to reorder"
-          aria-hidden="true"
-          {...attributes}
-          {...listeners}
-        >
-          ⠿
+      {/* Normal row */}
+      <div className="pretext-plus-editor__toc-item-row">
+        {isDraggable && !isEditing && (
+          <span
+            className="pretext-plus-editor__toc-drag-handle"
+            title="Drag to reorder"
+            aria-hidden="true"
+            {...attributes}
+            {...listeners}
+          >
+            ⠿
+          </span>
+        )}
+
+        <span className="pretext-plus-editor__toc-type-badge">
+          {TYPE_LABELS[section.type] ?? section.type}
         </span>
-      )}
 
-      <span className="pretext-plus-editor__toc-type-badge">
-        {TYPE_LABELS[section.type] ?? section.type}
-      </span>
-
-      <button
-        type="button"
-        className="pretext-plus-editor__toc-select"
-        onClick={onSelect}
-        aria-current={isActive ? "true" : undefined}
-      >
-        {isEditing ? (
-          <input
-            ref={inputRef}
-            className="pretext-plus-editor__toc-rename-input"
-            value={editingValue}
-            onChange={(e) => onEditChange(e.target.value)}
-            onBlur={onEditCommit}
-            onKeyDown={onEditKeyDown}
-            onClick={(e) => e.stopPropagation()}
-          />
-        ) : (
+        <button
+          type="button"
+          className="pretext-plus-editor__toc-select"
+          onClick={onSelect}
+          aria-current={isActive ? "true" : undefined}
+        >
           <span className="pretext-plus-editor__toc-title">
             {section.title || <em>Untitled</em>}
           </span>
-        )}
-      </button>
+        </button>
 
-      {!readonly && (
-        <div className="pretext-plus-editor__toc-actions">
-          {isRegularDivision(section.type) && (
+        {!readonly && (
+          <div className="pretext-plus-editor__toc-actions">
+            {isRegularDivision(section.type) && !isEditing && (
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-action-btn"
+                onClick={onStartEdit}
+                title="Edit section properties"
+                aria-label={`Edit "${section.title}"`}
+              >
+                ✎
+              </button>
+            )}
             <button
               type="button"
-              className="pretext-plus-editor__toc-action-btn"
-              onClick={onStartEdit}
-              title="Rename"
-              aria-label={`Rename "${section.title}"`}
+              className="pretext-plus-editor__toc-action-btn pretext-plus-editor__toc-action-btn--danger"
+              onClick={onRemove}
+              disabled={!canRemove}
+              title="Remove"
+              aria-label={`Remove "${section.title}"`}
             >
-              ✎
+              ✕
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* Inline edit form */}
+      {isEditing && editDraft && (
+        <div className="pretext-plus-editor__toc-edit-form">
+          <label className="pretext-plus-editor__toc-edit-field">
+            <span>Title</span>
+            <input
+              type="text"
+              value={editDraft.title}
+              onChange={(e) => onDraftChange({ ...editDraft, title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") onEditCommit();
+                if (e.key === "Escape") onEditCancel();
+              }}
+              autoFocus
+            />
+          </label>
+          {!isLatex && (
+            <>
+              <label className="pretext-plus-editor__toc-edit-field">
+                <span>Type</span>
+                <select
+                  value={editDraft.type}
+                  onChange={(e) =>
+                    onDraftChange({ ...editDraft, type: e.target.value as DocumentSectionType })
+                  }
+                >
+                  {REGULAR_DIVISION_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {TYPE_FULL_LABELS[t]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="pretext-plus-editor__toc-edit-field">
+                <span>xml:id</span>
+                <input
+                  type="text"
+                  value={editDraft.xmlId}
+                  placeholder="optional"
+                  onChange={(e) => onDraftChange({ ...editDraft, xmlId: e.target.value })}
+                />
+              </label>
+              <label className="pretext-plus-editor__toc-edit-field">
+                <span>label</span>
+                <input
+                  type="text"
+                  value={editDraft.label}
+                  placeholder="optional"
+                  onChange={(e) => onDraftChange({ ...editDraft, label: e.target.value })}
+                />
+              </label>
+            </>
           )}
-          <button
-            type="button"
-            className="pretext-plus-editor__toc-action-btn pretext-plus-editor__toc-action-btn--danger"
-            onClick={onRemove}
-            disabled={!canRemove}
-            title="Remove"
-            aria-label={`Remove "${section.title}"`}
-          >
-            ✕
-          </button>
+          <div className="pretext-plus-editor__toc-edit-actions">
+            <button
+              type="button"
+              className="pretext-plus-editor__toc-edit-save"
+              onClick={onEditCommit}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="pretext-plus-editor__toc-edit-cancel"
+              onClick={onEditCancel}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </li>
@@ -251,7 +360,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onAddIntroduction,
     onAddConclusion,
     onRemoveSection,
-    onRenameSection,
+    onUpdateSection,
     onReorderSections,
     onMergeWithNext,
     onAddFirstSection,
@@ -262,8 +371,10 @@ const TableOfContents = (props: TableOfContentsProps) => {
   } = props;
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingValue, setEditingValue] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const isLatex = sections.some(
+    (s) => !s.content.trimStart().startsWith("<"),
+  );
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -281,28 +392,35 @@ const TableOfContents = (props: TableOfContentsProps) => {
     .map((s) => s.id);
 
   // ---------------------------------------------------------------------------
-  // Rename helpers
+  // Edit helpers
   // ---------------------------------------------------------------------------
   const startEdit = (section: DocumentSection) => {
+    const { xmlId, label } = getSectionAttributes(section.content);
     setEditingId(section.id);
-    setEditingValue(section.title);
-    setTimeout(() => inputRef.current?.select(), 0);
+    setEditDraft({
+      title: section.title,
+      type: section.type as DocumentSectionType,
+      xmlId,
+      label,
+    });
   };
 
   const commitEdit = () => {
-    if (editingId && editingValue.trim()) {
-      onRenameSection(editingId, editingValue.trim());
+    if (editingId && editDraft) {
+      onUpdateSection(editingId, {
+        title: editDraft.title.trim() || undefined,
+        type: editDraft.type,
+        xmlId: editDraft.xmlId.trim() || null,
+        label: editDraft.label.trim() || null,
+      });
     }
     setEditingId(null);
-    setEditingValue("");
+    setEditDraft(null);
   };
 
-  const handleRenameKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") commitEdit();
-    if (e.key === "Escape") {
-      setEditingId(null);
-      setEditingValue("");
-    }
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft(null);
   };
 
   const handleRemove = (section: DocumentSection) => {
@@ -390,17 +508,16 @@ const TableOfContents = (props: TableOfContentsProps) => {
         key={section.id}
         section={section}
         isActive={section.id === currentSectionId}
-        isEditing={editingId === section.id}
-        editingValue={editingValue}
-        inputRef={inputRef}
+        editDraft={editingId === section.id ? editDraft : null}
         onSelect={() => onSelectSection(section.id)}
         onStartEdit={() => startEdit(section)}
         onRemove={() => handleRemove(section)}
-        onEditChange={setEditingValue}
+        onDraftChange={setEditDraft}
         onEditCommit={commitEdit}
-        onEditKeyDown={handleRenameKeyDown}
+        onEditCancel={cancelEdit}
         canRemove={true}
         readonly={readonly}
+        isLatex={isLatex}
       />
     );
 

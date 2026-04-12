@@ -71,25 +71,117 @@
   flex: 1;
 }
 
-/* ── Item row ────────────────────────────────────────── */
+/* ── Item internal layout ────────────────────────────── */
 .pretext-plus-editor__toc-item {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid transparent;
+  cursor: default;
+}
+
+.pretext-plus-editor__toc-item-row {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 0 6px 0 4px;
-  border-left: 3px solid transparent;
   min-height: 32px;
-  cursor: default;
 }
 
-.pretext-plus-editor__toc-item:hover {
-  background: #e8eaf0;
+/* ── Inline edit form ─────────────────────────────────── */
+.pretext-plus-editor__toc-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 8px 8px 10px;
+  background: #eef2ff;
+  border-top: 1px solid #c7d2fe;
+}
+
+.pretext-plus-editor__toc-edit-field {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: #555;
+}
+
+.pretext-plus-editor__toc-edit-field > span {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-edit-field input,
+.pretext-plus-editor__toc-edit-field select {
+  font: inherit;
+  font-size: 0.8rem;
+  border: 1px solid #a5b4fc;
+  border-radius: 3px;
+  padding: 2px 5px;
+  background: #fff;
+  outline: none;
+  color: #111;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.pretext-plus-editor__toc-edit-field input:focus,
+.pretext-plus-editor__toc-edit-field select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.pretext-plus-editor__toc-edit-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pretext-plus-editor__toc-edit-save,
+.pretext-plus-editor__toc-edit-cancel {
+  font: inherit;
+  font-size: 0.76rem;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__toc-edit-save {
+  background: #2563eb;
+  color: #fff;
+  border: 1px solid #1d4ed8;
+}
+
+.pretext-plus-editor__toc-edit-save:hover {
+  background: #1d4ed8;
+}
+
+.pretext-plus-editor__toc-edit-cancel {
+  background: #fff;
+  color: #555;
+  border: 1px solid #ccc;
+}
+
+.pretext-plus-editor__toc-edit-cancel:hover {
+  background: #f1f5f9;
+  border-color: #999;
+}
+
+.pretext-plus-editor__toc-item--editing {
+  background: #f0f4ff;
 }
 
 .pretext-plus-editor__toc-item--active {
-  background: #e0e8ff;
   border-left-color: #2563eb;
+}
+
+.pretext-plus-editor__toc-item:hover > .pretext-plus-editor__toc-item-row {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-item--active > .pretext-plus-editor__toc-item-row {
+  background: #e0e8ff;
 }
 
 .pretext-plus-editor__toc-item--dragging {
@@ -108,8 +200,7 @@
   -webkit-user-drag: element;
 }
 
-.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-drag-handle {
-  color: #888;
+.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-drag-handle {  color: #888;
 }
 
 .pretext-plus-editor__toc-drag-handle:active {
@@ -123,8 +214,8 @@
 }
 
 /* Compensate missing drag handle with left padding for intro/conclusion */
-.pretext-plus-editor__toc-item--introduction,
-.pretext-plus-editor__toc-item--conclusion {
+.pretext-plus-editor__toc-item--introduction .pretext-plus-editor__toc-item-row,
+.pretext-plus-editor__toc-item--conclusion .pretext-plus-editor__toc-item-row {
   padding-left: 10px;
 }
 

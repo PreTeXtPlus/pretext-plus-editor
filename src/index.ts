@@ -44,6 +44,8 @@ export {
   mergeTwoSections,
   wrapSectionAsDocument,
   wrapLatexSectionAsDocument,
+  getSectionAttributes,
+  updateSectionMetadata,
 } from './sectionUtils';
 
 // Export other useful components if needed
