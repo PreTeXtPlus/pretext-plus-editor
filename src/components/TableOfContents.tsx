@@ -213,7 +213,9 @@ const SortableItem = ({
           onClick={onSelect}
           onDoubleClick={!readonly ? onStartEdit : undefined}
           aria-current={isActive ? "true" : undefined}
-          title={!readonly ? "Click to edit · Double-click to rename" : undefined}
+          title={
+            !readonly ? "Click to edit · Double-click to rename" : undefined
+          }
         >
           <span className="pretext-plus-editor__toc-title">
             {section.title || <em>Untitled</em>}
@@ -519,7 +521,9 @@ const TableOfContents = (props: TableOfContentsProps) => {
     if (wasMergeTarget && onMergeSections) {
       const tgt = sections.find((s) => s.id === wasMergeTarget);
       const confirmed = window.confirm(
-        `Merge "${activeSection.title ?? "section"}" into "${tgt?.title ?? "section"}"?\n\nThe dragged section will be appended to the end of the destination section.`,
+        `Merge "${activeSection.title ?? "section"}" into "${
+          tgt?.title ?? "section"
+        }"?\n\nThe dragged section will be appended to the end of the destination section.`,
       );
       if (confirmed) onMergeSections(active.id as string, wasMergeTarget);
       return;
@@ -665,7 +669,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     onClick={onAddFirstSection}
                     title="Wrap the document content in a section to enable section editing"
                   >
-                    + Add first section
+                    + Create sections
                   </button>
                 )}
               </li>

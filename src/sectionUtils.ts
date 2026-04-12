@@ -21,7 +21,9 @@ import type {
 
 /** Generate a simple unique ID (not RFC-4122, but collision-resistant enough for in-memory use). */
 function generateId(): string {
-  return `sec-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `sec-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 /** Extract the plain-text title from a `<section>` / `<introduction>` / `<conclusion>` element. */
@@ -93,9 +95,9 @@ export function splitDocument(xml: string): DocumentSplitResult {
   // (which is valid XML only as a fragment, not a document) parses without
   // "extra content at end of document" errors.
   const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
-  const syntheticRoot = tree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const syntheticRoot = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
 
   if (!syntheticRoot) {
     return { wrapper: "", sections: [] };
@@ -180,9 +182,9 @@ export function mergeDocument(
   }
 
   const wrapperTree: Root = fromXml(wrapper);
-  const rootElement = wrapperTree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const rootElement = wrapperTree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
 
   if (!rootElement) {
     return sections.map((s) => s.content).join("\n\n");
@@ -193,9 +195,7 @@ export function mergeDocument(
   const sectionNodes: Element[] = sections.flatMap((sec) => {
     try {
       const secTree: Root = fromXml(sec.content);
-      return secTree.children.filter(
-        (n) => n.type === "element",
-      ) as Element[];
+      return secTree.children.filter((n) => n.type === "element") as Element[];
     } catch {
       return [];
     }
@@ -213,7 +213,11 @@ export function mergeDocument(
     children: [
       {
         ...rootElement,
-        children: [...rootElement.children, ...interleaved, { type: "text" as const, value: "\n" }],
+        children: [
+          ...rootElement.children,
+          ...interleaved,
+          { type: "text" as const, value: "\n" },
+        ],
       } as Element,
     ],
   };
@@ -230,9 +234,9 @@ export function updateSectionTitle(
   newTitle: string,
 ): string {
   const tree: Root = fromXml(sectionXml);
-  const rootEl = tree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const rootEl = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
   if (!rootEl) return sectionXml;
 
   const titleIndex = rootEl.children.findIndex(
@@ -257,7 +261,7 @@ export function updateSectionTitle(
 
 /** Create a new blank `<section>` as a `DocumentSection`. */
 export function createNewSection(title = "New Section"): DocumentSection {
-  const content = `<section>\n<title>${title}</title>\n<p></p>\n</section>`;
+  const content = `<section>\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
   return {
     id: generateId(),
     title,
@@ -268,7 +272,7 @@ export function createNewSection(title = "New Section"): DocumentSection {
 
 /** Create a blank `<introduction>` section. */
 export function createIntroduction(): DocumentSection {
-  const content = `<introduction>\n<p></p>\n</introduction>`;
+  const content = `<introduction>\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
   return {
     id: generateId(),
     title: "Introduction",
@@ -279,7 +283,7 @@ export function createIntroduction(): DocumentSection {
 
 /** Create a blank `<conclusion>` section. */
 export function createConclusion(): DocumentSection {
-  const content = `<conclusion>\n<p></p>\n</conclusion>`;
+  const content = `<conclusion>\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
   return {
     id: generateId(),
     title: "Conclusion",
@@ -296,9 +300,9 @@ export function createConclusion(): DocumentSection {
  */
 export function stripSectionWrapper(sectionXml: string): string {
   const tree: Root = fromXml(sectionXml);
-  const rootEl = tree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const rootEl = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
   if (!rootEl) return sectionXml;
   const inner: Root = { type: "root", children: rootEl.children };
   return toXml(inner);
@@ -315,7 +319,7 @@ export function rewrapSection(
   innerXml: string,
   type: DocumentSectionType,
 ): string {
-  return `<${type}>${innerXml}</${type}>`;
+  return `<${type}>\n\n${innerXml}\n\n</${type}>`;
 }
 
 /**
@@ -351,7 +355,7 @@ function untitledLabel(tag: string): string {
  */
 interface LatexWrapper {
   preamble: string; // everything up to and including \begin{document}
-  closing: string;  // \end{document} and anything after
+  closing: string; // \end{document} and anything after
 }
 
 function encodeLatexWrapper(w: LatexWrapper): string {
@@ -595,9 +599,9 @@ export function rewrapLatexSection(
   }
   // Detect environment style from the original content
   if (originalContent?.trimStart().startsWith("\\begin{section}")) {
-    return `\\begin{section}\n${inner}\n\\end{section}`;
+    return `\\begin{section}\n\n${inner}\n\n\\end{section}`;
   }
-  return `\\section{${title}}\n${inner}`;
+  return `\\section{${title}}\n\n${inner}`;
 }
 
 /**
@@ -647,7 +651,7 @@ export function updateLatexSectionTitle(
     }
     return content.replace(
       "\\begin{section}",
-      `\\begin{section}\n\\title{${newTitle}}`,
+      `\\begin{section}\n\n\\title{${newTitle}}\n\n`,
     );
   }
   return content;
@@ -709,9 +713,9 @@ export function wrapDocumentAsSection(
   }
 
   const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
-  const syntheticRoot = tree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const syntheticRoot = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
 
   if (!syntheticRoot) {
     return { wrapper: "", sections: [createNewSection(sectionTitle)] };
@@ -728,15 +732,11 @@ export function wrapDocumentAsSection(
     const docRoot = elementChildren[0];
     const wrapperChildren = docRoot.children.filter(
       (c) =>
-        c.type === "element" &&
-        PRETEXT_HEADER_TAGS.has((c as Element).name),
+        c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name),
     );
     const bodyChildren = docRoot.children.filter(
       (c) =>
-        !(
-          c.type === "element" &&
-          PRETEXT_HEADER_TAGS.has((c as Element).name)
-        ),
+        !(c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name)),
     );
 
     const titleEl: Element = {
@@ -797,7 +797,7 @@ export function wrapLatexDocumentAsSection(
   sectionTitle = "Section 1",
 ): DocumentSplitResult {
   const { preamble, body, closing } = splitLatexPreamble(latex);
-  const sectionContent = `\\section{${sectionTitle}}\n${body.trim()}`;
+  const sectionContent = `\\section{${sectionTitle}}\n\n${body.trim()}\n\n`;
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   return {
     wrapper,
@@ -839,12 +839,12 @@ export function mergeTwoSections(
   // PreTeXt: parse and combine xast children
   const aTree = fromXml(a.content);
   const bTree = fromXml(b.content);
-  const aEl = aTree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
-  const bEl = bTree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  const aEl = aTree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+  const bEl = bTree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
 
   if (!aEl || !bEl) {
     return { ...a, content: a.content + "\n\n" + b.content };
@@ -923,7 +923,11 @@ export function updateSectionMetadata(
     }
 
     // Update tag name (type).
-    const newEl: Element = { ...el, name: newType, attributes: { ...el.attributes } };
+    const newEl: Element = {
+      ...el,
+      name: newType,
+      attributes: { ...el.attributes },
+    };
 
     // Update xml:id attribute.
     if (changes.xmlId !== undefined) {
@@ -1000,9 +1004,9 @@ export function wrapSectionAsDocument(
   let sectionEl: Element | undefined;
   try {
     const sectionTree: Root = fromXml(section.content);
-    sectionEl = sectionTree.children.find(
-      (n) => n.type === "element",
-    ) as Element | undefined;
+    sectionEl = sectionTree.children.find((n) => n.type === "element") as
+      | Element
+      | undefined;
   } catch {
     sectionEl = undefined;
   }
@@ -1081,4 +1085,3 @@ export function wrapLatexSectionAsDocument(
   parts.push(w.closing || "\\end{document}");
   return parts.join("\n\n");
 }
-

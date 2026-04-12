@@ -37,6 +37,10 @@ import {
   updateSectionMetadata,
   wrapSectionAsDocument,
   wrapLatexSectionAsDocument,
+  stripSectionWrapper,
+  stripLatexSectionWrapper,
+  rewrapSection,
+  rewrapLatexSection,
 } from "../sectionUtils";
 
 const startingContent = defaultContent;
@@ -344,10 +348,14 @@ const Editors = (props: editorProps) => {
 
   // ── Derived preview content ───────────────────────────────────────────────
   /** In sectioned mode, preview uses the current section; otherwise full doc. */
-  const activeSourceContent =
-    editMode === "sectioned" && currentSection
-      ? currentSection.content
-      : contentState.sourceContent;
+  const activeSourceContent = (() => {
+    if (editMode === "sectioned" && currentSection) {
+      return contentState.sourceFormat === "latex"
+        ? stripLatexSectionWrapper(currentSection.content, currentSection.type)
+        : stripSectionWrapper(currentSection.content);
+    }
+    return contentState.sourceContent;
+  })();
 
   const previewContent = (() => {
     if (editMode === "sectioned" && currentSection) {
@@ -430,16 +438,26 @@ const Editors = (props: editorProps) => {
 
   /**
    * Handle a content change that originated from within sectioned mode.
+   * The editor now shows *inner* content (no outer division tags), so we
+   * re-wrap before storing in sections state.
    * Updates the current section, fires callbacks, and propagates the merged
    * full document via `onContentChange`.
    */
   const updateSectionContent = (newContent: string | undefined) => {
     if (!currentSection) return;
-    const normalized = newContent || "";
+    const inner = newContent || "";
     const isLatex = contentState.sourceFormat === "latex";
+    const wrapped = isLatex
+      ? rewrapLatexSection(
+          inner,
+          currentSection.type,
+          currentSection.title,
+          currentSection.content,
+        )
+      : rewrapSection(inner, currentSection.type);
     const updatedSection: DocumentSection = {
       ...currentSection,
-      content: normalized,
+      content: wrapped,
     };
     const nextSections = sections.map((s) =>
       s.id === currentSection.id ? updatedSection : s,
@@ -648,12 +666,9 @@ const Editors = (props: editorProps) => {
   // remains "pretext" (section content is PreTeXt XML), for LaTeX it stays "latex".
   const editorSourceFormat: SourceFormat = contentState.sourceFormat;
 
-  // In sectioned mode, show the full section content (including the outer
-  // <section> / \section{} wrapper) so the user can see and edit the structure.
-  const codeEditorContent =
-    editMode === "sectioned" && currentSection
-      ? currentSection.content
-      : contentState.sourceContent;
+  // In sectioned mode, `activeSourceContent` already has the outer wrapper
+  // stripped, so the user only edits the inner content.
+  const codeEditorContent = activeSourceContent;
 
   const codeEditor = (
     <CodeEditor
@@ -703,7 +718,7 @@ const Editors = (props: editorProps) => {
   } else {
     const visualContent =
       editMode === "sectioned" && currentSection
-        ? currentSection.content
+        ? activeSourceContent
         : (previewContent || "");
     // The Tiptap visual editor only understands PreTeXt XML — disable editing
     // when the document source is LaTeX (either in full-doc or sectioned mode).
