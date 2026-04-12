@@ -1,22 +1,21 @@
 import { useRef, useState } from "react";
 import {
   DndContext,
+  DragOverlay,
   closestCenter,
   PointerSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
+  type DragStartEvent,
+  type DragMoveEvent,
   type DragEndEvent,
-  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  verticalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import type { DocumentSection, DocumentSectionType } from "../types/sections";
 import { getSectionAttributes } from "../sectionUtils";
 import "./TableOfContents.css";
@@ -126,6 +125,12 @@ interface EditDraft {
 interface SortableItemProps {
   section: DocumentSection;
   isActive: boolean;
+  /** The item is currently being dragged — render as invisible placeholder. */
+  isBeingDragged: boolean;
+  /** Show a drop-target line above this item. */
+  isDropBefore: boolean;
+  /** Show a drop-target line below this item. */
+  isDropAfter: boolean;
   isMergeTarget: boolean;
   editDraft: EditDraft | null;
   onSelect: () => void;
@@ -142,6 +147,9 @@ interface SortableItemProps {
 const SortableItem = ({
   section,
   isActive,
+  isBeingDragged,
+  isDropBefore,
+  isDropAfter,
   isMergeTarget,
   editDraft,
   onSelect,
@@ -156,19 +164,14 @@ const SortableItem = ({
 }: SortableItemProps) => {
   const isDraggable = !readonly && isRegularDivision(section.type);
   const isEditing = editDraft !== null;
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: section.id, disabled: !isDraggable || isEditing });
+  const { attributes, listeners, setNodeRef } = useSortable({
+    id: section.id,
+    disabled: !isDraggable || isEditing,
+  });
 
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
+  const style: React.CSSProperties = isBeingDragged
+    ? { opacity: 0, pointerEvents: "none" }
+    : {};
 
   return (
     <li
@@ -178,9 +181,10 @@ const SortableItem = ({
         "pretext-plus-editor__toc-item",
         `pretext-plus-editor__toc-item--${section.type}`,
         isActive ? "pretext-plus-editor__toc-item--active" : "",
-        isDragging ? "pretext-plus-editor__toc-item--dragging" : "",
         isEditing ? "pretext-plus-editor__toc-item--editing" : "",
         isMergeTarget ? "pretext-plus-editor__toc-item--merge-target" : "",
+        isDropBefore ? "pretext-plus-editor__toc-item--drop-before" : "",
+        isDropAfter ? "pretext-plus-editor__toc-item--drop-after" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -351,8 +355,14 @@ const TableOfContents = (props: TableOfContentsProps) => {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    id: string;
+    position: "before" | "after";
+  } | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
   const mergeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentOverIdRef = useRef<string | null>(null);
   const isLatex = sections.some((s) => !s.content.trimStart().startsWith("<"));
 
   const sensors = useSensors(
@@ -364,11 +374,6 @@ const TableOfContents = (props: TableOfContentsProps) => {
 
   const hasIntroduction = sections.some((s) => s.type === "introduction");
   const hasConclusion = sections.some((s) => s.type === "conclusion");
-
-  // Intro and conclusion are fixed in position; all other division types can be sorted.
-  const draggableIds = sections
-    .filter((s) => isRegularDivision(s.type))
-    .map((s) => s.id);
 
   // ---------------------------------------------------------------------------
   // Edit helpers
@@ -412,54 +417,103 @@ const TableOfContents = (props: TableOfContentsProps) => {
   // Drag handlers
   // ---------------------------------------------------------------------------
 
-  /** Clear the pending merge timer and merge highlight. */
-  const clearMergeState = () => {
+  const clearDragState = () => {
     if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
     mergeTimerRef.current = null;
+    currentOverIdRef.current = null;
+    setActiveId(null);
+    setDropTarget(null);
     setMergeTargetId(null);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+    setDropTarget(null);
+    setMergeTargetId(null);
+    currentOverIdRef.current = null;
+    // Close any open edit form
+    setEditingId(null);
+    setEditDraft(null);
   };
 
   /**
-   * When the dragged item hovers over a different section, start a 700 ms
-   * timer.  If the user holds still that long, the item turns into a merge
-   * target (amber outline).  Moving away resets the timer.
+   * onDragMove fires every pointer-move tick. Since we use strategy={() => null},
+   * items don't displace, so over.rect is always the stable layout position.
+   * We use it to:
+   *   1. Compute before/after drop indicator (active center vs over center).
+   *   2. Drive the 700 ms merge timer: reset whenever the hovered item changes.
    */
-  const handleDragOver = (event: DragOverEvent) => {
+  const handleDragMove = (event: DragMoveEvent) => {
     const { active, over } = event;
-    if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
-    mergeTimerRef.current = null;
-    setMergeTargetId(null);
-    if (!over || active.id === over.id || !isRegularDivision(over.id as string)) return;
+    if (!over || active.id === over.id) {
+      setDropTarget(null);
+      if (currentOverIdRef.current !== null) {
+        if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+        mergeTimerRef.current = null;
+        currentOverIdRef.current = null;
+        setMergeTargetId(null);
+      }
+      return;
+    }
+
+    // Before/after indicator using stable rects.
+    const activeRect = active.rect.current.translated;
+    if (activeRect) {
+      const activeCenter = activeRect.top + activeRect.height / 2;
+      const overCenter = over.rect.top + over.rect.height / 2;
+      setDropTarget({
+        id: over.id as string,
+        position: activeCenter < overCenter ? "before" : "after",
+      });
+    }
+
+    // Merge timer: reset only when moving to a new item.
     const overId = over.id as string;
-    mergeTimerRef.current = setTimeout(() => {
-      setMergeTargetId(overId);
-    }, 700);
+    if (overId !== currentOverIdRef.current) {
+      if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+      currentOverIdRef.current = overId;
+      setMergeTargetId(null);
+      if (isRegularDivision(overId)) {
+        mergeTimerRef.current = setTimeout(() => {
+          setMergeTargetId(overId);
+        }, 700);
+      }
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
-    mergeTimerRef.current = null;
     const wasMergeTarget = mergeTargetId;
-    setMergeTargetId(null);
+    const savedDropTarget = dropTarget;
+    clearDragState();
 
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    const { active } = event;
+    const activeSection = sections.find((s) => s.id === active.id);
+    if (!activeSection) return;
 
     if (wasMergeTarget && onMergeSections) {
-      const src = sections.find((s) => s.id === active.id);
       const tgt = sections.find((s) => s.id === wasMergeTarget);
       const confirmed = window.confirm(
-        `Merge "${src?.title ?? "section"}" into "${tgt?.title ?? "section"}"?\n\nThe dragged section will be appended to the end of the destination section.`,
+        `Merge "${activeSection.title ?? "section"}" into "${tgt?.title ?? "section"}"?\n\nThe dragged section will be appended to the end of the destination section.`,
       );
       if (confirmed) onMergeSections(active.id as string, wasMergeTarget);
       return;
     }
 
-    // Normal reorder
-    const oldIndex = sections.findIndex((s) => s.id === active.id);
-    const newIndex = sections.findIndex((s) => s.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-    const next = arrayMove(sections, oldIndex, newIndex);
+    if (!savedDropTarget) return;
+
+    // Build new ordered array: remove active, then insert at computed position.
+    const without = sections.filter((s) => s.id !== active.id);
+    const targetIdx = without.findIndex((s) => s.id === savedDropTarget.id);
+    if (targetIdx === -1) return;
+    const insertAt =
+      savedDropTarget.position === "before" ? targetIdx : targetIdx + 1;
+    const next = [
+      ...without.slice(0, insertAt),
+      activeSection,
+      ...without.slice(insertAt),
+    ];
+
+    // Validate invariant: intro first, conclusion last.
     const introIdx = next.findIndex((s) => s.type === "introduction");
     const conclusionIdx = next.findIndex((s) => s.type === "conclusion");
     const valid =
@@ -495,6 +549,17 @@ const TableOfContents = (props: TableOfContentsProps) => {
       key={section.id}
       section={section}
       isActive={section.id === currentSectionId}
+      isBeingDragged={activeId === section.id}
+      isDropBefore={
+        dropTarget?.id === section.id &&
+        dropTarget.position === "before" &&
+        mergeTargetId !== section.id
+      }
+      isDropAfter={
+        dropTarget?.id === section.id &&
+        dropTarget.position === "after" &&
+        mergeTargetId !== section.id
+      }
       isMergeTarget={mergeTargetId === section.id}
       editDraft={editingId === section.id ? editDraft : null}
       onSelect={() => onSelectSection(section.id)}
@@ -508,6 +573,8 @@ const TableOfContents = (props: TableOfContentsProps) => {
       isLatex={isLatex}
     />
   ));
+
+  const activeSection = sections.find((s) => s.id === activeId);
 
   return (
     <div className="pretext-plus-editor__toc">
@@ -552,13 +619,14 @@ const TableOfContents = (props: TableOfContentsProps) => {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragOver={handleDragOver}
+        onDragStart={handleDragStart}
+        onDragMove={handleDragMove}
         onDragEnd={handleDragEnd}
-        onDragCancel={clearMergeState}
+        onDragCancel={clearDragState}
       >
         <SortableContext
-          items={draggableIds}
-          strategy={verticalListSortingStrategy}
+          items={sections.map((s) => s.id)}
+          strategy={() => null}
         >
           <ul className="pretext-plus-editor__toc-list" role="list">
             {sections.length === 0 ? (
@@ -580,6 +648,18 @@ const TableOfContents = (props: TableOfContentsProps) => {
             )}
           </ul>
         </SortableContext>
+        <DragOverlay>
+          {activeSection && (
+            <div className="pretext-plus-editor__toc-drag-overlay">
+              <span className="pretext-plus-editor__toc-drag-overlay-badge">
+                {activeSection.type}
+              </span>
+              <span className="pretext-plus-editor__toc-drag-overlay-title">
+                {activeSection.title || "Untitled"}
+              </span>
+            </div>
+          )}
+        </DragOverlay>
       </DndContext>
 
       {!readonly && sections.length > 0 && (
