@@ -169,3 +169,26 @@
   color: #4b5563;
   text-align: center;
 }
+
+/* Edit-mode toggle button */
+.pretext-plus-editor__button--edit-mode {
+  background: #f0f4ff;
+  border: 1px solid #a5b4fc;
+  color: #3730a3;
+  border-radius: 4px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pretext-plus-editor__button--edit-mode:hover {
+  background: #e0e8ff;
+  border-color: #6366f1;
+}
+
+.pretext-plus-editor__button--edit-mode-active {
+  background: #e0e8ff;
+  border-color: #6366f1;
+  font-weight: 600;
+}

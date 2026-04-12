@@ -163,3 +163,40 @@
   .pretext-plus-editor__resize-dots::after {
   background-color: #333;
 }
+
+/* Sectioned editing mode: TOC + split-panel layout */
+.pretext-plus-editor__sectioned-layout {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Narrow-screen TOC drawer */
+.pretext-plus-editor__toc-drawer {
+  border-bottom: 1px solid #dde0e6;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-drawer-toggle {
+  width: 100%;
+  padding: 6px 12px;
+  background: #f5f6f8;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #333;
+}
+
+.pretext-plus-editor__toc-drawer-toggle:hover {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-drawer-open {
+  max-height: 40vh;
+  overflow-y: auto;
+  border-top: 1px solid #dde0e6;
+}

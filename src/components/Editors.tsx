@@ -8,6 +8,7 @@ import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import MenuBar from "./MenuBar";
+import TableOfContents from "./TableOfContents";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
@@ -17,6 +18,28 @@ import type {
   EditorContentState,
   SourceFormat,
 } from "../types/editor";
+import type { DocumentSection } from "../types/sections";
+import {
+  splitDocument,
+  mergeDocument,
+  updateSectionTitle,
+  createNewSection,
+  createIntroduction,
+  createConclusion,
+  ensureSectionWrapper,
+  splitLatexDocument,
+  mergeLatexDocument,
+  ensureLatexSectionWrapper,
+  updateLatexSectionTitle,
+  createNewLatexSection,
+  createLatexIntroduction,
+  createLatexConclusion,
+  wrapDocumentAsSection,
+  wrapLatexDocumentAsSection,
+  mergeTwoSections,
+  wrapSectionAsDocument,
+  wrapLatexSectionAsDocument,
+} from "../sectionUtils";
 
 const startingContent = defaultContent;
 
@@ -86,6 +109,30 @@ export interface editorProps {
     title: string,
     postToIframe: (url: string, data: any) => void,
   ) => void;
+  /**
+   * Controls the editing mode from the outside.  When provided, the
+   * component operates in controlled mode; omit to use internal state
+   * (uncontrolled).
+   */
+  editMode?: "document" | "sectioned";
+  /**
+   * Initial editing mode for uncontrolled usage.  Defaults to `"document"`.
+   */
+  defaultEditMode?: "document" | "sectioned";
+  /**
+   * Called when the user switches between `"document"` and `"sectioned"` mode.
+   */
+  onEditModeChange?: (mode: "document" | "sectioned") => void;
+  /**
+   * Called when the section list changes structurally (add, remove, reorder,
+   * or rename).  Only fired in `"sectioned"` mode.
+   */
+  onSectionsChange?: (sections: DocumentSection[]) => void;
+  /**
+   * Called when the content of a single section is edited.  Only fired in
+   * `"sectioned"` mode.
+   */
+  onSectionChange?: (section: DocumentSection) => void;
 }
 
 /**
@@ -156,12 +203,166 @@ const Editors = (props: editorProps) => {
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
+
+  // ── Sectioned editing mode state ──────────────────────────────────────────
+  const [internalEditMode, setInternalEditMode] = useState<
+    "document" | "sectioned"
+  >(props.defaultEditMode ?? "document");
+  const editMode = props.editMode ?? internalEditMode;
+
+  const [sections, setSections] = useState<DocumentSection[]>([]);
+  const [documentWrapper, setDocumentWrapper] = useState<string>("");
+  const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
+  const [isTocCollapsed, setIsTocCollapsed] = useState(false);
+
+  // Pending section title to navigate to after a mode switch
+  const pendingNavTitle = useRef<string | null>(null);
+  // Debounce timer for auto-refreshing the TOC in document mode
+  const tocRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Populate sections on initial mount so TOC works in document mode too
+  useEffect(() => {
+    const { sourceContent, sourceFormat } = contentState;
+    const toSplit = sourceFormat === "latex" ? sourceContent : (
+      sourceFormat === "pretext" ? sourceContent : (contentState.pretextSource ?? "")
+    );
+    if (!toSplit.trim()) return;
+    try {
+      const { wrapper, sections: split } = sourceFormat === "latex"
+        ? splitLatexDocument(toSplit)
+        : splitDocument(toSplit);
+      setDocumentWrapper(wrapper);
+      setSections(split);
+      setCurrentSectionId(split[0]?.id ?? null);
+    } catch {
+      // ignore parse errors; TOC will be empty
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
+  /**
+   * Re-parse the current full document and refresh the sections array.
+   * In document mode this keeps the readonly TOC in sync as the user types.
+   * In sectioned mode it is only triggered explicitly (refresh button) so the
+   * user can split a section they have manually sub-divided.
+   *
+   * Existing section IDs are re-used where the title matches an existing entry
+   * so that the selected section is preserved where possible.
+   */
+  const handleRefreshSections = () => {
+    const isLatex = contentState.sourceFormat === "latex";
+    const source = contentState.sourceContent;
+    let fresh: DocumentSection[];
+    let wrapper: string;
+    try {
+      ({ wrapper, sections: fresh } = isLatex
+        ? splitLatexDocument(source)
+        : splitDocument(source));
+    } catch {
+      return; // ignore parse errors
+    }
+    // Carry forward existing IDs where titles match to keep selection stable
+    const titleToId = new Map(sections.map((s) => [s.title, s.id]));
+    const remapped = fresh.map((s) => ({
+      ...s,
+      id: titleToId.get(s.title) ?? s.id,
+    }));
+    setDocumentWrapper(wrapper);
+    setSections(remapped);
+    props.onSectionsChange?.(remapped);
+    // Keep the current section selected if it still exists
+    if (
+      editMode === "sectioned" &&
+      currentSectionId &&
+      !remapped.some((s) => s.id === currentSectionId)
+    ) {
+      setCurrentSectionId(remapped[0]?.id ?? null);
+    }
+  };
+
+  // In document mode, debounce-refresh the sections whenever the content changes
+  // so the readonly TOC stays in sync without a manual refresh.
+  useEffect(() => {
+    if (editMode !== "document") return;
+    if (tocRefreshTimer.current) clearTimeout(tocRefreshTimer.current);
+    tocRefreshTimer.current = setTimeout(() => {
+      handleRefreshSections();
+    }, 800);
+    return () => {
+      if (tocRefreshTimer.current) clearTimeout(tocRefreshTimer.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contentState.sourceContent, editMode]);
+
+  /** The section currently being edited (or null in document mode). */
+  const currentSection =
+    editMode === "sectioned"
+      ? (sections.find((s) => s.id === currentSectionId) ?? sections[0] ?? null)
+      : null;
+
+  /** Switch to the given mode, splitting or merging the document as needed. */
+  const switchEditMode = (newMode: "document" | "sectioned") => {
+    if (newMode === "sectioned" && editMode === "document") {
+      const isLatex = contentState.sourceFormat === "latex";
+      const toSplit = isLatex
+        ? contentState.sourceContent
+        : (contentState.sourceFormat === "pretext"
+            ? contentState.sourceContent
+            : (contentState.pretextSource ?? ""));
+      const { wrapper, sections: split } = isLatex
+        ? splitLatexDocument(toSplit)
+        : splitDocument(toSplit);
+      // If the document has no sections, stay in document mode.
+      if (split.length === 0) return;
+      setDocumentWrapper(wrapper);
+      setSections(split);
+      // Navigate to the pending section (by title) if requested
+      if (pendingNavTitle.current) {
+        const target = split.find((s) => s.title === pendingNavTitle.current);
+        setCurrentSectionId(target?.id ?? split[0]?.id ?? null);
+        pendingNavTitle.current = null;
+      } else {
+        setCurrentSectionId(split[0]?.id ?? null);
+      }
+    } else if (newMode === "document" && editMode === "sectioned") {
+      const merged = contentState.sourceFormat === "latex"
+        ? mergeLatexDocument(documentWrapper, sections)
+        : mergeDocument(documentWrapper, sections);
+      updateContentState(merged);
+    }
+    setInternalEditMode(newMode);
+    props.onEditModeChange?.(newMode);
+  };
+
+  /**
+   * When a section is clicked while in document mode, switch to sectioned mode
+   * and navigate to that section.
+   */
+  const handleSelectSectionInDocMode = (id: string) => {
+    const section = sections.find((s) => s.id === id);
+    pendingNavTitle.current = section?.title ?? null;
+    switchEditMode("sectioned");
+  };
+
+  // ── Derived preview content ───────────────────────────────────────────────
+  /** In sectioned mode, preview uses the current section; otherwise full doc. */
+  const activeSourceContent =
+    editMode === "sectioned" && currentSection
+      ? currentSection.content
+      : contentState.sourceContent;
+
   const previewContent =
-    contentState.pretextSource ??
-    (contentState.sourceFormat === "pretext"
-      ? contentState.sourceContent
-      : undefined);
-  const previewUnavailable = contentState.pretextError !== undefined;
+    editMode === "sectioned" && currentSection
+      ? (contentState.sourceFormat === "pretext"
+          ? wrapSectionAsDocument(currentSection, internalDocinfo, title)
+          : wrapLatexSectionAsDocument(currentSection, documentWrapper))
+      : (contentState.pretextSource ??
+        (contentState.sourceFormat === "pretext"
+          ? contentState.sourceContent
+          : undefined));
+
+  const previewUnavailable =
+    editMode !== "sectioned" && contentState.pretextError !== undefined;
 
   /** Triggers a full-page preview rebuild without saving. */
   const triggerRebuild = () => {
@@ -224,6 +425,42 @@ const Editors = (props: editorProps) => {
   };
 
   /**
+   * Handle a content change that originated from within sectioned mode.
+   * Updates the current section, fires callbacks, and propagates the merged
+   * full document via `onContentChange`.
+   *
+   * The code editor shows the full section XML/LaTeX including the outer
+   * wrapper tag.  If the user accidentally deletes it, we restore it here.
+   */
+  const updateSectionContent = (newContent: string | undefined) => {
+    if (!currentSection) return;
+    const normalized = newContent || "";
+    const isLatex = contentState.sourceFormat === "latex";
+    // Ensure the outer section wrapper is still present; restore it if removed.
+    const fullContent = isLatex
+      ? ensureLatexSectionWrapper(
+          normalized,
+          currentSection.type,
+          currentSection.title,
+          currentSection.content,
+        )
+      : ensureSectionWrapper(normalized, currentSection.type);
+    const updatedSection: DocumentSection = {
+      ...currentSection,
+      content: fullContent,
+    };
+    const nextSections = sections.map((s) =>
+      s.id === currentSection.id ? updatedSection : s,
+    );
+    setSections(nextSections);
+    props.onSectionChange?.(updatedSection);
+    const merged = isLatex
+      ? mergeLatexDocument(documentWrapper, nextSections)
+      : mergeDocument(documentWrapper, nextSections);
+    updateContentState(merged);
+  };
+
+  /**
    * Promotes the derived PreTeXt content to be the new canonical source,
    * switching `sourceFormat` to `"pretext"`.  Only callable when conversion
    * has succeeded (i.e. `pretextError` is undefined).
@@ -242,23 +479,192 @@ const Editors = (props: editorProps) => {
     props.onContentChange(convertedPretext, nextState);
   };
 
+  // ── TOC action handlers ───────────────────────────────────────────────────
+
+  const isLatexDoc = contentState.sourceFormat === "latex";
+
+  const doMerge = (secs: DocumentSection[], wrapper = documentWrapper) =>
+    isLatexDoc
+      ? mergeLatexDocument(wrapper, secs)
+      : mergeDocument(wrapper, secs);
+
+  /**
+   * Wrap the entire current document content as a single section and switch
+   * to sectioned editing mode.  Called when the user adds a section to a
+   * document that has none.
+   */
+  const handleAddFirstSection = () => {
+    const { wrapper, sections: wrapped } = isLatexDoc
+      ? wrapLatexDocumentAsSection(contentState.sourceContent)
+      : wrapDocumentAsSection(contentState.sourceContent);
+    setDocumentWrapper(wrapper);
+    setSections(wrapped);
+    setCurrentSectionId(wrapped[0]?.id ?? null);
+    const merged = doMerge(wrapped, wrapper);
+    updateContentState(merged);
+    setInternalEditMode("sectioned");
+    props.onEditModeChange?.("sectioned");
+  };
+
+  const handleAddSection = (afterId: string | null) => {
+    // When the document has no sections yet, wrap the whole content as one section first.
+    if (sections.length === 0) {
+      handleAddFirstSection();
+      return;
+    }
+    const newSec = isLatexDoc ? createNewLatexSection() : createNewSection();
+    let nextSections: DocumentSection[];
+    if (afterId === null) {
+      // Insert before any conclusion, otherwise at the end.
+      const conclusionIdx = sections.findIndex((s) => s.type === "conclusion");
+      if (conclusionIdx !== -1) {
+        nextSections = [
+          ...sections.slice(0, conclusionIdx),
+          newSec,
+          ...sections.slice(conclusionIdx),
+        ];
+      } else {
+        nextSections = [...sections, newSec];
+      }
+    } else {
+      const idx = sections.findIndex((s) => s.id === afterId);
+      nextSections = [
+        ...sections.slice(0, idx + 1),
+        newSec,
+        ...sections.slice(idx + 1),
+      ];
+    }
+    setSections(nextSections);
+    setCurrentSectionId(newSec.id);
+    props.onSectionsChange?.(nextSections);
+    const merged = doMerge(nextSections);
+    updateContentState(merged);
+  };
+
+  const handleAddIntroduction = () => {
+    if (sections.some((s) => s.type === "introduction")) return;
+    const intro = isLatexDoc ? createLatexIntroduction() : createIntroduction();
+    const nextSections = [intro, ...sections];
+    setSections(nextSections);
+    setCurrentSectionId(intro.id);
+    props.onSectionsChange?.(nextSections);
+    const merged = doMerge(nextSections);
+    updateContentState(merged);
+  };
+
+  const handleAddConclusion = () => {
+    if (sections.some((s) => s.type === "conclusion")) return;
+    const conc = isLatexDoc ? createLatexConclusion() : createConclusion();
+    const nextSections = [...sections, conc];
+    setSections(nextSections);
+    setCurrentSectionId(conc.id);
+    props.onSectionsChange?.(nextSections);
+    const merged = doMerge(nextSections);
+    updateContentState(merged);
+  };
+
+  const handleRemoveSection = (id: string) => {
+    const nextSections = sections.filter((s) => s.id !== id);
+    setSections(nextSections);
+    if (currentSectionId === id) {
+      setCurrentSectionId(nextSections[0]?.id ?? null);
+    }
+    // If all sections are gone, switch back to document mode automatically.
+    if (nextSections.length === 0 && editMode === "sectioned") {
+      const merged = doMerge(nextSections);
+      updateContentState(merged);
+      setInternalEditMode("document");
+      props.onEditModeChange?.("document");
+    } else {
+      props.onSectionsChange?.(nextSections);
+      const merged = doMerge(nextSections);
+      updateContentState(merged);
+    }
+  };
+
+  const handleRenameSection = (id: string, newTitle: string) => {
+    const nextSections = sections.map((s) => {
+      if (s.id !== id) return s;
+      return {
+        ...s,
+        title: newTitle,
+        content: isLatexDoc
+          ? updateLatexSectionTitle(s.content, newTitle)
+          : updateSectionTitle(s.content, newTitle),
+      };
+    });
+    setSections(nextSections);
+    const renamed = nextSections.find((s) => s.id === id);
+    if (renamed) props.onSectionChange?.(renamed);
+    props.onSectionsChange?.(nextSections);
+    const merged = doMerge(nextSections);
+    updateContentState(merged);
+  };
+
+  const handleReorderSections = (nextSections: DocumentSection[]) => {
+    setSections(nextSections);
+    props.onSectionsChange?.(nextSections);
+    const merged = doMerge(nextSections);
+    updateContentState(merged);
+  };
+
+  /**
+   * Merge the section with the given id into its successor section.
+   * The merged section keeps the title and id of the first.
+   */
+  const handleMergeSection = (id: string) => {
+    const idx = sections.findIndex((s) => s.id === id);
+    if (idx === -1 || idx >= sections.length - 1) return;
+    const merged = mergeTwoSections(sections[idx], sections[idx + 1], isLatexDoc);
+    const nextSections = [
+      ...sections.slice(0, idx),
+      merged,
+      ...sections.slice(idx + 2),
+    ];
+    setSections(nextSections);
+    if (currentSectionId === sections[idx + 1].id) {
+      setCurrentSectionId(merged.id);
+    }
+    props.onSectionsChange?.(nextSections);
+    const mergedDoc = doMerge(nextSections);
+    updateContentState(mergedDoc);
+  };
+
+  // ── Build editor sub-components ───────────────────────────────────────────
+
+  // Always use the actual source format; for PreTeXt in sectioned mode this
+  // remains "pretext" (section content is PreTeXt XML), for LaTeX it stays "latex".
+  const editorSourceFormat: SourceFormat = contentState.sourceFormat;
+
+  // In sectioned mode, show the full section content (including the outer
+  // <section> / \section{} wrapper) so the user can see and edit the structure.
+  const codeEditorContent =
+    editMode === "sectioned" && currentSection
+      ? currentSection.content
+      : contentState.sourceContent;
+
   const codeEditor = (
     <CodeEditor
-      content={contentState.sourceContent}
-      sourceFormat={contentState.sourceFormat}
-      onChange={updateContentState}
+      content={codeEditorContent}
+      sourceFormat={editorSourceFormat}
+      onChange={
+        editMode === "sectioned"
+          ? (c) => updateSectionContent(c)
+          : updateContentState
+      }
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onOpenLatexImport={() => setIsLatexDialogOpen(true)}
       onOpenDocinfoEditor={() => setIsDocinfoEditorOpen(true)}
       onOpenConvertToPretext={
-        contentState.sourceFormat === "latex"
+        editMode !== "sectioned" && contentState.sourceFormat === "latex"
           ? () => setIsConvertDialogOpen(true)
           : undefined
       }
       canConvertToPretext={contentState.pretextError === undefined}
     />
   );
+
   // `preview` will either be the visual editor or the full preview based on `showFull`
   let preview: ReactNode;
   if (previewUnavailable) {
@@ -283,22 +689,86 @@ const Editors = (props: editorProps) => {
       />
     );
   } else {
+    const visualContent =
+      editMode === "sectioned" && currentSection
+        ? currentSection.content
+        : (previewContent || "");
+    // The Tiptap visual editor only understands PreTeXt XML — disable editing
+    // when the document source is LaTeX (either in full-doc or sectioned mode).
+    const canEditVisually = contentState.sourceFormat === "pretext";
     preview = (
       <VisualEditor
-        content={previewContent || ""}
-        canEdit={contentState.sourceFormat === "pretext"}
-        editDisabledReason=""
+        content={visualContent}
+        canEdit={canEditVisually}
+        editDisabledReason={isLatexDoc ? "Visual editing is not available for LaTeX documents." : ""}
         onChange={(content) => {
-          updateContentState(content);
+          if (editMode === "sectioned") {
+            updateSectionContent(content);
+          } else {
+            updateContentState(content);
+          }
         }}
       />
     );
   }
 
+  // ── Build the TOC sidebar (sectioned mode only) ────────────────────────────
+
+  const tocSidebar = (
+    <TableOfContents
+      sections={sections}
+      currentSectionId={currentSectionId ?? (sections[0]?.id ?? null)}
+      isCollapsed={isTocCollapsed}
+      onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
+      onSelectSection={
+        editMode === "sectioned"
+          ? setCurrentSectionId
+          : handleSelectSectionInDocMode
+      }
+      onAddSection={handleAddSection}
+      onAddIntroduction={handleAddIntroduction}
+      onAddConclusion={handleAddConclusion}
+      onRemoveSection={handleRemoveSection}
+      onRenameSection={handleRenameSection}
+      onReorderSections={handleReorderSections}
+      onMergeWithNext={handleMergeSection}
+      onAddFirstSection={handleAddFirstSection}
+      onRefresh={editMode === "sectioned" ? handleRefreshSections : undefined}
+      editMode={editMode}
+      onToggleEditMode={() =>
+        switchEditMode(editMode === "document" ? "sectioned" : "document")
+      }
+      readonly={editMode === "document"}
+    />
+  );
+
+  // ── Build the editor displays ─────────────────────────────────────────────
+
   let editorDisplays: ReactNode;
+
+  // On narrow screens: show TOC as a collapsible drawer above the tab layout
+  const narrowTocDrawer = isNarrowScreen ? (
+    <div className="pretext-plus-editor__toc-drawer">
+      {isTocCollapsed ? (
+        <button
+          type="button"
+          className="pretext-plus-editor__toc-drawer-toggle"
+          onClick={() => setIsTocCollapsed(false)}
+        >
+          ☰ Contents
+        </button>
+      ) : (
+        <div className="pretext-plus-editor__toc-drawer-open">
+          {tocSidebar}
+        </div>
+      )}
+    </div>
+  ) : null;
+
   if (isNarrowScreen) {
     editorDisplays = (
       <div className="pretext-plus-editor__tabs">
+        {narrowTocDrawer}
         <div className="pretext-plus-editor__tab-list" role="tablist">
           <button
             type="button"
@@ -343,17 +813,28 @@ const Editors = (props: editorProps) => {
     );
   } else {
     editorDisplays = (
-      <Group orientation="horizontal" className="pretext-plus-editor__splitter">
-        <Panel className="pretext-plus-editor__editor-panel">
-          {codeEditor}
-        </Panel>
-        <Separator className="pretext-plus-editor__resize-handle">
-          <div className="pretext-plus-editor__resize-dots"></div>
-        </Separator>
-        <Panel className="pretext-plus-editor__preview-panel">{preview}</Panel>
-      </Group>
+      <div className="pretext-plus-editor__sectioned-layout">
+        {tocSidebar}
+        <Group
+          orientation="horizontal"
+          className="pretext-plus-editor__splitter"
+        >
+          <Panel className="pretext-plus-editor__editor-panel">
+            {codeEditor}
+          </Panel>
+          <Separator className="pretext-plus-editor__resize-handle">
+            <div className="pretext-plus-editor__resize-dots"></div>
+          </Separator>
+          <Panel className="pretext-plus-editor__preview-panel">
+            {preview}
+          </Panel>
+        </Group>
+      </div>
     );
   }
+
+  // Suppress unused variable warnings for activeSourceContent in document mode.
+  void activeSourceContent;
 
   return (
     <div className="pretext-plus-editor" onKeyDown={handleKeyDown}>

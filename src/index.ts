@@ -14,6 +14,37 @@ export type {
   EditorContentState,
   SourceFormat,
 } from './types/editor';
+export type {
+  DocumentSection,
+  DocumentSectionType,
+  DocumentSplitResult,
+} from './types/sections';
+export {
+  splitDocument,
+  mergeDocument,
+  updateSectionTitle,
+  createNewSection,
+  createIntroduction,
+  createConclusion,
+  stripSectionWrapper,
+  rewrapSection,
+  ensureSectionWrapper,
+  // LaTeX section utilities
+  splitLatexDocument,
+  mergeLatexDocument,
+  stripLatexSectionWrapper,
+  rewrapLatexSection,
+  ensureLatexSectionWrapper,
+  updateLatexSectionTitle,
+  createNewLatexSection,
+  createLatexIntroduction,
+  createLatexConclusion,
+  wrapDocumentAsSection,
+  wrapLatexDocumentAsSection,
+  mergeTwoSections,
+  wrapSectionAsDocument,
+  wrapLatexSectionAsDocument,
+} from './sectionUtils';
 
 // Export other useful components if needed
 export { default as CodeEditor } from './components/CodeEditor';

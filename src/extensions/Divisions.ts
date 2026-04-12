@@ -281,11 +281,52 @@ const Worksheet = Node.create({
 
 
 
+const Conclusion = Node.create({
+  name: "conclusion",
+
+  content: "(BasicBlock|block|rawptx)*",
+
+  group: "division conclusion",
+
+  selectable: true,
+  draggable: true,
+
+  defining: false,
+
+  parseHTML() {
+    return [
+      {
+        tag: "conclusion",
+      },
+    ];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return [
+      "article",
+      mergeAttributes(
+        { class: "conclusion", label: "conclusion" },
+        HTMLAttributes
+      ),
+      0,
+    ];
+  },
+
+  addInputRules() {
+    return [
+      wrappingInputRule({
+        find: new RegExp(`^#conclusion\\s$`),
+        type: this.type,
+      }),
+    ];
+  },
+});
+
 const Divisions = Extension.create({
   name: "divisions",
 
   addExtensions() {
-    return [Introduction, Part, Chapter, Section, Subsection, Worksheet, PtxDoc];
+    return [Introduction, Conclusion, Part, Chapter, Section, Subsection, Worksheet, PtxDoc];
   },
 });
 

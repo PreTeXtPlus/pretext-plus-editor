@@ -1,6 +1,5 @@
 const defaultContent: string = `
-  <section>
-  <title>My Section</title>
+
   <p>
     This is a paragraph.  It can contain <term>terms</term> and <em>emphasis</em>.
   </p>
@@ -76,7 +75,7 @@ const defaultContent: string = `
   </theorem>
 
   <p> And that's the end of the demo.  Thanks for coming!</p>
-  </section>
+
   `;
 
 const simpleContent: string = `
