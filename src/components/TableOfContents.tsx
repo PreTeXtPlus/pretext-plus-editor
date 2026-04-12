@@ -456,28 +456,52 @@ const TableOfContents = (props: TableOfContentsProps) => {
       return;
     }
 
-    // Before/after indicator using stable rects.
+    const overId = over.id as string;
     const activeRect = active.rect.current.translated;
-    if (activeRect) {
+
+    // Determine where the dragged item's center sits relative to the target.
+    // Middle 30% of the target → merge zone; outer 70% → reorder zone.
+    let inMergeZone = false;
+    if (activeRect && isRegularDivision(overId)) {
+      const activeCenter = activeRect.top + activeRect.height / 2;
+      const overTop = over.rect.top;
+      const overHeight = over.rect.height;
+      const zoneFraction = 0.15; // 15% from top/bottom edge = 30% centre band
+      const mergeTop = overTop + overHeight * zoneFraction;
+      const mergeBottom = overTop + overHeight * (1 - zoneFraction);
+      inMergeZone = activeCenter >= mergeTop && activeCenter <= mergeBottom;
+    }
+
+    // Before/after drop indicator — suppress when in merge zone.
+    if (activeRect && !inMergeZone) {
       const activeCenter = activeRect.top + activeRect.height / 2;
       const overCenter = over.rect.top + over.rect.height / 2;
       setDropTarget({
-        id: over.id as string,
+        id: overId,
         position: activeCenter < overCenter ? "before" : "after",
       });
+    } else if (inMergeZone) {
+      setDropTarget(null);
     }
 
-    // Merge timer: reset only when moving to a new item.
-    const overId = over.id as string;
+    // Merge timer: start only inside the merge zone; cancel when leaving it or
+    // moving to a different item.
     if (overId !== currentOverIdRef.current) {
+      // Entered a new item — reset everything.
       if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
       currentOverIdRef.current = overId;
       setMergeTargetId(null);
-      if (isRegularDivision(overId)) {
-        mergeTimerRef.current = setTimeout(() => {
-          setMergeTargetId(overId);
-        }, 700);
-      }
+    }
+
+    if (inMergeZone && !mergeTimerRef.current && !mergeTargetId) {
+      mergeTimerRef.current = setTimeout(() => {
+        setMergeTargetId(overId);
+      }, 700);
+    } else if (!inMergeZone && mergeTimerRef.current) {
+      clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
+      setMergeTargetId(null);
     }
   };
 
