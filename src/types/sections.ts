@@ -1,10 +1,31 @@
 /**
  * The type of a document section in sectioned editing mode.
- * - `'introduction'` — appears only at the beginning (maps to `<introduction>`)
- * - `'section'`      — a regular `<section>` element
- * - `'conclusion'`   — appears only at the end (maps to `<conclusion>`)
+ *
+ * Each value is the XML tag name used for that division so that the type can
+ * be used directly when serialising (`<${type}>…</${type}>`).
+ *
+ * - `'introduction'`      — positional: always first; maps to `<introduction>`
+ * - `'conclusion'`        — positional: always last;  maps to `<conclusion>`
+ * - `'section'`           — ordinary `<section>` division
+ * - `'worksheet'`         — `<worksheet>` division
+ * - `'handout'`           — `<handout>` division
+ * - `'exercises'`         — `<exercises>` division
+ * - `'references'`        — `<references>` division
+ * - `'glossary'`          — `<glossary>` division
+ * - `'solutions'`         — `<solutions>` division
+ * - `'reading-questions'` — `<reading-questions>` division
  */
-export type DocumentSectionType = 'introduction' | 'section' | 'conclusion';
+export type DocumentSectionType =
+  | 'introduction'
+  | 'conclusion'
+  | 'section'
+  | 'worksheet'
+  | 'handout'
+  | 'exercises'
+  | 'references'
+  | 'glossary'
+  | 'solutions'
+  | 'reading-questions';
 
 /**
  * Represents a single top-level division of a PreTeXt article when the

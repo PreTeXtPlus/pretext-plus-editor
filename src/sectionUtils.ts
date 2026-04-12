@@ -41,14 +41,21 @@ function extractTitle(element: Element): string {
 const SECTION_TAGS: ReadonlySet<string> = new Set([
   "introduction",
   "section",
+  "worksheet",
+  "handout",
+  "exercises",
+  "references",
+  "glossary",
+  "solutions",
+  "reading-questions",
   "conclusion",
 ]);
 
-/** Map a tag name to its `DocumentSectionType`. */
+/** Map a tag name to its `DocumentSectionType` (the two are identical for PreTeXt). */
 function tagToType(tag: string): DocumentSectionType {
-  if (tag === "introduction") return "introduction";
-  if (tag === "conclusion") return "conclusion";
-  return "section";
+  // All recognised section-level tags map directly to their tag name as the type.
+  // Unknown tags fall back to "section" so legacy data is not broken.
+  return SECTION_TAGS.has(tag) ? (tag as DocumentSectionType) : "section";
 }
 
 // ---------------------------------------------------------------------------
@@ -295,15 +302,15 @@ export function stripSectionWrapper(sectionXml: string): string {
 /**
  * Re-wrap inner XML content (as returned by the code editor) with the correct
  * outer element for the given section type.
+ *
+ * Because `DocumentSectionType` values are identical to the XML tag names,
+ * this is simply `<${type}>inner</${type}>`.
  */
 export function rewrapSection(
   innerXml: string,
   type: DocumentSectionType,
 ): string {
-  const tagName = type === "introduction" ? "introduction"
-    : type === "conclusion" ? "conclusion"
-    : "section";
-  return `<${tagName}>${innerXml}</${tagName}>`;
+  return `<${type}>${innerXml}</${type}>`;
 }
 
 /**
@@ -316,11 +323,8 @@ export function ensureSectionWrapper(
   content: string,
   type: DocumentSectionType,
 ): string {
-  const tagName = type === "introduction" ? "introduction"
-    : type === "conclusion" ? "conclusion"
-    : "section";
   const trimmed = content.trimStart();
-  if (trimmed.startsWith(`<${tagName}`)) return content;
+  if (trimmed.startsWith(`<${type}`)) return content;
   return rewrapSection(content, type);
 }
 

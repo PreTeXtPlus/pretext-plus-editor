@@ -57,9 +57,21 @@ export interface TableOfContentsProps {
 
 const TYPE_LABELS: Record<string, string> = {
   introduction: "Intro",
-  section: "§",
   conclusion: "Concl",
+  section: "§",
+  worksheet: "WS",
+  handout: "HO",
+  exercises: "Ex",
+  references: "Ref",
+  glossary: "Gls",
+  solutions: "Sol",
+  "reading-questions": "RQ",
 };
+
+/** Returns true for section-level divisions that can be freely reordered. */
+function isRegularDivision(type: string): boolean {
+  return type !== "introduction" && type !== "conclusion";
+}
 
 // ---------------------------------------------------------------------------
 // SortableItem — a single draggable section row
@@ -95,7 +107,7 @@ const SortableItem = ({
   canRemove,
   readonly,
 }: SortableItemProps) => {
-  const isDraggable = !readonly && section.type === "section";
+  const isDraggable = !readonly && isRegularDivision(section.type);
   const {
     attributes,
     listeners,
@@ -164,7 +176,7 @@ const SortableItem = ({
 
       {!readonly && (
         <div className="pretext-plus-editor__toc-actions">
-          {section.type === "section" && (
+          {isRegularDivision(section.type) && (
             <button
               type="button"
               className="pretext-plus-editor__toc-action-btn"
@@ -263,9 +275,9 @@ const TableOfContents = (props: TableOfContentsProps) => {
   const hasIntroduction = sections.some((s) => s.type === "introduction");
   const hasConclusion = sections.some((s) => s.type === "conclusion");
 
-  // Only plain section items are sortable
+  // Intro and conclusion are fixed in position; all other division types can be sorted.
   const draggableIds = sections
-    .filter((s) => s.type === "section")
+    .filter((s) => isRegularDivision(s.type))
     .map((s) => s.id);
 
   // ---------------------------------------------------------------------------
@@ -344,18 +356,18 @@ const TableOfContents = (props: TableOfContentsProps) => {
   // ---------------------------------------------------------------------------
   // Build the interleaved list: items + add-dividers
   // ---------------------------------------------------------------------------
-  // Pre-compute the last plain-section id before each section (for merge logic).
+  // Pre-compute the last regular-division id before each section (for merge logic).
   const prevPlainSectionIds: (string | null)[] = sections.map((_, i) => {
     for (let j = i - 1; j >= 0; j--) {
-      if (sections[j].type === "section") return sections[j].id;
+      if (isRegularDivision(sections[j].type)) return sections[j].id;
     }
     return null;
   });
   const lastPlainSectionId: string | null =
-    [...sections].reverse().find((s) => s.type === "section")?.id ?? null;
+    [...sections].reverse().find((s) => isRegularDivision(s.type))?.id ?? null;
 
   const items: React.ReactNode[] = sections.flatMap((section, i) => {
-    const isDraggable = section.type === "section";
+    const isDraggable = isRegularDivision(section.type);
     const prevId = prevPlainSectionIds[i];
     const canMergeAbove =
       !readonly &&
