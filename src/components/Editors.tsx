@@ -25,10 +25,8 @@ import {
   createNewSection,
   createIntroduction,
   createConclusion,
-  ensureSectionWrapper,
   splitLatexDocument,
   mergeLatexDocument,
-  ensureLatexSectionWrapper,
   updateLatexSectionTitle,
   createNewLatexSection,
   createLatexIntroduction,
@@ -434,26 +432,14 @@ const Editors = (props: editorProps) => {
    * Handle a content change that originated from within sectioned mode.
    * Updates the current section, fires callbacks, and propagates the merged
    * full document via `onContentChange`.
-   *
-   * The code editor shows the full section XML/LaTeX including the outer
-   * wrapper tag.  If the user accidentally deletes it, we restore it here.
    */
   const updateSectionContent = (newContent: string | undefined) => {
     if (!currentSection) return;
     const normalized = newContent || "";
     const isLatex = contentState.sourceFormat === "latex";
-    // Ensure the outer section wrapper is still present; restore it if removed.
-    const fullContent = isLatex
-      ? ensureLatexSectionWrapper(
-          normalized,
-          currentSection.type,
-          currentSection.title,
-          currentSection.content,
-        )
-      : ensureSectionWrapper(normalized, currentSection.type);
     const updatedSection: DocumentSection = {
       ...currentSection,
-      content: fullContent,
+      content: normalized,
     };
     const nextSections = sections.map((s) =>
       s.id === currentSection.id ? updatedSection : s,
