@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   DndContext,
   closestCenter,
@@ -7,7 +7,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-  type DragMoveEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -352,6 +352,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string | null>(null);
+  const mergeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLatex = sections.some((s) => !s.content.trimStart().startsWith("<"));
 
   const sensors = useSensors(
@@ -410,51 +411,60 @@ const TableOfContents = (props: TableOfContentsProps) => {
   // ---------------------------------------------------------------------------
   // Drag handlers
   // ---------------------------------------------------------------------------
-  const handleDragMove = (event: DragMoveEvent) => {
+
+  /** Clear the pending merge timer and merge highlight. */
+  const clearMergeState = () => {
+    if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+    mergeTimerRef.current = null;
+    setMergeTargetId(null);
+  };
+
+  /**
+   * When the dragged item hovers over a different section, start a 700 ms
+   * timer.  If the user holds still that long, the item turns into a merge
+   * target (amber outline).  Moving away resets the timer.
+   */
+  const handleDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id || !isRegularDivision(over.id as string)) {
-      setMergeTargetId(null);
-      return;
-    }
-    // Check if the active item's center is in the middle 50% of the over item.
-    const activeRect = active.rect.current.translated;
-    if (!activeRect) { setMergeTargetId(null); return; }
-    const activeCenter = activeRect.top + activeRect.height / 2;
-    const overRect = over.rect;
-    const mergeZoneTop = overRect.top + overRect.height * 0.25;
-    const mergeZoneBottom = overRect.top + overRect.height * 0.75;
-    if (activeCenter >= mergeZoneTop && activeCenter <= mergeZoneBottom) {
-      setMergeTargetId(over.id as string);
-    } else {
-      setMergeTargetId(null);
-    }
+    if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+    mergeTimerRef.current = null;
+    setMergeTargetId(null);
+    if (!over || active.id === over.id || !isRegularDivision(over.id as string)) return;
+    const overId = over.id as string;
+    mergeTimerRef.current = setTimeout(() => {
+      setMergeTargetId(overId);
+    }, 700);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+    if (mergeTimerRef.current) clearTimeout(mergeTimerRef.current);
+    mergeTimerRef.current = null;
+    const wasMergeTarget = mergeTargetId;
     setMergeTargetId(null);
+
+    const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    // If the active item's center was in the merge zone when released, merge.
-    if (mergeTargetId === over.id && onMergeSections) {
-      onMergeSections(active.id as string, over.id as string);
+    if (wasMergeTarget && onMergeSections) {
+      const src = sections.find((s) => s.id === active.id);
+      const tgt = sections.find((s) => s.id === wasMergeTarget);
+      const confirmed = window.confirm(
+        `Merge "${src?.title ?? "section"}" into "${tgt?.title ?? "section"}"?\n\nThe dragged section will be appended to the end of the destination section.`,
+      );
+      if (confirmed) onMergeSections(active.id as string, wasMergeTarget);
       return;
     }
 
-    // Otherwise reorder.
+    // Normal reorder
     const oldIndex = sections.findIndex((s) => s.id === active.id);
     const newIndex = sections.findIndex((s) => s.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-
     const next = arrayMove(sections, oldIndex, newIndex);
-
-    // Validate invariant: intro first, conclusion last
     const introIdx = next.findIndex((s) => s.type === "introduction");
     const conclusionIdx = next.findIndex((s) => s.type === "conclusion");
     const valid =
       (introIdx === -1 || introIdx === 0) &&
       (conclusionIdx === -1 || conclusionIdx === next.length - 1);
-
     if (valid) onReorderSections(next);
   };
 
@@ -542,8 +552,9 @@ const TableOfContents = (props: TableOfContentsProps) => {
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragMove={handleDragMove}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        onDragCancel={clearMergeState}
       >
         <SortableContext
           items={draggableIds}

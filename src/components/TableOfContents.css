@@ -352,6 +352,16 @@
   outline-offset: -2px;
 }
 
+.pretext-plus-editor__toc-item--merge-target > .pretext-plus-editor__toc-item-row::after {
+  content: "⊕ merge";
+  font-size: 0.7rem;
+  color: #d97706;
+  font-weight: 600;
+  margin-left: auto;
+  padding-right: 6px;
+  flex-shrink: 0;
+}
+
 /* ── No-sections placeholder ────────────────────────── */
 .pretext-plus-editor__toc-no-sections {
   list-style: none;
