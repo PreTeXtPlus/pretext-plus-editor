@@ -288,6 +288,13 @@
   font-size: 0.83rem;
 }
 
+/* Hint that double-click opens rename — only on non-readonly rows */
+.pretext-plus-editor__toc-item:not(.pretext-plus-editor__toc-item--editing)
+  .pretext-plus-editor__toc-select:hover
+  .pretext-plus-editor__toc-title {
+  text-decoration: underline dotted #aaa;
+}
+
 /* ── Rename input ────────────────────────────────────── */
 .pretext-plus-editor__toc-rename-input {
   width: 100%;

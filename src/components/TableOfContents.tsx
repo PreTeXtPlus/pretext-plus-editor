@@ -211,7 +211,9 @@ const SortableItem = ({
           type="button"
           className="pretext-plus-editor__toc-select"
           onClick={onSelect}
+          onDoubleClick={!readonly ? onStartEdit : undefined}
           aria-current={isActive ? "true" : undefined}
+          title={!readonly ? "Click to edit · Double-click to rename" : undefined}
         >
           <span className="pretext-plus-editor__toc-title">
             {section.title || <em>Untitled</em>}
