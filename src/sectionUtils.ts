@@ -189,11 +189,16 @@ export function mergeDocument(
   }
 
   // Parse each section back to an xast element.
+  // Skip sections with invalid XML (user may be mid-edit).
   const sectionNodes: Element[] = sections.flatMap((sec) => {
-    const secTree: Root = fromXml(sec.content);
-    return secTree.children.filter(
-      (n) => n.type === "element",
-    ) as Element[];
+    try {
+      const secTree: Root = fromXml(sec.content);
+      return secTree.children.filter(
+        (n) => n.type === "element",
+      ) as Element[];
+    } catch {
+      return [];
+    }
   });
 
   // Interleave blank-line text nodes between sections for readability.
@@ -991,10 +996,16 @@ export function wrapSectionAsDocument(
   title?: string,
 ): string {
   // Parse the section content back to an xast element.
-  const sectionTree: Root = fromXml(section.content);
-  const sectionEl = sectionTree.children.find(
-    (n) => n.type === "element",
-  ) as Element | undefined;
+  // Guard against invalid XML while the user is mid-edit.
+  let sectionEl: Element | undefined;
+  try {
+    const sectionTree: Root = fromXml(section.content);
+    sectionEl = sectionTree.children.find(
+      (n) => n.type === "element",
+    ) as Element | undefined;
+  } catch {
+    sectionEl = undefined;
+  }
 
   // Build <article> children: optional <title>, then the section element.
   const articleChildren: Array<Element | { type: "text"; value: string }> = [];

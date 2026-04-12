@@ -351,15 +351,21 @@ const Editors = (props: editorProps) => {
       ? currentSection.content
       : contentState.sourceContent;
 
-  const previewContent =
-    editMode === "sectioned" && currentSection
-      ? (contentState.sourceFormat === "pretext"
+  const previewContent = (() => {
+    if (editMode === "sectioned" && currentSection) {
+      try {
+        return contentState.sourceFormat === "pretext"
           ? wrapSectionAsDocument(currentSection, internalDocinfo, title)
-          : wrapLatexSectionAsDocument(currentSection, documentWrapper))
-      : (contentState.pretextSource ??
-        (contentState.sourceFormat === "pretext"
-          ? contentState.sourceContent
-          : undefined));
+          : wrapLatexSectionAsDocument(currentSection, documentWrapper);
+      } catch {
+        return undefined;
+      }
+    }
+    return contentState.pretextSource ??
+      (contentState.sourceFormat === "pretext"
+        ? contentState.sourceContent
+        : undefined);
+  })();
 
   const previewUnavailable =
     editMode !== "sectioned" && contentState.pretextError !== undefined;
