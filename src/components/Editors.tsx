@@ -35,8 +35,6 @@ import {
   wrapLatexDocumentAsSection,
   mergeTwoSections,
   updateSectionMetadata,
-  wrapSectionAsDocument,
-  wrapLatexSectionAsDocument,
   stripSectionWrapper,
   stripLatexSectionWrapper,
   rewrapSection,
@@ -359,13 +357,14 @@ const Editors = (props: editorProps) => {
 
   const previewContent = (() => {
     if (editMode === "sectioned" && currentSection) {
-      try {
-        return contentState.sourceFormat === "pretext"
-          ? wrapSectionAsDocument(currentSection, internalDocinfo, title)
-          : wrapLatexSectionAsDocument(currentSection, documentWrapper);
-      } catch {
-        return undefined;
+      if (contentState.sourceFormat === "pretext") {
+        // Just the section with its outer division tag — no <pretext>/<article> wrapper.
+        // The calling app handles any document-level wrapping it needs.
+        return currentSection.content || undefined;
       }
+      // For LaTeX sources we don't have a per-section PreTeXt converter, so fall
+      // back to the full converted PreTeXt document.  Never send raw LaTeX.
+      return contentState.pretextSource ?? undefined;
     }
     return contentState.pretextSource ??
       (contentState.sourceFormat === "pretext"
