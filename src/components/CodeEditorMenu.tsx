@@ -40,8 +40,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onContentChange,
   onOpenLatexImport,
   onOpenDocinfoEditor,
-  onConvertToPretext,
-  canConvertToPretext,
+  //onConvertToPretext,
+  //canConvertToPretext,
 }) => {
   const handleFormat = () => {
     try {
