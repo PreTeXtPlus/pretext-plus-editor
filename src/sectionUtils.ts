@@ -60,6 +60,33 @@ function tagToType(tag: string): DocumentSectionType {
   return SECTION_TAGS.has(tag) ? (tag as DocumentSectionType) : "section";
 }
 
+function trimBoundaryWhitespaceNodes(
+  children: Root["children"],
+): Root["children"] {
+  let start = 0;
+  let end = children.length;
+
+  while (start < end) {
+    const node = children[start];
+    if (node.type !== "text" || /\S/.test(node.value)) break;
+    start += 1;
+  }
+
+  while (end > start) {
+    const node = children[end - 1];
+    if (node.type !== "text" || /\S/.test(node.value)) break;
+    end -= 1;
+  }
+
+  return children.slice(start, end);
+}
+
+function trimBoundaryBlankLines(value: string): string {
+  return value
+    .replace(/^(?:[ \t]*\r?\n)+/, "")
+    .replace(/(?:\r?\n[ \t]*)+$/, "");
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -304,7 +331,10 @@ export function stripSectionWrapper(sectionXml: string): string {
     | Element
     | undefined;
   if (!rootEl) return sectionXml;
-  const inner: Root = { type: "root", children: rootEl.children };
+  const inner: Root = {
+    type: "root",
+    children: trimBoundaryWhitespaceNodes(rootEl.children),
+  };
   return toXml(inner);
 }
 
@@ -319,7 +349,8 @@ export function rewrapSection(
   innerXml: string,
   type: DocumentSectionType,
 ): string {
-  return `<${type}>\n\n${innerXml}\n\n</${type}>`;
+  const normalizedInnerXml = trimBoundaryBlankLines(innerXml);
+  return `<${type}>\n${normalizedInnerXml}\n</${type}>`;
 }
 
 /**
@@ -721,6 +752,8 @@ export function wrapDocumentAsSection(
     return { wrapper: "", sections: [createNewSection(sectionTitle)] };
   }
 
+  // Check if there's a document root element (article, book, …) that we can pull sections out of.  If not, we'll just wrap everything in a new section.
+  // The follow isn't used currently; we currently use the bare content fallback at the end of this function.
   const elementChildren = syntheticRoot.children.filter(
     (n) => n.type === "element",
   ) as Element[];
@@ -777,7 +810,7 @@ export function wrapDocumentAsSection(
       {
         id: generateId(),
         title: sectionTitle,
-        content: `<section><title>${sectionTitle}</title>${normalized}</section>`,
+        content: `<section>\n\t<title>${sectionTitle}</title>\n\n${normalized}\n</section>`,
         type: "section",
       },
     ],

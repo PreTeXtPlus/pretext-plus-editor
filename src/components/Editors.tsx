@@ -223,21 +223,25 @@ const Editors = (props: editorProps) => {
   // Populate sections on initial mount so TOC works in document mode too
   useEffect(() => {
     const { sourceContent, sourceFormat } = contentState;
-    const toSplit = sourceFormat === "latex" ? sourceContent : (
-      sourceFormat === "pretext" ? sourceContent : (contentState.pretextSource ?? "")
-    );
+    const toSplit =
+      sourceFormat === "latex"
+        ? sourceContent
+        : sourceFormat === "pretext"
+        ? sourceContent
+        : contentState.pretextSource ?? "";
     if (!toSplit.trim()) return;
     try {
-      const { wrapper, sections: split } = sourceFormat === "latex"
-        ? splitLatexDocument(toSplit)
-        : splitDocument(toSplit);
+      const { wrapper, sections: split } =
+        sourceFormat === "latex"
+          ? splitLatexDocument(toSplit)
+          : splitDocument(toSplit);
       setDocumentWrapper(wrapper);
       setSections(split);
       setCurrentSectionId(split[0]?.id ?? null);
     } catch {
       // ignore parse errors; TOC will be empty
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
 
   /**
@@ -291,13 +295,13 @@ const Editors = (props: editorProps) => {
     return () => {
       if (tocRefreshTimer.current) clearTimeout(tocRefreshTimer.current);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentState.sourceContent, editMode]);
 
   /** The section currently being edited (or null in document mode). */
   const currentSection =
     editMode === "sectioned"
-      ? (sections.find((s) => s.id === currentSectionId) ?? sections[0] ?? null)
+      ? sections.find((s) => s.id === currentSectionId) ?? sections[0] ?? null
       : null;
 
   /** Switch to the given mode, splitting or merging the document as needed. */
@@ -306,9 +310,9 @@ const Editors = (props: editorProps) => {
       const isLatex = contentState.sourceFormat === "latex";
       const toSplit = isLatex
         ? contentState.sourceContent
-        : (contentState.sourceFormat === "pretext"
-            ? contentState.sourceContent
-            : (contentState.pretextSource ?? ""));
+        : contentState.sourceFormat === "pretext"
+        ? contentState.sourceContent
+        : contentState.pretextSource ?? "";
       const { wrapper, sections: split } = isLatex
         ? splitLatexDocument(toSplit)
         : splitDocument(toSplit);
@@ -325,9 +329,10 @@ const Editors = (props: editorProps) => {
         setCurrentSectionId(split[0]?.id ?? null);
       }
     } else if (newMode === "document" && editMode === "sectioned") {
-      const merged = contentState.sourceFormat === "latex"
-        ? mergeLatexDocument(documentWrapper, sections)
-        : mergeDocument(documentWrapper, sections);
+      const merged =
+        contentState.sourceFormat === "latex"
+          ? mergeLatexDocument(documentWrapper, sections)
+          : mergeDocument(documentWrapper, sections);
       updateContentState(merged);
     }
     setInternalEditMode(newMode);
@@ -366,10 +371,12 @@ const Editors = (props: editorProps) => {
       // back to the full converted PreTeXt document.  Never send raw LaTeX.
       return contentState.pretextSource ?? undefined;
     }
-    return contentState.pretextSource ??
+    return (
+      contentState.pretextSource ??
       (contentState.sourceFormat === "pretext"
         ? contentState.sourceContent
-        : undefined);
+        : undefined)
+    );
   })();
 
   const previewUnavailable =
@@ -454,6 +461,9 @@ const Editors = (props: editorProps) => {
           currentSection.content,
         )
       : rewrapSection(inner, currentSection.type);
+    if (wrapped === currentSection.content) {
+      return;
+    }
     const updatedSection: DocumentSection = {
       ...currentSection,
       content: wrapped,
@@ -646,7 +656,11 @@ const Editors = (props: editorProps) => {
     const sourceIdx = sections.findIndex((s) => s.id === sourceId);
     const targetIdx = sections.findIndex((s) => s.id === targetId);
     if (sourceIdx === -1 || targetIdx === -1) return;
-    const merged = mergeTwoSections(sections[targetIdx], sections[sourceIdx], isLatexDoc);
+    const merged = mergeTwoSections(
+      sections[targetIdx],
+      sections[sourceIdx],
+      isLatexDoc,
+    );
     const nextSections = sections
       .filter((s) => s.id !== sourceId)
       .map((s) => (s.id === targetId ? merged : s));
@@ -718,7 +732,7 @@ const Editors = (props: editorProps) => {
     const visualContent =
       editMode === "sectioned" && currentSection
         ? activeSourceContent
-        : (previewContent || "");
+        : previewContent || "";
     // The Tiptap visual editor only understands PreTeXt XML — disable editing
     // when the document source is LaTeX (either in full-doc or sectioned mode).
     const canEditVisually = contentState.sourceFormat === "pretext";
@@ -726,7 +740,11 @@ const Editors = (props: editorProps) => {
       <VisualEditor
         content={visualContent}
         canEdit={canEditVisually}
-        editDisabledReason={isLatexDoc ? "Visual editing is not available for LaTeX documents." : ""}
+        editDisabledReason={
+          isLatexDoc
+            ? "Visual editing is not available for LaTeX documents."
+            : ""
+        }
         onChange={(content) => {
           if (editMode === "sectioned") {
             updateSectionContent(content);
@@ -743,7 +761,7 @@ const Editors = (props: editorProps) => {
   const tocSidebar = (
     <TableOfContents
       sections={sections}
-      currentSectionId={currentSectionId ?? (sections[0]?.id ?? null)}
+      currentSectionId={currentSectionId ?? sections[0]?.id ?? null}
       isCollapsed={isTocCollapsed}
       onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
       onSelectSection={
@@ -784,9 +802,7 @@ const Editors = (props: editorProps) => {
           ☰ Contents
         </button>
       ) : (
-        <div className="pretext-plus-editor__toc-drawer-open">
-          {tocSidebar}
-        </div>
+        <div className="pretext-plus-editor__toc-drawer-open">{tocSidebar}</div>
       )}
     </div>
   ) : null;

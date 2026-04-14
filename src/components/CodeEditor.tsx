@@ -70,6 +70,7 @@ const CodeEditor = ({
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isProgrammaticUpdateRef = useRef(false);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
   const onRebuildRef = useRef(onRebuild);
@@ -100,6 +101,15 @@ const CodeEditor = ({
     };
   }, []);
 
+  const setModelValueSafely = (model: any, nextValue: string) => {
+    if (model.getValue() === nextValue) return;
+    isProgrammaticUpdateRef.current = true;
+    model.setValue(nextValue);
+    queueMicrotask(() => {
+      isProgrammaticUpdateRef.current = false;
+    });
+  };
+
   // When the content prop changes from an external source, update the editor
   // model only if it actually differs from what the editor currently contains.
   // This prevents cursor jumps caused by the parent re-rendering with the same
@@ -112,7 +122,7 @@ const CodeEditor = ({
     if (model.getValue() !== content) {
       const position = editor.getPosition();
       const selections = editor.getSelections();
-      model.setValue(content);
+      setModelValueSafely(model, content);
       if (position) editor.setPosition(position);
       if (selections) editor.setSelections(selections);
     }
@@ -126,7 +136,7 @@ const CodeEditor = ({
     // content-sync effect (editorRef.current was null at that point).
     const model = editor.getModel();
     if (model && model.getValue() !== content) {
-      model.setValue(content);
+      setModelValueSafely(model, content);
     }
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
@@ -212,7 +222,10 @@ const CodeEditor = ({
           language={sourceFormat === "latex" ? "latex" : "xml"}
           defaultValue={content}
           onMount={handleEditorMount}
-          onChange={(value) => {
+          onChange={(value, event) => {
+            if (event?.isFlush || isProgrammaticUpdateRef.current) {
+              return;
+            }
             if (debounceRef.current) clearTimeout(debounceRef.current);
             debounceRef.current = setTimeout(() => {
               handleContentChange(value || "");
