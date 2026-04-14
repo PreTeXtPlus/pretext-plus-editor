@@ -213,7 +213,7 @@ const Editors = (props: editorProps) => {
   const [sections, setSections] = useState<DocumentSection[]>([]);
   const [documentWrapper, setDocumentWrapper] = useState<string>("");
   const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
-  const [isTocCollapsed, setIsTocCollapsed] = useState(false);
+  const [isTocCollapsed, setIsTocCollapsed] = useState(true);
 
   // Pending section title to navigate to after a mode switch
   const pendingNavTitle = useRef<string | null>(null);

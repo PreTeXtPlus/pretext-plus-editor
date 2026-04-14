@@ -54,42 +54,47 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
 
   return (
     <div className="pretext-plus-editor__code-editor-menu">
-      <>
-        {sourceFormat === "latex" ? (
-          <button
-            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-            onClick={onConvertToPretext}
-            disabled={canConvertToPretext === false}
-            title="Promote the current derived PreTeXt into the canonical source"
-          >
-            Convert to PreTeXt
-          </button>
-        ) : (
-          <>
-            <button
-              className="pretext-plus-editor__menu-button"
-              onClick={handleFormat}
-              title="Format the PreTeXt source"
-            >
-              Format PreTeXt
-            </button>
-            <button
-              className="pretext-plus-editor__menu-button"
-              onClick={onOpenLatexImport}
-              title="Import LaTeX"
-            >
-              Import LaTeX
-            </button>
-          </>
-        )}
+      {sourceFormat === "latex" ? (
+        //<button
+        //  className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+        //  onClick={onConvertToPretext}
+        //  disabled={canConvertToPretext === false}
+        //  title="Promote the current derived PreTeXt into the canonical source"
+        //>
+        //  Convert to PreTeXt
+        //</button>
         <button
           className="pretext-plus-editor__menu-button"
           onClick={onOpenDocinfoEditor}
-          title="Edit Macros"
+          title="Edit Preamble"
         >
-          Edit Macros
+          Edit Preamble
         </button>
-      </>
+      ) : (
+        <>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={handleFormat}
+            title="Format the PreTeXt source"
+          >
+            Format PreTeXt
+          </button>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenLatexImport}
+            title="Import LaTeX"
+          >
+            Import LaTeX
+          </button>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenDocinfoEditor}
+            title="Edit Macros"
+          >
+            Edit Macros
+          </button>
+        </>
+      )}
       <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
         {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
       </span>
