@@ -2,7 +2,7 @@ import "./App.css";
 import Editors from "./components/Editors";
 import { defaultContent } from "./defaultContent";
 import { useState } from "react";
-import type { SourceFormat } from "./types/editor";
+import type { FeedbackSubmission, SourceFormat } from "./types/editor";
 import type { DocumentSection } from "./types/sections";
 
 const latexDemoContent = String.raw`
@@ -81,6 +81,10 @@ function App() {
     });
   };
 
+  const handleFeedbackSubmit = async (feedback: FeedbackSubmission) => {
+    console.log("Feedback submitted:", feedback);
+  };
+
   return (
     <>
       <div className="app-demo-toolbar">
@@ -110,6 +114,8 @@ function App() {
         saveButtonLabel="Save and ..."
         onCancelButton={() => console.log("Cancel clicked")}
         cancelButtonLabel="Cancel"
+        onFeedbackSubmit={handleFeedbackSubmit}
+        projectUrl="https://example.com/projects/demo"
         onSave={() => console.log("Save triggered via keyboard")}
         onPreviewRebuild={handlePreviewRebuild}
         editMode={editMode}

@@ -1,6 +1,28 @@
 /** The format of the source content being edited. */
 export type SourceFormat = "pretext" | "latex";
 
+/** Payload emitted when a user submits feedback from the editor UI. */
+export interface FeedbackSubmission {
+  /** Location where feedback was submitted (for example, "main-editor"). */
+  context: string;
+  /** Optional email provided by the user when they want a response. */
+  email?: string;
+  /** Free-form feedback message. */
+  message: string;
+  /** Whether `currentSource` was included in this submission. */
+  includeCurrentSource: boolean;
+  /** Current source content when the user opted in. */
+  currentSource?: string;
+  /** Project URL associated with this feedback, when available. */
+  projectUrl?: string;
+  /** Optional source format metadata for routing/debugging. */
+  sourceFormat?: SourceFormat;
+  /** Optional title metadata for routing/debugging. */
+  title?: string;
+  /** Client-side timestamp of submission. */
+  submittedAt: string;
+}
+
 /**
  * Represents the full content state of the editor at any point in time.
  * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.

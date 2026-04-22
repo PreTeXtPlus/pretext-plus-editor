@@ -7,6 +7,7 @@ import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
+import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import "./Editors.css";
@@ -16,6 +17,7 @@ import { defaultContent } from "../defaultContent";
 import type {
   EditorContentChange,
   EditorContentState,
+  FeedbackSubmission,
   SourceFormat,
 } from "../types/editor";
 import type { DocumentSection } from "../types/sections";
@@ -89,6 +91,10 @@ export interface editorProps {
   onCancelButton?: () => void;
   /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /** Called when a user submits feedback from any built-in feedback link. */
+  onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
+  /** Optional URL for the current project, included in feedback submissions. */
+  projectUrl?: string;
   /**
    * If provided, `onSave` is called on Ctrl+S in addition to `onSaveButton`.
    * Useful when the host wants a keyboard shortcut to trigger saving without
@@ -892,12 +898,40 @@ const Editors = (props: editorProps) => {
         saveButtonLabel={props.saveButtonLabel}
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
+        feedbackControl={
+          props.onFeedbackSubmit ? (
+            <FeedbackLink
+              label="Give feedback"
+              context="main-editor"
+              projectUrl={props.projectUrl}
+              currentSource={contentState.sourceContent}
+              sourceFormat={contentState.sourceFormat}
+              title={title}
+              onSubmit={props.onFeedbackSubmit}
+            />
+          ) : undefined
+        }
         showPreviewModeToggle={props.onPreviewRebuild !== undefined}
       />
       <div className="pretext-plus-editor__editor-displays">
         {editorDisplays}
         {isLatexDialogOpen ? (
-          <LatexImportDialog onClose={() => setIsLatexDialogOpen(false)} />
+          <LatexImportDialog
+            onClose={() => setIsLatexDialogOpen(false)}
+            feedbackControl={
+              props.onFeedbackSubmit ? (
+                <FeedbackLink
+                  label="Give feedback on conversion"
+                  context="latex-conversion"
+                  projectUrl={props.projectUrl}
+                  currentSource={contentState.sourceContent}
+                  sourceFormat={contentState.sourceFormat}
+                  title={title}
+                  onSubmit={props.onFeedbackSubmit}
+                />
+              ) : undefined
+            }
+          />
         ) : null}
         {isConvertDialogOpen ? (
           <ConvertToPretextDialog
