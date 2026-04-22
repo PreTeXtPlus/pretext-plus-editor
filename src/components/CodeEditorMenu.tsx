@@ -40,8 +40,8 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onContentChange,
   onOpenLatexImport,
   onOpenDocinfoEditor,
-  //onConvertToPretext,
-  //canConvertToPretext,
+  onConvertToPretext,
+  canConvertToPretext,
 }) => {
   const handleFormat = () => {
     try {
@@ -55,21 +55,23 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   return (
     <div className="pretext-plus-editor__code-editor-menu">
       {sourceFormat === "latex" ? (
-        //<button
-        //  className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-        //  onClick={onConvertToPretext}
-        //  disabled={canConvertToPretext === false}
-        //  title="Promote the current derived PreTeXt into the canonical source"
-        //>
-        //  Convert to PreTeXt
-        //</button>
-        <button
-          className="pretext-plus-editor__menu-button"
-          onClick={onOpenDocinfoEditor}
-          title="Edit Preamble"
-        >
-          Edit Preamble
-        </button>
+        <>
+          <button
+            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+            onClick={onConvertToPretext}
+            disabled={canConvertToPretext === false}
+            title="Create a new project copy using the converted PreTeXt source"
+          >
+            Convert to PreTeXt
+          </button>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenDocinfoEditor}
+            title="Edit Preamble"
+          >
+            Edit Preamble
+          </button>
+        </>
       ) : (
         <>
           <button

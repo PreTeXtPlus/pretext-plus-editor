@@ -18,6 +18,7 @@ import type {
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
+  PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
 import type { DocumentSection } from "../types/sections";
@@ -95,6 +96,13 @@ export interface editorProps {
   onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   /** Optional URL for the current project, included in feedback submissions. */
   projectUrl?: string;
+  /**
+   * Called when user confirms creating a new project copy from LaTeX using
+   * converted PreTeXt source.
+   */
+  onCreatePretextProjectCopy?: (
+    request: PretextProjectCopyRequest,
+  ) => void | Promise<void>;
   /**
    * If provided, `onSave` is called on Ctrl+S in addition to `onSaveButton`.
    * Useful when the host wants a keyboard shortcut to trigger saving without
@@ -492,22 +500,19 @@ const Editors = (props: editorProps) => {
   };
 
   /**
-   * Promotes the derived PreTeXt content to be the new canonical source,
-   * switching `sourceFormat` to `"pretext"`.  Only callable when conversion
-   * has succeeded (i.e. `pretextError` is undefined).
+   * Sends converted PreTeXt content to the host so it can create a new
+   * PreTeXt project copy.
    */
   const handleConvertToPretext = () => {
     if (contentState.pretextError) {
       return;
     }
-    const convertedPretext = contentState.pretextSource || "";
-    const nextState: EditorContentState = {
-      sourceContent: convertedPretext,
-      sourceFormat: "pretext",
+    const convertedPretext = contentState.pretextSource ?? "";
+    props.onCreatePretextProjectCopy?.({
       pretextSource: convertedPretext,
-      pretextError: undefined,
-    };
-    props.onContentChange(convertedPretext, nextState);
+      title,
+      projectUrl: props.projectUrl,
+    });
   };
 
   // ── TOC action handlers ───────────────────────────────────────────────────
@@ -703,7 +708,8 @@ const Editors = (props: editorProps) => {
       onOpenLatexImport={() => setIsLatexDialogOpen(true)}
       onOpenDocinfoEditor={() => setIsDocinfoEditorOpen(true)}
       onOpenConvertToPretext={
-        editMode !== "sectioned" && contentState.sourceFormat === "latex"
+        contentState.sourceFormat === "latex" &&
+        props.onCreatePretextProjectCopy
           ? () => setIsConvertDialogOpen(true)
           : undefined
       }
