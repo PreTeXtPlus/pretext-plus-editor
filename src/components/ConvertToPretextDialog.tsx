@@ -7,7 +7,7 @@ interface ConvertToPretextDialogProps {
   latexSource: string;
   /** The already-converted PreTeXt to display (read-only) on the right. */
   pretextSource: string;
-  /** Called when the user confirms the conversion. */
+  /** Called when the user confirms creating a converted project copy. */
   onConfirm: () => void;
   /** Called when the dialog should close without converting. */
   onClose: () => void;
@@ -25,9 +25,9 @@ const editorOptions = {
 };
 
 /**
- * Confirmation dialog shown before permanently replacing LaTeX source with
- * the derived PreTeXt.  Displays the current LaTeX and the converted PreTeXt
- * side-by-side so the user can review before committing.
+ * Confirmation dialog shown before creating a new project copy in PreTeXt
+ * format from the current LaTeX source. Displays both sources side-by-side
+ * so the user can review before continuing.
  */
 const ConvertToPretextDialog = ({
   latexSource,
@@ -63,12 +63,11 @@ const ConvertToPretextDialog = ({
               id="pretext-plus-editor-convert-dialog-title"
               className="pretext-plus-editor__dialog-title"
             >
-              Convert project to PreTeXt
+              Create PreTeXt Project Copy
             </h2>
             <p className="pretext-plus-editor__dialog-copy">
-              This will replace your LaTeX source with the converted PreTeXt
-              shown below.{" "}
-              <strong>WARNING: This action cannot be undone.</strong>
+              Create a new project using the converted PreTeXt shown below. Your
+              current LaTeX project will remain unchanged.
             </p>
           </div>
           <button
@@ -128,7 +127,7 @@ const ConvertToPretextDialog = ({
             className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--danger"
             onClick={handleConfirm}
           >
-            Convert to PreTeXt
+            Yes, Create Copy
           </button>
         </div>
       </div>

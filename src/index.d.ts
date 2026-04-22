@@ -25,6 +25,16 @@ export interface FeedbackSubmission {
   submittedAt: string;
 }
 
+/** Payload emitted when a LaTeX document is converted into a new PreTeXt project copy. */
+export interface PretextProjectCopyRequest {
+  /** Converted PreTeXt source used to create the new project copy. */
+  pretextSource: string;
+  /** Title to use for the new project copy. */
+  title: string;
+  /** Optional link to the source project the copy came from. */
+  projectUrl?: string;
+}
+
 /**
  * Represents the full content state of the editor at any point in time.
  * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.
@@ -108,6 +118,10 @@ export interface editorProps {
   onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   /** Optional URL for the current project, included in feedback submissions. */
   projectUrl?: string;
+  /** Called when user confirms creating a new PreTeXt copy from a LaTeX project. */
+  onCreatePretextProjectCopy?: (
+    request: PretextProjectCopyRequest,
+  ) => void | Promise<void>;
   /** Called on Ctrl+S (in addition to `onSaveButton`). */
   onSave?: () => void;
   /**

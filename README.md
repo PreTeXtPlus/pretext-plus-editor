@@ -14,7 +14,11 @@ npm install @pretextbook/web-editor
 
 ```tsx
 import React, { useState } from "react";
-import { Editors } from "@pretextbook/web-editor";
+import {
+  Editors,
+  type FeedbackSubmission,
+  type PretextProjectCopyRequest,
+} from "@pretextbook/web-editor";
 import "@pretextbook/web-editor/dist/web-editor.css";
 
 function App() {
@@ -23,6 +27,24 @@ function App() {
     "pretext",
   );
   const [title, setTitle] = useState("My Document");
+
+  const handleFeedbackSubmit = async (feedback: FeedbackSubmission) => {
+    await fetch("/api/editor-feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(feedback),
+    });
+  };
+
+  const handleCreatePretextProjectCopy = async (
+    request: PretextProjectCopyRequest,
+  ) => {
+    await fetch("/api/projects/create_pretext_copy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  };
 
   return (
     <Editors
@@ -38,6 +60,9 @@ function App() {
       saveButtonLabel="Save"
       onCancelButton={() => console.log("Cancel clicked")}
       cancelButtonLabel="Cancel"
+      projectUrl={window.location.href}
+      onFeedbackSubmit={handleFeedbackSubmit}
+      onCreatePretextProjectCopy={handleCreatePretextProjectCopy}
     />
   );
 }
@@ -74,11 +99,30 @@ The `Editors` component accepts the following props:
 ```tsx
 type SourceFormat = "pretext" | "latex";
 
+interface FeedbackSubmission {
+  context: string;
+  email?: string;
+  message: string;
+  includeCurrentSource: boolean;
+  currentSource?: string;
+  projectUrl?: string;
+  sourceFormat?: SourceFormat;
+  title?: string;
+  submittedAt: string;
+}
+
+interface PretextProjectCopyRequest {
+  pretextSource: string;
+  title: string;
+  projectUrl?: string;
+}
+
 interface EditorContentChange {
   sourceContent: string;
   sourceFormat: SourceFormat;
   pretextSource?: string;
   pretextError?: string;
+  docinfo?: string;
 }
 
 interface editorProps {
@@ -95,6 +139,11 @@ interface editorProps {
   saveButtonLabel?: string; // Custom save button text
   onCancelButton?: () => void; // Cancel button callback
   cancelButtonLabel?: string; // Custom cancel button text
+  onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
+  projectUrl?: string;
+  onCreatePretextProjectCopy?: (
+    request: PretextProjectCopyRequest,
+  ) => void | Promise<void>;
   onSave?: () => void; // Keyboard save callback
   onPreviewRebuild?: (
     source: string,
@@ -104,9 +153,48 @@ interface editorProps {
 }
 ```
 
-For LaTeX-authored documents, the editor can now derive previewable PreTeXt on the fly. The simple preview remains read-only until the document is explicitly converted to PreTeXt source.
+For LaTeX-authored documents, the editor derives previewable PreTeXt on the fly. The simple preview remains read-only for the LaTeX source project; visual editing becomes available in the new PreTeXt copy your app creates.
 
-When a document is in LaTeX mode, the toolbar exposes a `Convert to PreTeXt` action. That action replaces the canonical source with the latest generated PreTeXt so the visual editor can become editable.
+When a document is in LaTeX mode and `onCreatePretextProjectCopy` is provided, the toolbar exposes a Convert to PreTeXt action. Clicking it opens a confirmation dialog and, if confirmed, sends the converted PreTeXt to your callback so your app can create a new project copy.
+
+The current LaTeX project is not replaced by this action.
+
+When `onFeedbackSubmit` is provided, the editor shows Give feedback links in the main menu and LaTeX conversion dialog. The popup collects:
+
+- optional email address
+- required feedback message
+- optional inclusion of current source
+- project URL (when available)
+
+The collected payload is sent to your callback so your app can email it, store it, or route it to another workflow.
+
+### Rails Integration Pattern
+
+```tsx
+const handleFeedbackSubmit = async (feedback: FeedbackSubmission) => {
+  await fetch("/editor_feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ editor_feedback: feedback }),
+  });
+};
+
+const handleCreatePretextProjectCopy = async (
+  request: PretextProjectCopyRequest,
+) => {
+  await fetch("/projects/create_pretext_copy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ project_copy: request }),
+  });
+};
+```
+
+Typical server behavior:
+
+- Feedback endpoint stores the message and optionally sends an email to support.
+- Project-copy endpoint creates a new project with the same title and `pretextSource` as canonical source.
+- Original project remains unchanged.
 
 ### Persistence recommendation
 
@@ -116,7 +204,7 @@ For consuming apps, the recommended storage model is:
 - optionally store derived `pretextSource` as a cache for LaTeX-authored documents
 - do not treat LaTeX and PreTeXt as two independently editable canonical sources
 
-Once a user clicks `Convert to PreTeXt`, the canonical source should become PreTeXt. If your product needs an audit trail, keep the original LaTeX separately in your own persistence layer.
+If your product needs an audit trail, keep the original LaTeX and created PreTeXt copy linked in your own persistence layer.
 
 ## Features
 
