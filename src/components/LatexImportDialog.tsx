@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
   type ChangeEvent,
   type DragEvent,
 } from "react";
@@ -15,6 +16,8 @@ import "./dialog.css";
 interface LatexImportDialogProps {
   /** Called when the dialog should close (Cancel button, Escape key, or after "Copy and Close"). */
   onClose: () => void;
+  /** Optional feedback control shown in the dialog header. */
+  feedbackControl?: ReactNode;
 }
 
 /**
@@ -24,7 +27,10 @@ interface LatexImportDialogProps {
  * The dialog does not modify the editor content directly; it relies on the
  * user copying the output and pasting it wherever needed.
  */
-const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
+const LatexImportDialog = ({
+  onClose,
+  feedbackControl,
+}: LatexImportDialogProps) => {
   const [latexInput, setLatexInput] = useState("");
   const [convertedOutput, setConvertedOutput] = useState("");
   const [isDragActive, setIsDragActive] = useState(false);
@@ -165,6 +171,11 @@ const LatexImportDialog = ({ onClose }: LatexImportDialogProps) => {
             <p className="pretext-plus-editor__dialog-copy">
               Paste LaTeX, convert it to PreTeXt, then copy the result.
             </p>
+            {feedbackControl ? (
+              <div className="pretext-plus-editor__dialog-feedback-row">
+                {feedbackControl}
+              </div>
+            ) : null}
           </div>
           <button
             type="button"

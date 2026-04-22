@@ -3,6 +3,28 @@
 /** The format of the source content being edited. */
 export type SourceFormat = "pretext" | "latex";
 
+/** Payload emitted when a user submits feedback from the editor UI. */
+export interface FeedbackSubmission {
+  /** Location where feedback was submitted (for example, "main-editor"). */
+  context: string;
+  /** Optional email provided by the user when they want a response. */
+  email?: string;
+  /** Free-form feedback message. */
+  message: string;
+  /** Whether `currentSource` was included in this submission. */
+  includeCurrentSource: boolean;
+  /** Current source content when the user opted in. */
+  currentSource?: string;
+  /** Project URL associated with this feedback, when available. */
+  projectUrl?: string;
+  /** Optional source format metadata for routing/debugging. */
+  sourceFormat?: SourceFormat;
+  /** Optional title metadata for routing/debugging. */
+  title?: string;
+  /** Client-side timestamp of submission. */
+  submittedAt: string;
+}
+
 /**
  * Represents the full content state of the editor at any point in time.
  * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.
@@ -82,6 +104,10 @@ export interface editorProps {
   onCancelButton?: () => void;
   /** Label for the Cancel button.  Defaults to `"Cancel"`. */
   cancelButtonLabel?: string;
+  /** Called when a user submits feedback from any built-in feedback link. */
+  onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
+  /** Optional URL for the current project, included in feedback submissions. */
+  projectUrl?: string;
   /** Called on Ctrl+S (in addition to `onSaveButton`). */
   onSave?: () => void;
   /**
@@ -102,3 +128,5 @@ export function CodeEditor(props: any): JSX.Element;
 export function VisualEditor(props: any): JSX.Element;
 
 export function FullPreview(props: any): JSX.Element;
+
+export function FeedbackLink(props: any): JSX.Element;

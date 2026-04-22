@@ -130,6 +130,10 @@
   max-width: 70ch;
 }
 
+.pretext-plus-editor__dialog-feedback-row {
+  margin-top: 0.45rem;
+}
+
 .pretext-plus-editor__dialog-close {
   border: none;
   background: transparent;
