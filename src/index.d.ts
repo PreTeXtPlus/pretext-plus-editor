@@ -1,5 +1,7 @@
 // Type definitions for @pretextbook/web-editor
 
+import type * as React from "react";
+
 /** The format of the source content being edited. */
 export type SourceFormat = "pretext" | "latex";
 
@@ -50,6 +52,12 @@ export interface EditorContentState {
   pretextSource?: string;
   /** Human-readable error set when conversion fails.  When present, `pretextSource` is undefined. */
   pretextError?: string;
+  /** Project-specific docinfo XML. */
+  docinfo?: string;
+  /** User-level common docinfo/preamble XML. */
+  commonDocinfo?: string;
+  /** Whether project rendering should use a user-level common docinfo/preamble. */
+  useCommonDocinfo?: boolean;
 }
 
 /** The value passed to `onContentChange` — identical to `EditorContentState`. */
@@ -93,6 +101,16 @@ export interface editorProps {
   sourceFormat?: SourceFormat;
   /** Pre-computed PreTeXt XML for `source`; avoids redundant conversion on first render. */
   pretextSource?: string;
+  /** The docinfo element for a pretext document. */
+  docinfo?: string;
+  /** Optional user-level common docinfo/preamble that project docinfo can import. */
+  commonDocinfo?: string;
+  /** Whether this project should use the user's common docinfo/preamble. */
+  useCommonDocinfo?: boolean;
+  /** Called when the project-level common docinfo selection changes. */
+  onUseCommonDocinfoChange?: (value: boolean) => void;
+  /** Called when the user edits common docinfo from the project dialog. */
+  onCommonDocinfoChange?: (value: string) => void;
   /**
    * Called whenever the source content changes.
    * @param value - The new source string.
@@ -135,12 +153,28 @@ export interface editorProps {
   ) => void;
 }
 
-export function Editors(props: editorProps): JSX.Element;
+export function Editors(props: editorProps): React.JSX.Element;
 
-export function CodeEditor(props: any): JSX.Element;
+export function CodeEditor(props: any): React.JSX.Element;
 
-export function VisualEditor(props: any): JSX.Element;
+export function VisualEditor(props: any): React.JSX.Element;
 
-export function FullPreview(props: any): JSX.Element;
+export function FullPreview(props: any): React.JSX.Element;
 
-export function FeedbackLink(props: any): JSX.Element;
+export function FeedbackLink(props: any): React.JSX.Element;
+
+export interface DocinfoEditorCloseValue {
+  docinfo: string;
+  commonDocinfo: string;
+  useCommonDocinfo: boolean;
+}
+
+export interface DocinfoEditorProps {
+  docinfo: string;
+  onClose: (value: DocinfoEditorCloseValue | undefined) => void;
+  showCommonDocinfoControls?: boolean;
+  commonDocinfo?: string;
+  initialUseCommonDocinfo?: boolean;
+}
+
+export function DocinfoEditor(props: DocinfoEditorProps): React.JSX.Element;

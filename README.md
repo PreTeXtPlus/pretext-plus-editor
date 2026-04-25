@@ -123,12 +123,19 @@ interface EditorContentChange {
   pretextSource?: string;
   pretextError?: string;
   docinfo?: string;
+  commonDocinfo?: string;
+  useCommonDocinfo?: boolean;
 }
 
 interface editorProps {
   source: string; // The canonical source content
   sourceFormat?: SourceFormat; // The canonical source format
   pretextSource?: string; // Optional derived PreTeXt for previewing LaTeX sources
+  docinfo?: string; // Project-specific docinfo XML
+  commonDocinfo?: string; // User-level common docinfo/preamble XML
+  useCommonDocinfo?: boolean; // Use common docinfo for this project
+  onUseCommonDocinfoChange?: (value: boolean) => void;
+  onCommonDocinfoChange?: (value: string) => void;
   onContentChange: (
     value: string | undefined,
     meta?: EditorContentChange,
@@ -151,7 +158,23 @@ interface editorProps {
     postToIframe: (url: string, data: any) => void,
   ) => void;
 }
+
+interface DocinfoEditorCloseValue {
+  docinfo: string;
+  commonDocinfo: string;
+  useCommonDocinfo: boolean;
+}
+
+interface DocinfoEditorProps {
+  docinfo: string;
+  onClose: (value: DocinfoEditorCloseValue | undefined) => void;
+  showCommonDocinfoControls?: boolean;
+  commonDocinfo?: string;
+  initialUseCommonDocinfo?: boolean;
+}
 ```
+
+`DocinfoEditor` is exported for host apps that want to edit user-level common docinfo directly.
 
 For LaTeX-authored documents, the editor derives previewable PreTeXt on the fly. The simple preview remains read-only for the LaTeX source project; visual editing becomes available in the new PreTeXt copy your app creates.
 

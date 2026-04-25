@@ -2,11 +2,26 @@ import { useEffect, useState } from "react";
 import { Editor } from "@monaco-editor/react";
 import "./dialog.css";
 
-interface DocinfoEditorProps {
+export interface DocinfoEditorCloseValue {
+  /** The project-specific docinfo XML from this editor session. */
+  docinfo: string;
+  /** The user-level common docinfo XML from this editor session. */
+  commonDocinfo: string;
+  /** Whether the project should use the user's common docinfo. */
+  useCommonDocinfo: boolean;
+}
+
+export interface DocinfoEditorProps {
   /** The current docinfo XML string (the full `<docinfo>` element or empty). */
   docinfo: string;
-  /** Called on Save with the updated docinfo XML, or `undefined` on Cancel. */
-  onClose: (value: string | undefined) => void;
+  /** Called on Save with docinfo settings, or `undefined` on Cancel. */
+  onClose: (value: DocinfoEditorCloseValue | undefined) => void;
+  /** Show project-level controls for a user's common docinfo. */
+  showCommonDocinfoControls?: boolean;
+  /** The user's common docinfo XML available to import. */
+  commonDocinfo?: string;
+  /** Initial state of the "Use my common docinfo/preamble" checkbox. */
+  initialUseCommonDocinfo?: boolean;
 }
 
 type DocinfoTab = "macros" | "preamble" | "other";
@@ -51,6 +66,53 @@ const parseDocinfo = (docinfo: string): Document => {
   return new DOMParser().parseFromString(docinfo, "application/xml");
 };
 
+const hasParseError = (doc: Document): boolean =>
+  doc.getElementsByTagName("parsererror").length > 0;
+
+const mergeTextField = (current: string, incoming: string): string => {
+  const trimmedCurrent = current.trim();
+  const trimmedIncoming = incoming.trim();
+  if (!trimmedIncoming) return current;
+  if (!trimmedCurrent) return trimmedIncoming;
+  if (trimmedCurrent.includes(trimmedIncoming)) return current;
+  if (trimmedIncoming.includes(trimmedCurrent)) return trimmedIncoming;
+  return `${trimmedCurrent}\n${trimmedIncoming}`;
+};
+
+const mergeOtherElements = (
+  current: string,
+  incomingDocinfo: Document,
+): string => {
+  if (hasParseError(incomingDocinfo)) return current;
+
+  const existingDoc = new DOMParser().parseFromString(
+    `<docinfo>${current}</docinfo>`,
+    "application/xml",
+  );
+  if (hasParseError(existingDoc)) {
+    // If current "other" content is temporarily invalid, do not overwrite it.
+    return current;
+  }
+
+  const existingTags = new Set(
+    Array.from(existingDoc.documentElement.children).map((el) => el.tagName),
+  );
+  const serializer = new XMLSerializer();
+  const incomingChildren = Array.from(
+    incomingDocinfo.documentElement.children,
+  ).filter((el) => !["macros", "latex-image-preamble"].includes(el.tagName));
+
+  const additions = incomingChildren
+    .filter((el) => !existingTags.has(el.tagName))
+    .map((el) => serializer.serializeToString(el));
+
+  if (additions.length === 0) return current;
+  const trimmedCurrent = current.trim();
+  return trimmedCurrent
+    ? `${trimmedCurrent}\n${additions.join("\n")}`
+    : additions.join("\n");
+};
+
 /**
  * Rebuilds the full `<docinfo>` XML from the three editor regions.
  * Omits elements whose content is blank.
@@ -92,8 +154,17 @@ const TAB_DESCRIPTIONS: Record<DocinfoTab, string> = {
  * Modal dialog for editing the PreTeXt `<docinfo>` section, with three tabs:
  * Macros, Image Preamble, and Other Elements.
  */
-const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
+const DocinfoEditor = ({
+  docinfo,
+  onClose,
+  showCommonDocinfoControls = false,
+  commonDocinfo = "",
+  initialUseCommonDocinfo = false,
+}: DocinfoEditorProps) => {
   const [activeTab, setActiveTab] = useState<DocinfoTab>("macros");
+  const [useCommonDocinfo, setUseCommonDocinfo] = useState(
+    initialUseCommonDocinfo,
+  );
 
   const doc = parseDocinfo(docinfo);
   const [macros, setMacros] = useState(() => extractTextElement(doc, "macros"));
@@ -104,6 +175,19 @@ const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
     extractOtherElements(doc, ["macros", "latex-image-preamble"]),
   );
 
+  const commonDoc = parseDocinfo(commonDocinfo);
+  const [commonMacros, setCommonMacros] = useState(() =>
+    extractTextElement(commonDoc, "macros"),
+  );
+  const [commonPreamble, setCommonPreamble] = useState(() =>
+    extractTextElement(commonDoc, "latex-image-preamble"),
+  );
+  const [commonOther, setCommonOther] = useState(() =>
+    extractOtherElements(commonDoc, ["macros", "latex-image-preamble"]),
+  );
+
+  const canImportCommonDocinfo = commonDocinfo.trim().length > 0;
+
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose(undefined);
@@ -113,21 +197,54 @@ const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
   }, [onClose]);
 
   const handleSave = () => {
-    onClose(buildDocinfo(macros, preamble, other));
+    onClose({
+      docinfo: buildDocinfo(macros, preamble, other),
+      commonDocinfo: buildDocinfo(commonMacros, commonPreamble, commonOther),
+      useCommonDocinfo,
+    });
+  };
+
+  const handleImportCommonDocinfo = () => {
+    if (!canImportCommonDocinfo) return;
+    const commonDoc = parseDocinfo(commonDocinfo);
+    if (hasParseError(commonDoc)) return;
+    setMacros((current) =>
+      mergeTextField(current, extractTextElement(commonDoc, "macros")),
+    );
+    setPreamble((current) =>
+      mergeTextField(
+        current,
+        extractTextElement(commonDoc, "latex-image-preamble"),
+      ),
+    );
+    setOther((current) => mergeOtherElements(current, commonDoc));
   };
 
   const currentValue =
     activeTab === "macros"
-      ? macros
+      ? useCommonDocinfo
+        ? commonMacros
+        : macros
       : activeTab === "preamble"
-      ? preamble
+      ? useCommonDocinfo
+        ? commonPreamble
+        : preamble
+      : useCommonDocinfo
+      ? commonOther
       : other;
   const currentLanguage = activeTab === "other" ? "xml" : "latex";
+  const isEditingCommonDocinfo = showCommonDocinfoControls && useCommonDocinfo;
   const currentSetter =
     activeTab === "macros"
-      ? setMacros
+      ? useCommonDocinfo
+        ? setCommonMacros
+        : setMacros
       : activeTab === "preamble"
-      ? setPreamble
+      ? useCommonDocinfo
+        ? setCommonPreamble
+        : setPreamble
+      : useCommonDocinfo
+      ? setCommonOther
       : setOther;
 
   return (
@@ -136,7 +253,11 @@ const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
       onClick={() => onClose(undefined)}
     >
       <div
-        className="pretext-plus-editor__dialog"
+        className={`pretext-plus-editor__dialog${
+          isEditingCommonDocinfo
+            ? " pretext-plus-editor__dialog--common-mode"
+            : ""
+        }`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="pretext-plus-editor-docinfo-dialog-title"
@@ -153,6 +274,30 @@ const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
             <p className="pretext-plus-editor__dialog-copy">
               {TAB_DESCRIPTIONS[activeTab]}
             </p>
+            {showCommonDocinfoControls ? (
+              <label className="pretext-plus-editor__dialog-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={useCommonDocinfo}
+                  onChange={(event) =>
+                    setUseCommonDocinfo(event.currentTarget.checked)
+                  }
+                />
+                <span>Use my common docinfo/preamble.</span>
+              </label>
+            ) : null}
+            {showCommonDocinfoControls && !useCommonDocinfo ? (
+              <div className="pretext-plus-editor__dialog-common-import-row">
+                <button
+                  type="button"
+                  className="pretext-plus-editor__dialog-link-button"
+                  onClick={handleImportCommonDocinfo}
+                  disabled={!canImportCommonDocinfo}
+                >
+                  Import common docinfo
+                </button>
+              </div>
+            ) : null}
           </div>
           <button
             type="button"
@@ -164,42 +309,54 @@ const DocinfoEditor = ({ docinfo, onClose }: DocinfoEditorProps) => {
           </button>
         </div>
 
-        <div className="pretext-plus-editor__dialog-tab-bar" role="tablist">
-          {(["macros", "preamble", "other"] as DocinfoTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              className={`pretext-plus-editor__dialog-tab${
-                activeTab === tab
-                  ? " pretext-plus-editor__dialog-tab--active"
-                  : ""
-              }`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {TAB_LABELS[tab]}
-            </button>
-          ))}
-        </div>
+        {isEditingCommonDocinfo ? (
+          <div className="pretext-plus-editor__dialog-common-mode-banner">
+            You are editing your shared common docinfo/preamble. These values
+            will apply to all projects that use this option.
+          </div>
+        ) : null}
 
-        <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
-          <div className="pretext-plus-editor__dialog-section">
-            <div className="pretext-plus-editor__dialog-editor">
-              <Editor
-                key={activeTab}
-                options={
-                  activeTab === "other" ? xmlEditorOptions : latexEditorOptions
-                }
-                height="100%"
-                language={currentLanguage}
-                value={currentValue}
-                onChange={(value) => currentSetter(value ?? "")}
-              />
+        <>
+          <div className="pretext-plus-editor__dialog-tab-bar" role="tablist">
+            {(["macros", "preamble", "other"] as DocinfoTab[]).map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                className={`pretext-plus-editor__dialog-tab${
+                  activeTab === tab
+                    ? " pretext-plus-editor__dialog-tab--active"
+                    : ""
+                }`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {TAB_LABELS[tab]}
+              </button>
+            ))}
+          </div>
+
+          <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
+            <div className="pretext-plus-editor__dialog-section">
+              <div className="pretext-plus-editor__dialog-editor">
+                <Editor
+                  key={`${activeTab}-${
+                    useCommonDocinfo ? "common" : "project"
+                  }`}
+                  options={
+                    activeTab === "other"
+                      ? xmlEditorOptions
+                      : latexEditorOptions
+                  }
+                  height="100%"
+                  language={currentLanguage}
+                  value={currentValue}
+                  onChange={(value) => currentSetter(value ?? "")}
+                />
+              </div>
             </div>
           </div>
-        </div>
-
+        </>
         <div className="pretext-plus-editor__dialog-actions">
           <button
             type="button"

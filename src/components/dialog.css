@@ -21,9 +21,13 @@
   box-shadow: 0 25px 80px rgba(15, 23, 42, 0.35);
 }
 
+.pretext-plus-editor__dialog--common-mode {
+  border: 2px solid #0c4a6e;
+}
+
 .pretext-plus-editor__dialog-content {
   flex: 1;
-  min-height: 0;
+  min-height: 200px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
@@ -63,7 +67,7 @@
 }
 
 .pretext-plus-editor__dialog-section {
-  min-height: 0;
+  min-height: 200px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -128,6 +132,51 @@
   margin: 0.4rem 0 0;
   color: #475569;
   max-width: 70ch;
+}
+
+.pretext-plus-editor__dialog-mode-badge {
+  display: inline-block;
+  margin-top: 0.45rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: #0c4a6e;
+  color: #ecfeff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pretext-plus-editor__dialog-common-mode-banner {
+  border: 1px solid #0c4a6e;
+  background: #ecfeff;
+  color: #164e63;
+  padding: 0.65rem 0.8rem;
+  border-radius: 2px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__dialog-checkbox-row {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #334155;
+  font-size: 0.92rem;
+}
+
+.pretext-plus-editor__dialog-common-import-row {
+  margin-top: 0.4rem;
+}
+
+.pretext-plus-editor__dialog-common-copy {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e3a8a;
+  padding: 0.8rem 0.9rem;
+  border-radius: 2px;
+  font-size: 0.92rem;
 }
 
 .pretext-plus-editor__dialog-feedback-row {
