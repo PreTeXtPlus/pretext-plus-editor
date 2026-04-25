@@ -62,6 +62,10 @@ export interface EditorContentState {
    * document wide information.
    */
   docinfo?: string;
+  /** The user-level common docinfo/preamble XML. */
+  commonDocinfo?: string;
+  /** Whether project rendering should use a user-level common docinfo/preamble. */
+  useCommonDocinfo?: boolean;
 }
 
 /**

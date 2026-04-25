@@ -68,6 +68,22 @@ export interface editorProps {
    */
   docinfo?: string;
   /**
+   * Optional user-level common docinfo/preamble that project docinfo can import.
+   */
+  commonDocinfo?: string;
+  /**
+   * Whether this project should use the user's common docinfo/preamble.
+   */
+  useCommonDocinfo?: boolean;
+  /**
+   * Called when the project-level "use common docinfo" choice changes.
+   */
+  onUseCommonDocinfoChange?: (value: boolean) => void;
+  /**
+   * Called when the user edits their common docinfo from the project dialog.
+   */
+  onCommonDocinfoChange?: (value: string) => void;
+  /**
    * Called whenever the source content changes (user edits in the code
    * editor or WYSIWYG editor).
    *
@@ -213,6 +229,12 @@ const Editors = (props: editorProps) => {
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [isDocinfoEditorOpen, setIsDocinfoEditorOpen] = useState(false);
   const [internalDocinfo, setInternalDocinfo] = useState(props.docinfo ?? "");
+  const [internalCommonDocinfo, setInternalCommonDocinfo] = useState(
+    props.commonDocinfo ?? "",
+  );
+  const [internalUseCommonDocinfo, setInternalUseCommonDocinfo] = useState(
+    props.useCommonDocinfo ?? false,
+  );
   const editorTabId = "pretext-plus-tab-editor";
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
@@ -432,6 +454,22 @@ const Editors = (props: editorProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    if (props.docinfo !== undefined) setInternalDocinfo(props.docinfo);
+  }, [props.docinfo]);
+
+  useEffect(() => {
+    if (props.commonDocinfo !== undefined) {
+      setInternalCommonDocinfo(props.commonDocinfo);
+    }
+  }, [props.commonDocinfo]);
+
+  useEffect(() => {
+    if (props.useCommonDocinfo !== undefined) {
+      setInternalUseCommonDocinfo(props.useCommonDocinfo);
+    }
+  }, [props.useCommonDocinfo]);
+
   /**
    * Called by either sub-editor when the user changes the source content.
    * Re-derives the PreTeXt content (or records an error) then propagates the
@@ -451,6 +489,9 @@ const Editors = (props: editorProps) => {
     const nextState: EditorContentState = {
       sourceContent: normalizedSourceContent,
       sourceFormat: contentState.sourceFormat,
+      docinfo: props.docinfo ?? internalDocinfo,
+      commonDocinfo: props.commonDocinfo ?? internalCommonDocinfo,
+      useCommonDocinfo: props.useCommonDocinfo ?? internalUseCommonDocinfo,
       ...derivedPretext,
     };
     props.onContentChange(normalizedSourceContent, nextState);
@@ -950,13 +991,24 @@ const Editors = (props: editorProps) => {
         {isDocinfoEditorOpen ? (
           <DocinfoEditor
             docinfo={props.docinfo ?? internalDocinfo}
+            showCommonDocinfoControls
+            commonDocinfo={props.commonDocinfo ?? internalCommonDocinfo}
+            initialUseCommonDocinfo={
+              props.useCommonDocinfo ?? internalUseCommonDocinfo
+            }
             onClose={(value) => {
               setIsDocinfoEditorOpen(false);
               if (value !== undefined) {
-                setInternalDocinfo(value);
+                setInternalDocinfo(value.docinfo);
+                setInternalCommonDocinfo(value.commonDocinfo);
+                setInternalUseCommonDocinfo(value.useCommonDocinfo);
+                props.onCommonDocinfoChange?.(value.commonDocinfo);
+                props.onUseCommonDocinfoChange?.(value.useCommonDocinfo);
                 props.onContentChange(contentState.sourceContent, {
                   ...contentState,
-                  docinfo: value,
+                  docinfo: value.docinfo,
+                  commonDocinfo: value.commonDocinfo,
+                  useCommonDocinfo: value.useCommonDocinfo,
                 });
               }
             }}
