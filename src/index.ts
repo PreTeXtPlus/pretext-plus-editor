@@ -1,10 +1,10 @@
 // Main entry point for the npm package
-// Import styles to ensure they are bundled
-import "./index.css";
-
-// Import visual-editor styles via the official export path from package.json
-// @ts-expect-error - CSS-only export path doesn't have type definitions
+// Import CSS styles - the visual-editor exports its CSS via this path
+// This import works in both development and production
 import "@pretextbook/visual-editor/styles";
+
+// Import own styles
+import "./index.css";
 
 export { default as Editors } from "./components/Editors";
 export type { editorProps } from "./components/Editors";
@@ -54,7 +54,7 @@ export {
   updateSectionMetadata,
 } from "./sectionUtils";
 
-// Export other useful components if needed
+// Export components
 export { default as CodeEditor } from "./components/CodeEditor";
 export { default as FullPreview } from "./components/FullPreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";
