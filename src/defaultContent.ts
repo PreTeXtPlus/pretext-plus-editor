@@ -23,7 +23,7 @@ const defaultContent: string = `
   <p>Lemma text here</p>
   <p>Another paragraph</p>
   <p>
-    Welcome to this very basic demo of how tiptap can be used to edit PreTeXt.  First, a definition.
+    Welcome to this very basic demo of editing PreTeXt.  First, a definition.
   </p>
 
   <conjecture>

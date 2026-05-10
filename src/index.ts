@@ -1,6 +1,8 @@
 // Main entry point for the npm package
 // Import styles to ensure they are bundled
 import "./index.css";
+// @ts-expect-error - visual-editor exports CSS via ./styles but no type definitions
+import "@pretextbook/visual-editor/styles";
 
 export { default as Editors } from "./components/Editors";
 export type { editorProps } from "./components/Editors";
