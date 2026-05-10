@@ -56,14 +56,16 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     <div className="pretext-plus-editor__code-editor-menu">
       {sourceFormat === "latex" ? (
         <>
-          <button
-            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-            onClick={onConvertToPretext}
-            disabled={canConvertToPretext === false}
-            title="Create a new project copy using the converted PreTeXt source"
-          >
-            Convert to PreTeXt
-          </button>
+          {onConvertToPretext ? (
+            <button
+              className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Create a new project copy using the converted PreTeXt source"
+            >
+              Convert to PreTeXt
+            </button>
+          ) : null}
           <button
             className="pretext-plus-editor__menu-button"
             onClick={onOpenDocinfoEditor}
@@ -74,14 +76,16 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         </>
       ) : sourceFormat === "markdown" ? (
         <>
-          <button
-            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-            onClick={onConvertToPretext}
-            disabled={canConvertToPretext === false}
-            title="Create a new project copy using the converted PreTeXt source"
-          >
-            Convert to PreTeXt
-          </button>
+          {onConvertToPretext ? (
+            <button
+              className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Create a new project copy using the converted PreTeXt source"
+            >
+              Convert to PreTeXt
+            </button>
+          ) : null}
           <button
             className="pretext-plus-editor__menu-button"
             onClick={onOpenDocinfoEditor}

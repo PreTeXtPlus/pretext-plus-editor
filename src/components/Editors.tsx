@@ -432,7 +432,7 @@ const Editors = (props: editorProps) => {
   }
 
   // ── TOC sidebar ────────────────────────────────────────────────────────────
-  const tocSidebar = (
+  const tocSidebar = isMarkdownDoc ? null : (
     <TableOfContents
       sections={sections}
       currentSectionId={currentSectionId ?? sections[0]?.id ?? null}
@@ -461,7 +461,7 @@ const Editors = (props: editorProps) => {
   );
 
   // ── Layout ─────────────────────────────────────────────────────────────────
-  const narrowTocDrawer = isNarrowScreen ? (
+  const narrowTocDrawer = isNarrowScreen && tocSidebar ? (
     <div className="pretext-plus-editor__toc-drawer">
       {isTocCollapsed ? (
         <button

@@ -120,6 +120,15 @@ export function useSectionedEditing({
   const rawEditMode = controlledEditMode ?? internalEditMode;
   const editMode = supportsSectioned ? rawEditMode : "document";
 
+  useEffect(() => {
+    if (supportsSectioned) return;
+    setSections([]);
+    setDocumentWrapper("");
+    setCurrentSectionId(null);
+    pendingNavTitle.current = null;
+    setInternalEditMode("document");
+  }, [supportsSectioned]);
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const doMerge = (
@@ -324,6 +333,7 @@ export function useSectionedEditing({
    * document that has none.
    */
   const handleAddFirstSection = () => {
+    if (!supportsSectioned) return;
     const { wrapper, sections: wrapped } = isLatexDoc
       ? wrapLatexDocumentAsSection(contentState.sourceContent)
       : wrapDocumentAsSection(contentState.sourceContent);
@@ -337,6 +347,7 @@ export function useSectionedEditing({
   };
 
   const handleAddSection = (afterId: string | null) => {
+    if (!supportsSectioned) return;
     // When the document has no sections yet, wrap the whole content first.
     if (sections.length === 0) {
       handleAddFirstSection();
@@ -371,6 +382,7 @@ export function useSectionedEditing({
   };
 
   const handleAddIntroduction = () => {
+    if (!supportsSectioned) return;
     if (sections.some((s) => s.type === "introduction")) return;
     const intro = isLatexDoc ? createLatexIntroduction() : createIntroduction();
     const nextSections = [intro, ...sections];
@@ -381,6 +393,7 @@ export function useSectionedEditing({
   };
 
   const handleAddConclusion = () => {
+    if (!supportsSectioned) return;
     if (sections.some((s) => s.type === "conclusion")) return;
     const conc = isLatexDoc ? createLatexConclusion() : createConclusion();
     const nextSections = [...sections, conc];
@@ -391,6 +404,7 @@ export function useSectionedEditing({
   };
 
   const handleRemoveSection = (id: string) => {
+    if (!supportsSectioned) return;
     const nextSections = sections.filter((s) => s.id !== id);
     setSections(nextSections);
     if (currentSectionId === id) {
@@ -419,6 +433,7 @@ export function useSectionedEditing({
       label?: string | null;
     },
   ) => {
+    if (!supportsSectioned) return;
     const nextSections = sections.map((s) => {
       if (s.id !== id) return s;
       if (isLatexDoc) {
@@ -440,6 +455,7 @@ export function useSectionedEditing({
   };
 
   const handleReorderSections = (nextSections: DocumentSection[]) => {
+    if (!supportsSectioned) return;
     setSections(nextSections);
     onSectionsChange?.(nextSections);
     onContentUpdate(doMerge(nextSections));
@@ -450,6 +466,7 @@ export function useSectionedEditing({
    * The merged section keeps the title and id of the target.
    */
   const handleMergeSection = (sourceId: string, targetId: string) => {
+    if (!supportsSectioned) return;
     const sourceIdx = sections.findIndex((s) => s.id === sourceId);
     const targetIdx = sections.findIndex((s) => s.id === targetId);
     if (sourceIdx === -1 || targetIdx === -1) return;
