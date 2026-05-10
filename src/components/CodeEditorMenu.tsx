@@ -56,20 +56,42 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
     <div className="pretext-plus-editor__code-editor-menu">
       {sourceFormat === "latex" ? (
         <>
-          <button
-            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
-            onClick={onConvertToPretext}
-            disabled={canConvertToPretext === false}
-            title="Create a new project copy using the converted PreTeXt source"
-          >
-            Convert to PreTeXt
-          </button>
+          {onConvertToPretext ? (
+            <button
+              className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Create a new project copy using the converted PreTeXt source"
+            >
+              Convert to PreTeXt
+            </button>
+          ) : null}
           <button
             className="pretext-plus-editor__menu-button"
             onClick={onOpenDocinfoEditor}
             title="Edit Preamble"
           >
             Edit Preamble
+          </button>
+        </>
+      ) : sourceFormat === "markdown" ? (
+        <>
+          {onConvertToPretext ? (
+            <button
+              className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+              onClick={onConvertToPretext}
+              disabled={canConvertToPretext === false}
+              title="Create a new project copy using the converted PreTeXt source"
+            >
+              Convert to PreTeXt
+            </button>
+          ) : null}
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenDocinfoEditor}
+            title="Edit Macros"
+          >
+            Edit Macros
           </button>
         </>
       ) : (
@@ -98,7 +120,11 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         </>
       )}
       <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
-        {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
+        {sourceFormat === "latex"
+          ? "LaTeX"
+          : sourceFormat === "markdown"
+          ? "Markdown"
+          : "PreTeXt"}
       </span>
     </div>
   );

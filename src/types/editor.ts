@@ -1,5 +1,5 @@
 /** The format of the source content being edited. */
-export type SourceFormat = "pretext" | "latex";
+export type SourceFormat = "pretext" | "latex" | "markdown";
 
 /** Payload emitted when a user submits feedback from the editor UI. */
 export interface FeedbackSubmission {

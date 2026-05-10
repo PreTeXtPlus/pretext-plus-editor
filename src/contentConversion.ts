@@ -1,5 +1,6 @@
 import { formatPretext } from "@pretextbook/format";
 import { latexToPretext } from "@pretextbook/latex-pretext";
+import { markdownToPretext } from "@pretextbook/remark-pretext";
 import type { SourceFormat } from "./types/editor";
 
 /** Returned by {@link derivePretextContent}. Exactly one of the two fields will be set. */
@@ -25,13 +26,20 @@ const LATEX_FORMAT_MARKERS = [
 ];
 
 /**
+ * Heuristic markers that strongly suggest a document is Markdown.
+ * Checked against the first line of the document.
+ */
+const MARKDOWN_FORMAT_MARKERS = ["# ", "## ", "### ", "#### "];
+
+/**
  * Inspects `source` and returns the most likely {@link SourceFormat}.
  *
  * Rules (applied in order):
  * 1. Empty/whitespace-only → `"pretext"` (safe default).
  * 2. Starts with `<` → `"pretext"` (XML document).
  * 3. Contains any {@link LATEX_FORMAT_MARKERS} → `"latex"`.
- * 4. Otherwise → `"pretext"`.
+ * 4. First non-blank line starts with a Markdown ATX heading → `"markdown"`.
+ * 5. Otherwise → `"pretext"`.
  */
 export function detectSourceFormat(source: string): SourceFormat {
   const trimmedContent = source.trim();
@@ -43,6 +51,11 @@ export function detectSourceFormat(source: string): SourceFormat {
   }
   if (LATEX_FORMAT_MARKERS.some((marker) => trimmedContent.includes(marker))) {
     return "latex";
+  }
+  if (
+    MARKDOWN_FORMAT_MARKERS.some((marker) => trimmedContent.startsWith(marker))
+  ) {
+    return "markdown";
   }
   return "pretext";
 }
@@ -60,6 +73,22 @@ export function convertLatexToPretext(latexContent: string): string {
     return "";
   }
   const converted = String(latexToPretext(trimmedLatex)).trim();
+  return converted ? formatPretext(converted) : "";
+}
+
+/**
+ * Converts a Markdown document string to formatted PreTeXt XML.
+ *
+ * @param markdownContent - The raw Markdown source to convert.
+ * @returns The formatted PreTeXt XML string, or `""` if `markdownContent` is blank.
+ * @throws If the underlying `markdownToPretext` conversion throws.
+ */
+export function convertMarkdownToPretext(markdownContent: string): string {
+  const trimmedMarkdown = markdownContent.trim();
+  if (!trimmedMarkdown) {
+    return "";
+  }
+  const converted = String(markdownToPretext(trimmedMarkdown)).trim();
   return converted ? formatPretext(converted) : "";
 }
 
@@ -83,6 +112,9 @@ export function getConversionErrorMessage(error: unknown): string {
  * - If `sourceFormat` is `"latex"`, the content is converted via
  *   {@link convertLatexToPretext}.  Conversion errors are caught and returned
  *   as `pretextError` so callers never need a try/catch.
+ * - If `sourceFormat` is `"markdown"`, the content is converted via
+ *   {@link convertMarkdownToPretext}.  Conversion errors are caught and returned
+ *   as `pretextError` so callers never need a try/catch.
  *
  * @param sourceContent - The raw source string.
  * @param sourceFormat - The format of `sourceContent`.
@@ -94,6 +126,14 @@ export function derivePretextContent(
 ): DerivedPretextResult {
   if (sourceFormat === "pretext") {
     return { pretextSource: sourceContent };
+  }
+
+  if (sourceFormat === "markdown") {
+    try {
+      return { pretextSource: convertMarkdownToPretext(sourceContent) };
+    } catch (error) {
+      return { pretextError: getConversionErrorMessage(error) };
+    }
   }
 
   try {
