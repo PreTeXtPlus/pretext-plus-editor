@@ -72,6 +72,24 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
             Edit Preamble
           </button>
         </>
+      ) : sourceFormat === "markdown" ? (
+        <>
+          <button
+            className="pretext-plus-editor__menu-button pretext-plus-editor__menu-button--convert"
+            onClick={onConvertToPretext}
+            disabled={canConvertToPretext === false}
+            title="Create a new project copy using the converted PreTeXt source"
+          >
+            Convert to PreTeXt
+          </button>
+          <button
+            className="pretext-plus-editor__menu-button"
+            onClick={onOpenDocinfoEditor}
+            title="Edit Macros"
+          >
+            Edit Macros
+          </button>
+        </>
       ) : (
         <>
           <button
@@ -98,7 +116,11 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         </>
       )}
       <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
-        {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"}
+        {sourceFormat === "latex"
+          ? "LaTeX"
+          : sourceFormat === "markdown"
+          ? "Markdown"
+          : "PreTeXt"}
       </span>
     </div>
   );

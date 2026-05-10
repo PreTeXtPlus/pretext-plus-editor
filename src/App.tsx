@@ -29,6 +29,33 @@ The third section can contain whatever you like.
 
 `;
 
+const markdownDemoContent = `# Markdown Demo
+
+This demo lets you test the new **markdown** source mode in the code editor.
+
+## Features To Try
+
+- Heading and paragraph editing
+- Lists and inline code like \`inline code\`
+- Fenced code blocks
+
+## Example Math-like Text
+
+Markdown mode currently treats this as plain text:
+
+\\[ E = mc^2 \\]
+
+## Blocks and environments.
+
+Theorem:
+  This is the theorem.
+
+  Proof:
+    This is the proof.
+
+More text.
+`;
+
 const handlePreviewRebuild = async (
   source: string,
   title: string,
@@ -66,6 +93,14 @@ function App() {
     setEditMode("document");
   };
 
+  const loadMarkdownDemo = () => {
+    setSource(markdownDemoContent);
+    setSourceFormat("markdown");
+    setPretextSource(undefined);
+    setTitle("Testing Markdown Source Mode");
+    setEditMode("document");
+  };
+
   const handleSectionsChange = (sections: DocumentSection[]) => {
     console.log(
       "Sections changed:",
@@ -89,14 +124,22 @@ function App() {
     <>
       <div className="app-demo-toolbar">
         <span className="app-demo-toolbar__label">
-          Demo source: {sourceFormat === "latex" ? "LaTeX" : "PreTeXt"} | Mode:{" "}
-          {editMode}
+          Demo source:{" "}
+          {sourceFormat === "latex"
+            ? "LaTeX"
+            : sourceFormat === "markdown"
+            ? "Markdown"
+            : "PreTeXt"}{" "}
+          | Mode: {editMode}
         </span>
         <button className="app-demo-toolbar__button" onClick={loadPretextDemo}>
           Load PreTeXt Demo
         </button>
         <button className="app-demo-toolbar__button" onClick={loadLatexDemo}>
           Load LaTeX Demo
+        </button>
+        <button className="app-demo-toolbar__button" onClick={loadMarkdownDemo}>
+          Load Markdown Demo
         </button>
       </div>
       <Editors

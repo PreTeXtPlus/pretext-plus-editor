@@ -219,7 +219,13 @@ const CodeEditor = ({
         <Editor
           options={options}
           height="100%"
-          language={sourceFormat === "latex" ? "latex" : "xml"}
+          language={
+            sourceFormat === "latex"
+              ? "latex"
+              : sourceFormat === "markdown"
+              ? "markdown"
+              : "xml"
+          }
           defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value, event) => {
