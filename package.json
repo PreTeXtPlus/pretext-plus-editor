@@ -5,8 +5,7 @@
   "description": "A web-based editor for PreTeXt documents, with simple preview functionality",
   "keywords": [
     "pretext",
-    "editor",
-    "tiptap"
+    "editor"
   ],
   "homepage": "https://github.com/PreTeXtPlus/pretext-plus-editor#readme",
   "bugs": {
@@ -47,30 +46,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@floating-ui/dom": "^1.7.4",
     "@monaco-editor/react": "^4.8.0-rc.3",
     "@pretextbook/completions": "^0.0.3",
     "@pretextbook/format": "^0.0.5",
     "@pretextbook/latex-pretext": "0.0.8",
     "@pretextbook/remark-pretext": "^0.0.3",
+    "@pretextbook/visual-editor": "^0.0.3",
     "@tailwindcss/vite": "^4.1.18",
-    "@tiptap/extension-code-block": "^3.14.0",
-    "@tiptap/extension-hard-break": "^3.14.0",
-    "@tiptap/extension-list": "^3.14.0",
-    "@tiptap/extension-text": "^3.14.0",
-    "@tiptap/extensions": "^3.14.0",
-    "@tiptap/pm": "^3.14.0",
-    "@tiptap/react": "^3.14.0",
-    "hast-util-whitespace": "^3.0.0",
-    "katex": "^0.16.27",
-    "react-resizable-panels": "^4.7.2",
-    "tailwindcss": "^4.1.18",
-    "unist-util-visit": "^5.0.0",
-    "xast-util-from-xml": "^4.0.0",
-    "xast-util-to-xml": "^4.0.0"
+    "react-resizable-panels": "^2.1.7",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -84,7 +68,6 @@
     "globals": "^16.5.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "sass-embedded": "^1.97.1",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.50.0",
     "vite": "^7.3.0"

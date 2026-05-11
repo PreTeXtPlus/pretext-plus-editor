@@ -231,7 +231,7 @@ If your product needs an audit trail, keep the original LaTeX and created PreTeX
 
 ## Features
 
-- **Visual Editor**: Intuitive WYSIWYG editor for PreTeXt documents using Tiptap
+- **Visual Editor**: Intuitive WYSIWYG editor for PreTeXt documents via `@pretextbook/visual-editor`
 - **Code Editor**: Monaco-powered code editor with syntax highlighting
 - **Full Preview**: Full-page preview of your document
 - **Synchronized Editing**: Changes in one editor instantly reflect in the other

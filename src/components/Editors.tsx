@@ -2,7 +2,7 @@ import { Group, Panel, Separator } from "react-resizable-panels";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import CodeEditor from "./CodeEditor";
-import VisualEditor from "./VisualEditor";
+import { VisualEditor } from "@pretextbook/visual-editor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";

@@ -1,5 +1,9 @@
 // Main entry point for the npm package
-// Import styles to ensure they are bundled
+// Import CSS styles - the visual-editor exports its CSS via this path
+// This import works in both development and production
+import "@pretextbook/visual-editor/styles";
+
+// Import own styles
 import "./index.css";
 
 export { default as Editors } from "./components/Editors";
@@ -50,9 +54,9 @@ export {
   updateSectionMetadata,
 } from "./sectionUtils";
 
-// Export other useful components if needed
+// Export components
 export { default as CodeEditor } from "./components/CodeEditor";
-export { default as VisualEditor } from "./components/VisualEditor";
+export { VisualEditor } from "@pretextbook/visual-editor";
 export { default as FullPreview } from "./components/FullPreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";
 export { default as DocinfoEditor } from "./components/DocinfoEditor";
