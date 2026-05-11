@@ -48,6 +48,9 @@
   "dependencies": {
     "@monaco-editor/react": "^4.8.0-rc.3",
     "@pretextbook/completions": "^0.0.3",
+    "@pretextbook/format": "^0.0.5",
+    "@pretextbook/latex-pretext": "0.0.8",
+    "@pretextbook/remark-pretext": "^0.0.3",
     "@pretextbook/visual-editor": "^0.0.3",
     "@tailwindcss/vite": "^4.1.18",
     "react-resizable-panels": "^2.1.7",
