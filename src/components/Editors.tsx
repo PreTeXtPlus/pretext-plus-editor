@@ -22,7 +22,7 @@ import type {
   PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
-import type { DocumentSection } from "../types/sections";
+import type { DocumentSection, ChapterSummary } from "../types/sections";
 
 const startingContent = defaultContent;
 
@@ -143,6 +143,27 @@ export interface editorProps {
    * `"sectioned"` mode.
    */
   onSectionChange?: (section: DocumentSection) => void;
+  /**
+   * Whether this is an `"article"` (default) or `"book"` project.
+   * When `"book"`, the TOC shows a chapter list above the section list.
+   */
+  projectType?: "article" | "book";
+  /**
+   * Book chapter summaries used to populate the TOC chapter list.
+   * Only meaningful when `projectType === "book"`.
+   */
+  chapters?: ChapterSummary[];
+  /**
+   * The id of the currently loaded/active chapter.
+   * Only meaningful when `projectType === "book"`.
+   */
+  currentChapterId?: string | null;
+  /**
+   * Called when the user clicks a chapter in the TOC.
+   * The host should fetch that chapter's source from the server and update
+   * the `source` and `currentChapterId` props accordingly.
+   */
+  onChapterSelect?: (chapterId: string) => void;
 }
 
 /**
@@ -281,6 +302,7 @@ const Editors = (props: editorProps) => {
     onSectionsChange: props.onSectionsChange,
     onSectionChange: props.onSectionChange,
     onContentUpdate: updateContentState,
+    chapterKey: props.currentChapterId,
   });
 
   // ── Sync props → internal state ────────────────────────────────────────────
@@ -457,6 +479,10 @@ const Editors = (props: editorProps) => {
         switchEditMode(editMode === "document" ? "sectioned" : "document")
       }
       readonly={editMode === "document"}
+      projectType={props.projectType}
+      chapters={props.chapters}
+      currentChapterId={props.currentChapterId}
+      onChapterSelect={props.onChapterSelect}
     />
   );
 

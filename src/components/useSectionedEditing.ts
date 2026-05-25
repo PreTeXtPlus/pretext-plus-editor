@@ -50,6 +50,12 @@ export interface SectionedEditingOptions {
   onSectionChange?: (section: DocumentSection) => void;
   /** Called with the merged full-document source whenever section content changes. */
   onContentUpdate: (source: string) => void;
+  /**
+   * When set (book mode), changing this value triggers an immediate section
+   * re-parse and resets to document mode so the newly-loaded chapter is
+   * reflected in the TOC even when the editor was previously in sectioned mode.
+   */
+  chapterKey?: string | null;
 }
 
 export interface SectionedEditingResult {
@@ -99,6 +105,7 @@ export function useSectionedEditing({
   onSectionsChange,
   onSectionChange,
   onContentUpdate,
+  chapterKey,
 }: SectionedEditingOptions): SectionedEditingResult {
   const [internalEditMode, setInternalEditMode] = useState<
     "document" | "sectioned"
@@ -164,6 +171,54 @@ export function useSectionedEditing({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
+
+  // ── Chapter-key change: reset sections when the host loads a new chapter ───
+  // This is needed in book mode: when the host fetches a new chapter and updates
+  // `source`, the sections must be re-parsed even if the editor was in sectioned
+  // mode (where the normal debounced refresh is suppressed to avoid clobbering
+  // in-progress edits).  We also reset to document mode so the user starts fresh
+  // on the newly-loaded chapter rather than landing in a potentially stale section.
+  const isFirstChapterKeyRender = useRef(true);
+  useEffect(() => {
+    if (chapterKey == null) return;
+    // Skip the initial render — mount-time parsing handles the first chapter.
+    if (isFirstChapterKeyRender.current) {
+      isFirstChapterKeyRender.current = false;
+      return;
+    }
+    const { sourceContent, sourceFormat } = contentState;
+    if (sourceFormat === "markdown") return;
+    const toSplit =
+      sourceFormat === "latex"
+        ? sourceContent
+        : sourceFormat === "pretext"
+        ? sourceContent
+        : contentState.pretextSource ?? "";
+    if (!toSplit.trim()) {
+      setSections([]);
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+    } else {
+      try {
+        const { wrapper, sections: split } =
+          sourceFormat === "latex"
+            ? splitLatexDocument(toSplit)
+            : splitDocument(toSplit);
+        setDocumentWrapper(wrapper);
+        setSections(split);
+        setCurrentSectionId(split[0]?.id ?? null);
+        onSectionsChange?.(split);
+      } catch {
+        setSections([]);
+        setDocumentWrapper("");
+        setCurrentSectionId(null);
+      }
+    }
+    // Switch back to document mode so the user starts fresh on the new chapter.
+    setInternalEditMode("document");
+    onEditModeChange?.("document");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterKey]); // only fire when the chapter changes
 
   // ── Refresh sections ───────────────────────────────────────────────────────
 

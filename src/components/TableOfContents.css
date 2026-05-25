@@ -412,7 +412,67 @@
   color: #1e293b;
 }
 
-/* ── No-sections placeholder ────────────────────────── */
+/* ── Chapter list (book mode) ────────────────────────── */
+.pretext-plus-editor__toc-chapter-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid #dde0e6;
+  flex-shrink: 0;
+  overflow-y: auto;
+  max-height: 50%;
+}
+
+.pretext-plus-editor__toc-chapter {
+  display: flex;
+  border-left: 3px solid transparent;
+}
+
+.pretext-plus-editor__toc-chapter--active {
+  border-left-color: #7c3aed;
+}
+
+.pretext-plus-editor__toc-chapter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #333;
+  padding: 5px 6px 5px 4px;
+  min-height: 32px;
+}
+
+.pretext-plus-editor__toc-chapter:hover .pretext-plus-editor__toc-chapter-btn {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-chapter--active .pretext-plus-editor__toc-chapter-btn {
+  background: #f3e8ff;
+  font-weight: 600;
+}
+
+.pretext-plus-editor__toc-type-badge--chapter {
+  background: #7c3aed;
+}
+
+/* ── Sections sublabel (book mode) ───────────────────── */
+.pretext-plus-editor__toc-sections-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  padding: 5px 10px 3px;
+  flex-shrink: 0;
+}
+
+
 .pretext-plus-editor__toc-no-sections {
   list-style: none;
   display: flex;

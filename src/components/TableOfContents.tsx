@@ -16,7 +16,11 @@ import {
   sortableKeyboardCoordinates,
   useSortable,
 } from "@dnd-kit/sortable";
-import type { DocumentSection, DocumentSectionType } from "../types/sections";
+import type {
+  ChapterSummary,
+  DocumentSection,
+  DocumentSectionType,
+} from "../types/sections";
 import { getSectionAttributes } from "../sectionUtils";
 import "./TableOfContents.css";
 
@@ -66,6 +70,27 @@ export interface TableOfContentsProps {
   onToggleEditMode: () => void;
   /** When true (document mode), hide all edit controls */
   readonly?: boolean;
+  /**
+   * Whether this is an `"article"` (default) or `"book"` project.
+   * When `"book"`, chapter items are rendered above the section list.
+   */
+  projectType?: "article" | "book";
+  /**
+   * Book chapter summaries provided by the host.
+   * Only meaningful when `projectType === "book"`.
+   */
+  chapters?: ChapterSummary[];
+  /**
+   * The id of the currently loaded/active chapter.
+   * Only meaningful when `projectType === "book"`.
+   */
+  currentChapterId?: string | null;
+  /**
+   * Called when the user clicks a chapter to request loading it.
+   * The host is responsible for fetching the chapter source and updating
+   * the `source` prop accordingly.
+   */
+  onChapterSelect?: (chapterId: string) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -334,6 +359,41 @@ const SortableItem = ({
 };
 
 // ---------------------------------------------------------------------------
+// ChapterItem — a single clickable chapter row (book mode, no DnD)
+// ---------------------------------------------------------------------------
+interface ChapterItemProps {
+  chapter: ChapterSummary;
+  isActive: boolean;
+  onSelect: () => void;
+}
+
+const ChapterItem = ({ chapter, isActive, onSelect }: ChapterItemProps) => (
+  <li
+    className={[
+      "pretext-plus-editor__toc-chapter",
+      isActive ? "pretext-plus-editor__toc-chapter--active" : "",
+    ]
+      .filter(Boolean)
+      .join(" ")}
+  >
+    <button
+      type="button"
+      className="pretext-plus-editor__toc-chapter-btn"
+      onClick={onSelect}
+      aria-current={isActive ? "true" : undefined}
+      title={`Edit chapter: ${chapter.title}`}
+    >
+      <span className="pretext-plus-editor__toc-type-badge pretext-plus-editor__toc-type-badge--chapter">
+        Ch
+      </span>
+      <span className="pretext-plus-editor__toc-title">
+        {chapter.title || <em>Untitled chapter</em>}
+      </span>
+    </button>
+  </li>
+);
+
+// ---------------------------------------------------------------------------
 // Main TableOfContents component
 // ---------------------------------------------------------------------------
 const TableOfContents = (props: TableOfContentsProps) => {
@@ -355,6 +415,10 @@ const TableOfContents = (props: TableOfContentsProps) => {
     editMode,
     onToggleEditMode,
     readonly = false,
+    projectType = "article",
+    chapters = [],
+    currentChapterId,
+    onChapterSelect,
   } = props;
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -634,92 +698,122 @@ const TableOfContents = (props: TableOfContentsProps) => {
         </div>
       </div>
 
-      {/* "Edit full document" link — only shown in section editing mode */}
+      {/* "Edit full chapter/document" link — only shown in section editing mode */}
       {editMode === "sectioned" && (
         <button
           type="button"
           className="pretext-plus-editor__toc-fulldoc-link"
           onClick={onToggleEditMode}
-          title="Switch to full document editing"
+          title={
+            projectType === "book"
+              ? "Switch to full chapter editing"
+              : "Switch to full document editing"
+          }
         >
-          ← Edit full document
+          {projectType === "book" ? "← Edit full chapter" : "← Edit full document"}
         </button>
       )}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragMove={handleDragMove}
-        onDragEnd={handleDragEnd}
-        onDragCancel={clearDragState}
-      >
-        <SortableContext
-          items={sections.map((s) => s.id)}
-          strategy={() => null}
-        >
-          <ul className="pretext-plus-editor__toc-list" role="list">
-            {sections.length === 0 ? (
-              <li className="pretext-plus-editor__toc-no-sections">
-                <span>No sections</span>
-                {onAddFirstSection && (
-                  <button
-                    type="button"
-                    className="pretext-plus-editor__toc-footer-btn"
-                    onClick={onAddFirstSection}
-                    title="Wrap the document content in a section to enable section editing"
-                  >
-                    + Create sections
-                  </button>
-                )}
-              </li>
-            ) : (
-              items
-            )}
-          </ul>
-        </SortableContext>
-        <DragOverlay>
-          {activeSection && (
-            <div className="pretext-plus-editor__toc-drag-overlay">
-              <span className="pretext-plus-editor__toc-drag-overlay-badge">
-                {activeSection.type}
-              </span>
-              <span className="pretext-plus-editor__toc-drag-overlay-title">
-                {activeSection.title || "Untitled"}
-              </span>
+      {/* Book chapter list */}
+      {projectType === "book" && chapters.length > 0 && (
+        <ul className="pretext-plus-editor__toc-chapter-list" role="list">
+          {chapters.map((ch) => (
+            <ChapterItem
+              key={ch.id}
+              chapter={ch}
+              isActive={ch.id === currentChapterId}
+              onSelect={() => onChapterSelect?.(ch.id)}
+            />
+          ))}
+        </ul>
+      )}
+
+      {/* Sections area — shown only when there are sections (or a chapter is loaded in book mode) */}
+      {(projectType !== "book" || currentChapterId != null) && (
+        <>
+          {/* Divider label in book mode */}
+          {projectType === "book" && (
+            <div className="pretext-plus-editor__toc-sections-label">
+              Sections
             </div>
           )}
-        </DragOverlay>
-      </DndContext>
 
-      {!readonly && sections.length > 0 && (
-        <div className="pretext-plus-editor__toc-footer">
-          {!hasIntroduction && (
-            <button
-              type="button"
-              className="pretext-plus-editor__toc-footer-btn"
-              onClick={onAddIntroduction}
-            >
-              + Introduction
-            </button>
-          )}
-          <button
-            type="button"
-            className="pretext-plus-editor__toc-footer-btn"
-            onClick={() => onAddSection(null)}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+            onDragCancel={clearDragState}
           >
-            + Section
-          </button>
-          {!hasConclusion && (
-            <button
-              type="button"
-              className="pretext-plus-editor__toc-footer-btn"
-              onClick={onAddConclusion}
+            <SortableContext
+              items={sections.map((s) => s.id)}
+              strategy={() => null}
             >
-              + Conclusion
-            </button>
+              <ul className="pretext-plus-editor__toc-list" role="list">
+                {sections.length === 0 ? (
+                  <li className="pretext-plus-editor__toc-no-sections">
+                    <span>No sections</span>
+                    {onAddFirstSection && (
+                      <button
+                        type="button"
+                        className="pretext-plus-editor__toc-footer-btn"
+                        onClick={onAddFirstSection}
+                        title="Wrap the document content in a section to enable section editing"
+                      >
+                        + Create sections
+                      </button>
+                    )}
+                  </li>
+                ) : (
+                  items
+                )}
+              </ul>
+            </SortableContext>
+            <DragOverlay>
+              {activeSection && (
+                <div className="pretext-plus-editor__toc-drag-overlay">
+                  <span className="pretext-plus-editor__toc-drag-overlay-badge">
+                    {activeSection.type}
+                  </span>
+                  <span className="pretext-plus-editor__toc-drag-overlay-title">
+                    {activeSection.title || "Untitled"}
+                  </span>
+                </div>
+              )}
+            </DragOverlay>
+          </DndContext>
+
+          {!readonly && sections.length > 0 && (
+            <div className="pretext-plus-editor__toc-footer">
+              {!hasIntroduction && (
+                <button
+                  type="button"
+                  className="pretext-plus-editor__toc-footer-btn"
+                  onClick={onAddIntroduction}
+                >
+                  + Introduction
+                </button>
+              )}
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-footer-btn"
+                onClick={() => onAddSection(null)}
+              >
+                + Section
+              </button>
+              {!hasConclusion && (
+                <button
+                  type="button"
+                  className="pretext-plus-editor__toc-footer-btn"
+                  onClick={onAddConclusion}
+                >
+                  + Conclusion
+                </button>
+              )}
+            </div>
           )}
-        </div>
+        </>
       )}
     </div>
   );

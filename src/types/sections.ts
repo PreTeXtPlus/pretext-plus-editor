@@ -43,6 +43,20 @@ export interface DocumentSection {
 }
 
 /**
+ * A lightweight summary of a book chapter used to populate the TOC when the
+ * editor is in `"book"` project mode.  Full chapter source is fetched on
+ * demand by the host via `onChapterSelect`.
+ */
+export interface ChapterSummary {
+  /** Stable identifier for this chapter (e.g. a Rails record id or UUID). */
+  id: string;
+  /** Plain-text chapter title displayed in the TOC. */
+  title: string;
+  /** Optional `xml:id` attribute from the PreTeXt source. */
+  xmlId?: string;
+}
+
+/**
  * The result of splitting a PreTeXt document into its top-level sections.
  */
 export interface DocumentSplitResult {
