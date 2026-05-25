@@ -164,6 +164,13 @@ export interface editorProps {
    * the `source` and `currentChapterId` props accordingly.
    */
   onChapterSelect?: (chapterId: string) => void;
+  /**
+   * Called when the user drags chapters into a new order.
+   * Receives the full reordered `ChapterSummary[]`; the host is responsible
+   * for persisting the new order (e.g., via a Rails PATCH request).
+   * When omitted, chapter drag handles are hidden.
+   */
+  onChaptersReorder?: (chapters: ChapterSummary[]) => void;
 }
 
 /**
@@ -483,6 +490,7 @@ const Editors = (props: editorProps) => {
       chapters={props.chapters}
       currentChapterId={props.currentChapterId}
       onChapterSelect={props.onChapterSelect}
+      onChaptersReorder={props.onChaptersReorder}
     />
   );
 

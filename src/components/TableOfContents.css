@@ -432,6 +432,25 @@
   padding: 0 6px 0 2px;
 }
 
+/* Chapter drag handle — shares base styles with section drag handle */
+.pretext-plus-editor__toc-chapter-drag-handle {
+  font-size: 1rem;
+  color: #bbb;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0 2px;
+  -webkit-user-drag: element;
+}
+
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-drag-handle {
+  color: #888;
+}
+
+.pretext-plus-editor__toc-chapter-drag-handle:active {
+  cursor: grabbing;
+}
+
 .pretext-plus-editor__toc-chapter-expand {
   font-size: 0.72rem;
   color: #999;

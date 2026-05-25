@@ -137,6 +137,7 @@ function App() {
     "article",
   );
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
+  const [bookChapterList, setBookChapterList] = useState<ChapterSummary[]>(bookChapters);
 
   const loadPretextDemo = () => {
     setSource(defaultContent);
@@ -256,10 +257,15 @@ function App() {
         onSectionsChange={handleSectionsChange}
         onSectionChange={handleSectionChange}
         projectType={projectType}
-        chapters={projectType === "book" ? bookChapters : undefined}
+        chapters={projectType === "book" ? bookChapterList : undefined}
         currentChapterId={projectType === "book" ? currentChapterId : undefined}
         onChapterSelect={
           projectType === "book" ? handleChapterSelect : undefined
+        }
+        onChaptersReorder={
+          projectType === "book"
+            ? (reordered) => setBookChapterList(reordered)
+            : undefined
         }
       />
     </>
