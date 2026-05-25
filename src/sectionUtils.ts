@@ -101,10 +101,15 @@ function trimBoundaryBlankLines(value: string): string {
  * If the document contains no splittable children a single synthetic section
  * is created that wraps all body content.
  */
-/** PreTeXt document-level element names that can act as the XML root. */
+/** PreTeXt document-level element names that can act as the XML root.
+ *  Includes `"chapter"` so that individual chapters (stored as
+ *  `<chapter>…</chapter>` in book-mode projects) are split at the
+ *  `<section>` level just like articles are.
+ */
 const DOCUMENT_ROOT_TAGS: ReadonlySet<string> = new Set([
   "article",
   "book",
+  "chapter",
   "letter",
   "memo",
   "slideshow",

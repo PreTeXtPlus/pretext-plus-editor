@@ -129,10 +129,14 @@ export function useSectionedEditing({
 
   useEffect(() => {
     if (supportsSectioned) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSections([]);
+     
     setDocumentWrapper("");
+     
     setCurrentSectionId(null);
     pendingNavTitle.current = null;
+     
     setInternalEditMode("document");
   }, [supportsSectioned]);
 
@@ -163,9 +167,9 @@ export function useSectionedEditing({
         sourceFormat === "latex"
           ? splitLatexDocument(toSplit)
           : splitDocument(toSplit);
-      setDocumentWrapper(wrapper);
-      setSections(split);
-      setCurrentSectionId(split[0]?.id ?? null);
+      setDocumentWrapper(wrapper); // eslint-disable-line react-hooks/set-state-in-effect
+      setSections(split);  
+      setCurrentSectionId(split[0]?.id ?? null);  
     } catch {
       // ignore parse errors; TOC will be empty
     }
@@ -195,27 +199,27 @@ export function useSectionedEditing({
         ? sourceContent
         : contentState.pretextSource ?? "";
     if (!toSplit.trim()) {
-      setSections([]);
-      setDocumentWrapper("");
-      setCurrentSectionId(null);
+      setSections([]); // eslint-disable-line react-hooks/set-state-in-effect
+      setDocumentWrapper("");  
+      setCurrentSectionId(null);  
     } else {
       try {
         const { wrapper, sections: split } =
           sourceFormat === "latex"
             ? splitLatexDocument(toSplit)
             : splitDocument(toSplit);
-        setDocumentWrapper(wrapper);
-        setSections(split);
-        setCurrentSectionId(split[0]?.id ?? null);
+        setDocumentWrapper(wrapper);  
+        setSections(split);  
+        setCurrentSectionId(split[0]?.id ?? null);  
         onSectionsChange?.(split);
       } catch {
-        setSections([]);
-        setDocumentWrapper("");
-        setCurrentSectionId(null);
+        setSections([]);  
+        setDocumentWrapper("");  
+        setCurrentSectionId(null);  
       }
     }
     // Switch back to document mode so the user starts fresh on the new chapter.
-    setInternalEditMode("document");
+    setInternalEditMode("document");  
     onEditModeChange?.("document");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterKey]); // only fire when the chapter changes
