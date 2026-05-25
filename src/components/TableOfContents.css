@@ -531,14 +531,30 @@
 }
 
 
-/* ── Add section menu ────────────────────────────────── */
-.pretext-plus-editor__toc-add-menu {
+/* ── Add section inline item ─────────────────────────── */
+.pretext-plus-editor__toc-add-item {
+  list-style: none;
   position: relative;
-  width: 100%;
 }
 
-.pretext-plus-editor__toc-add-menu-trigger {
+.pretext-plus-editor__toc-add-item-trigger {
+  display: block;
   width: 100%;
+  padding: 4px 8px 4px 16px;
+  background: none;
+  border: none;
+  border-top: 1px dashed #ccd0d8;
+  font: inherit;
+  font-size: 0.78rem;
+  color: #aaa;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pretext-plus-editor__toc-add-item-trigger:hover {
+  color: #2563eb;
+  background: #f0f4ff;
 }
 
 .pretext-plus-editor__toc-add-menu-popup {

@@ -367,9 +367,9 @@ const SortableItem = ({
 };
 
 // ---------------------------------------------------------------------------
-// AddSectionMenu — single "+" button with a context-aware popover
+// AddSectionItem — inline list item that opens a context-aware add menu
 // ---------------------------------------------------------------------------
-interface AddSectionMenuProps {
+interface AddSectionItemProps {
   hasIntroduction: boolean;
   hasConclusion: boolean;
   onAddSection: () => void;
@@ -377,15 +377,15 @@ interface AddSectionMenuProps {
   onAddConclusion: () => void;
 }
 
-const AddSectionMenu = ({
+const AddSectionItem = ({
   hasIntroduction,
   hasConclusion,
   onAddSection,
   onAddIntroduction,
   onAddConclusion,
-}: AddSectionMenuProps) => {
+}: AddSectionItemProps) => {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -414,16 +414,16 @@ const AddSectionMenu = ({
   };
 
   return (
-    <div ref={containerRef} className="pretext-plus-editor__toc-add-menu">
+    <li ref={containerRef} className="pretext-plus-editor__toc-add-item">
       <button
         type="button"
-        className="pretext-plus-editor__toc-footer-btn pretext-plus-editor__toc-add-menu-trigger"
+        className="pretext-plus-editor__toc-add-item-trigger"
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="true"
         aria-expanded={open}
         title="Add section"
       >
-        + Add
+        + add...
       </button>
       {open && (
         <div className="pretext-plus-editor__toc-add-menu-popup">
@@ -454,7 +454,7 @@ const AddSectionMenu = ({
           )}
         </div>
       )}
-    </div>
+    </li>
   );
 };
 
@@ -902,9 +902,17 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     isBeingDragged={activeChapterId === ch.id}
                     onSelect={() => {
                       onChapterSelect?.(ch.id);
-                      // If we're drilling into a section, clicking the chapter
-                      // header switches back to whole-chapter (document) mode.
-                      if (editMode === "sectioned") onToggleEditMode();
+                      // Clicking the same chapter while in a section → go back
+                      // to whole-chapter (document) mode.
+                      // Clicking a *different* chapter: the chapterKey effect in
+                      // useSectionedEditing handles the mode reset automatically.
+                      // Calling onToggleEditMode here for a chapter switch would
+                      // merge stale sections and overwrite the incoming source.
+                      if (
+                        ch.id === currentChapterId &&
+                        editMode === "sectioned"
+                      )
+                        onToggleEditMode();
                     }}
                   >
                     {/* Sections nested beneath the active chapter */}
@@ -939,7 +947,18 @@ const TableOfContents = (props: TableOfContentsProps) => {
                               )}
                             </li>
                           ) : (
-                            items
+                            <>
+                              {items}
+                              {!readonly && (
+                                <AddSectionItem
+                                  hasIntroduction={hasIntroduction}
+                                  hasConclusion={hasConclusion}
+                                  onAddSection={() => onAddSection(null)}
+                                  onAddIntroduction={onAddIntroduction}
+                                  onAddConclusion={onAddConclusion}
+                                />
+                              )}
+                            </>
                           )}
                         </ul>
                       </SortableContext>
@@ -957,17 +976,6 @@ const TableOfContents = (props: TableOfContentsProps) => {
                       </DragOverlay>
                     </DndContext>
 
-                    {!readonly && sections.length > 0 && (
-                      <div className="pretext-plus-editor__toc-footer pretext-plus-editor__toc-footer--nested">
-                        <AddSectionMenu
-                          hasIntroduction={hasIntroduction}
-                          hasConclusion={hasConclusion}
-                          onAddSection={() => onAddSection(null)}
-                          onAddIntroduction={onAddIntroduction}
-                          onAddConclusion={onAddConclusion}
-                        />
-                      </div>
-                    )}
                   </ChapterItem>
                 );
               })}
@@ -1021,7 +1029,18 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     )}
                   </li>
                 ) : (
-                  items
+                  <>
+                    {items}
+                    {!readonly && (
+                      <AddSectionItem
+                        hasIntroduction={hasIntroduction}
+                        hasConclusion={hasConclusion}
+                        onAddSection={() => onAddSection(null)}
+                        onAddIntroduction={onAddIntroduction}
+                        onAddConclusion={onAddConclusion}
+                      />
+                    )}
+                  </>
                 )}
               </ul>
             </SortableContext>
@@ -1039,17 +1058,6 @@ const TableOfContents = (props: TableOfContentsProps) => {
             </DragOverlay>
           </DndContext>
 
-          {!readonly && sections.length > 0 && (
-            <div className="pretext-plus-editor__toc-footer">
-              <AddSectionMenu
-                hasIntroduction={hasIntroduction}
-                hasConclusion={hasConclusion}
-                onAddSection={() => onAddSection(null)}
-                onAddIntroduction={onAddIntroduction}
-                onAddConclusion={onAddConclusion}
-              />
-            </div>
-          )}
         </>
       )}
     </div>
