@@ -319,6 +319,24 @@ const Editors = (props: editorProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  // Auto-select the first chapter when a book is loaded with no chapter active.
+  const {
+    projectType: _projectType,
+    chapters: _chapters,
+    currentChapterId: _currentChapterId,
+    onChapterSelect: _onChapterSelect,
+  } = props;
+  useEffect(() => {
+    if (
+      _projectType === "book" &&
+      _chapters?.length &&
+      !_currentChapterId &&
+      _onChapterSelect
+    ) {
+      _onChapterSelect(_chapters[0].id);
+    }
+  }, [_projectType, _chapters, _currentChapterId, _onChapterSelect]);
+
   // ── Derived preview content ────────────────────────────────────────────────
   /** In sectioned mode, preview uses the current section; otherwise full doc. */
   const previewContent = (() => {

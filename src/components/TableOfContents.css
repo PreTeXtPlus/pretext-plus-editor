@@ -531,11 +531,48 @@
 }
 
 
-/* ── Footer ──────────────────────────────────────────── */
-.pretext-plus-editor__toc-footer {
+/* ── Add section menu ────────────────────────────────── */
+.pretext-plus-editor__toc-add-menu {
+  position: relative;
+  width: 100%;
+}
+
+.pretext-plus-editor__toc-add-menu-trigger {
+  width: 100%;
+}
+
+.pretext-plus-editor__toc-add-menu-popup {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 100;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-add-menu-item {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  color: #333;
+}
+
+.pretext-plus-editor__toc-add-menu-item:hover {
+  background: #e0e8ff;
+  color: #2563eb;
+}
+
+.pretext-plus-editor__toc-footer {
   padding: 8px;
   border-top: 1px solid #dde0e6;
   flex-shrink: 0;

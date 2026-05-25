@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -363,6 +363,98 @@ const SortableItem = ({
         </div>
       )}
     </li>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// AddSectionMenu — single "+" button with a context-aware popover
+// ---------------------------------------------------------------------------
+interface AddSectionMenuProps {
+  hasIntroduction: boolean;
+  hasConclusion: boolean;
+  onAddSection: () => void;
+  onAddIntroduction: () => void;
+  onAddConclusion: () => void;
+}
+
+const AddSectionMenu = ({
+  hasIntroduction,
+  hasConclusion,
+  onAddSection,
+  onAddIntroduction,
+  onAddConclusion,
+}: AddSectionMenuProps) => {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const pick = (fn: () => void) => {
+    fn();
+    setOpen(false);
+  };
+
+  return (
+    <div ref={containerRef} className="pretext-plus-editor__toc-add-menu">
+      <button
+        type="button"
+        className="pretext-plus-editor__toc-footer-btn pretext-plus-editor__toc-add-menu-trigger"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="true"
+        aria-expanded={open}
+        title="Add section"
+      >
+        + Add
+      </button>
+      {open && (
+        <div className="pretext-plus-editor__toc-add-menu-popup">
+          {!hasIntroduction && (
+            <button
+              type="button"
+              className="pretext-plus-editor__toc-add-menu-item"
+              onClick={() => pick(onAddIntroduction)}
+            >
+              Introduction
+            </button>
+          )}
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-add-menu-item"
+            onClick={() => pick(onAddSection)}
+          >
+            Section
+          </button>
+          {!hasConclusion && (
+            <button
+              type="button"
+              className="pretext-plus-editor__toc-add-menu-item"
+              onClick={() => pick(onAddConclusion)}
+            >
+              Conclusion
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 };
 
@@ -773,19 +865,15 @@ const TableOfContents = (props: TableOfContentsProps) => {
         </div>
       </div>
 
-      {/* "Edit full chapter/document" link — only shown in section editing mode */}
-      {editMode === "sectioned" && (
+      {/* "Edit full document" link — shown in article mode when in section editing */}
+      {editMode === "sectioned" && projectType !== "book" && (
         <button
           type="button"
           className="pretext-plus-editor__toc-fulldoc-link"
           onClick={onToggleEditMode}
-          title={
-            projectType === "book"
-              ? "Switch to full chapter editing"
-              : "Switch to full document editing"
-          }
+          title="Switch to full document editing"
         >
-          {projectType === "book" ? "← Edit full chapter" : "← Edit full document"}
+          ← Edit full document
         </button>
       )}
 
@@ -812,7 +900,12 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     isExpanded={isActive}
                     canReorder={!!onChaptersReorder}
                     isBeingDragged={activeChapterId === ch.id}
-                    onSelect={() => onChapterSelect?.(ch.id)}
+                    onSelect={() => {
+                      onChapterSelect?.(ch.id);
+                      // If we're drilling into a section, clicking the chapter
+                      // header switches back to whole-chapter (document) mode.
+                      if (editMode === "sectioned") onToggleEditMode();
+                    }}
                   >
                     {/* Sections nested beneath the active chapter */}
                     <DndContext
@@ -866,31 +959,13 @@ const TableOfContents = (props: TableOfContentsProps) => {
 
                     {!readonly && sections.length > 0 && (
                       <div className="pretext-plus-editor__toc-footer pretext-plus-editor__toc-footer--nested">
-                        {!hasIntroduction && (
-                          <button
-                            type="button"
-                            className="pretext-plus-editor__toc-footer-btn"
-                            onClick={onAddIntroduction}
-                          >
-                            + Introduction
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className="pretext-plus-editor__toc-footer-btn"
-                          onClick={() => onAddSection(null)}
-                        >
-                          + Section
-                        </button>
-                        {!hasConclusion && (
-                          <button
-                            type="button"
-                            className="pretext-plus-editor__toc-footer-btn"
-                            onClick={onAddConclusion}
-                          >
-                            + Conclusion
-                          </button>
-                        )}
+                        <AddSectionMenu
+                          hasIntroduction={hasIntroduction}
+                          hasConclusion={hasConclusion}
+                          onAddSection={() => onAddSection(null)}
+                          onAddIntroduction={onAddIntroduction}
+                          onAddConclusion={onAddConclusion}
+                        />
                       </div>
                     )}
                   </ChapterItem>
@@ -966,31 +1041,13 @@ const TableOfContents = (props: TableOfContentsProps) => {
 
           {!readonly && sections.length > 0 && (
             <div className="pretext-plus-editor__toc-footer">
-              {!hasIntroduction && (
-                <button
-                  type="button"
-                  className="pretext-plus-editor__toc-footer-btn"
-                  onClick={onAddIntroduction}
-                >
-                  + Introduction
-                </button>
-              )}
-              <button
-                type="button"
-                className="pretext-plus-editor__toc-footer-btn"
-                onClick={() => onAddSection(null)}
-              >
-                + Section
-              </button>
-              {!hasConclusion && (
-                <button
-                  type="button"
-                  className="pretext-plus-editor__toc-footer-btn"
-                  onClick={onAddConclusion}
-                >
-                  + Conclusion
-                </button>
-              )}
+              <AddSectionMenu
+                hasIntroduction={hasIntroduction}
+                hasConclusion={hasConclusion}
+                onAddSection={() => onAddSection(null)}
+                onAddIntroduction={onAddIntroduction}
+                onAddConclusion={onAddConclusion}
+              />
             </div>
           )}
         </>
