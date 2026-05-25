@@ -413,23 +413,36 @@
 }
 
 /* ── Chapter list (book mode) ────────────────────────── */
-.pretext-plus-editor__toc-chapter-list {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0;
-  border-bottom: 1px solid #dde0e6;
-  flex-shrink: 0;
-  overflow-y: auto;
-  max-height: 50%;
-}
 
-.pretext-plus-editor__toc-chapter {
+/* Chapter items live in the main toc-list; no separate list needed */
+.pretext-plus-editor__toc-chapter-item {
   display: flex;
+  flex-direction: column;
   border-left: 3px solid transparent;
 }
 
-.pretext-plus-editor__toc-chapter--active {
+.pretext-plus-editor__toc-chapter-item--active {
   border-left-color: #7c3aed;
+}
+
+.pretext-plus-editor__toc-chapter-row {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 6px 0 2px;
+}
+
+.pretext-plus-editor__toc-chapter-expand {
+  font-size: 0.72rem;
+  color: #999;
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-expand {
+  color: #7c3aed;
 }
 
 .pretext-plus-editor__toc-chapter-btn {
@@ -444,16 +457,22 @@
   text-align: left;
   font: inherit;
   color: #333;
-  padding: 5px 6px 5px 4px;
-  min-height: 32px;
+  padding: 5px 4px 5px 0;
 }
 
-.pretext-plus-editor__toc-chapter:hover .pretext-plus-editor__toc-chapter-btn {
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-btn {
+  color: #111;
+}
+
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-row {
   background: #e8eaf0;
 }
 
-.pretext-plus-editor__toc-chapter--active .pretext-plus-editor__toc-chapter-btn {
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-row {
   background: #f3e8ff;
+}
+
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-btn {
   font-weight: 600;
 }
 
@@ -461,15 +480,22 @@
   background: #7c3aed;
 }
 
-/* ── Sections sublabel (book mode) ───────────────────── */
-.pretext-plus-editor__toc-sections-label {
-  font-size: 0.68rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #888;
-  padding: 5px 10px 3px;
-  flex-shrink: 0;
+/* ── Nested sections under active chapter ───────────── */
+.pretext-plus-editor__toc-chapter-sections {
+  border-left: 2px solid #e0d4f7;
+  margin-left: 20px;
+}
+
+/* Slightly tighter section items when nested */
+.pretext-plus-editor__toc-chapter-sections .pretext-plus-editor__toc-item-row {
+  min-height: 28px;
+}
+
+/* Nested footer buttons */
+.pretext-plus-editor__toc-footer--nested {
+  margin-left: 20px;
+  border-left: 2px solid #e0d4f7;
+  border-top: 1px solid #dde0e6;
 }
 
 

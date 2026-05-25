@@ -364,32 +364,54 @@ const SortableItem = ({
 interface ChapterItemProps {
   chapter: ChapterSummary;
   isActive: boolean;
+  isExpanded: boolean;
   onSelect: () => void;
+  children?: React.ReactNode;
 }
 
-const ChapterItem = ({ chapter, isActive, onSelect }: ChapterItemProps) => (
+const ChapterItem = ({
+  chapter,
+  isActive,
+  isExpanded,
+  onSelect,
+  children,
+}: ChapterItemProps) => (
   <li
     className={[
-      "pretext-plus-editor__toc-chapter",
-      isActive ? "pretext-plus-editor__toc-chapter--active" : "",
+      "pretext-plus-editor__toc-chapter-item",
+      isActive ? "pretext-plus-editor__toc-chapter-item--active" : "",
     ]
       .filter(Boolean)
       .join(" ")}
   >
-    <button
-      type="button"
-      className="pretext-plus-editor__toc-chapter-btn"
-      onClick={onSelect}
-      aria-current={isActive ? "true" : undefined}
-      title={`Edit chapter: ${chapter.title}`}
-    >
-      <span className="pretext-plus-editor__toc-type-badge pretext-plus-editor__toc-type-badge--chapter">
-        Ch
+    <div className="pretext-plus-editor__toc-chapter-row">
+      <span
+        className="pretext-plus-editor__toc-chapter-expand"
+        aria-hidden="true"
+      >
+        {isExpanded ? "▾" : "›"}
       </span>
-      <span className="pretext-plus-editor__toc-title">
-        {chapter.title || <em>Untitled chapter</em>}
-      </span>
-    </button>
+      <button
+        type="button"
+        className="pretext-plus-editor__toc-chapter-btn"
+        onClick={onSelect}
+        aria-current={isActive ? "true" : undefined}
+        aria-expanded={isExpanded}
+        title={isActive ? `Chapter loaded: ${chapter.title}` : `Load chapter: ${chapter.title}`}
+      >
+        <span className="pretext-plus-editor__toc-type-badge pretext-plus-editor__toc-type-badge--chapter">
+          Ch
+        </span>
+        <span className="pretext-plus-editor__toc-title">
+          {chapter.title || <em>Untitled chapter</em>}
+        </span>
+      </button>
+    </div>
+    {isExpanded && children && (
+      <div className="pretext-plus-editor__toc-chapter-sections">
+        {children}
+      </div>
+    )}
   </li>
 );
 
@@ -714,30 +736,105 @@ const TableOfContents = (props: TableOfContentsProps) => {
         </button>
       )}
 
-      {/* Book chapter list */}
-      {projectType === "book" && chapters.length > 0 && (
-        <ul className="pretext-plus-editor__toc-chapter-list" role="list">
-          {chapters.map((ch) => (
-            <ChapterItem
-              key={ch.id}
-              chapter={ch}
-              isActive={ch.id === currentChapterId}
-              onSelect={() => onChapterSelect?.(ch.id)}
-            />
-          ))}
+      {/* ── Book mode: unified tree ── */}
+      {projectType === "book" && chapters.length > 0 ? (
+        <ul className="pretext-plus-editor__toc-list" role="list">
+          {chapters.map((ch) => {
+            const isActive = ch.id === currentChapterId;
+            return (
+              <ChapterItem
+                key={ch.id}
+                chapter={ch}
+                isActive={isActive}
+                isExpanded={isActive}
+                onSelect={() => onChapterSelect?.(ch.id)}
+              >
+                {/* Sections nested beneath the active chapter */}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragStart={handleDragStart}
+                  onDragMove={handleDragMove}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={clearDragState}
+                >
+                  <SortableContext
+                    items={sections.map((s) => s.id)}
+                    strategy={() => null}
+                  >
+                    <ul
+                      className="pretext-plus-editor__toc-section-children"
+                      role="group"
+                    >
+                      {sections.length === 0 ? (
+                        <li className="pretext-plus-editor__toc-no-sections">
+                          <span>No sections</span>
+                          {onAddFirstSection && (
+                            <button
+                              type="button"
+                              className="pretext-plus-editor__toc-footer-btn"
+                              onClick={onAddFirstSection}
+                              title="Wrap the document content in a section to enable section editing"
+                            >
+                              + Create sections
+                            </button>
+                          )}
+                        </li>
+                      ) : (
+                        items
+                      )}
+                    </ul>
+                  </SortableContext>
+                  <DragOverlay>
+                    {activeSection && (
+                      <div className="pretext-plus-editor__toc-drag-overlay">
+                        <span className="pretext-plus-editor__toc-drag-overlay-badge">
+                          {activeSection.type}
+                        </span>
+                        <span className="pretext-plus-editor__toc-drag-overlay-title">
+                          {activeSection.title || "Untitled"}
+                        </span>
+                      </div>
+                    )}
+                  </DragOverlay>
+                </DndContext>
+
+                {!readonly && sections.length > 0 && (
+                  <div className="pretext-plus-editor__toc-footer pretext-plus-editor__toc-footer--nested">
+                    {!hasIntroduction && (
+                      <button
+                        type="button"
+                        className="pretext-plus-editor__toc-footer-btn"
+                        onClick={onAddIntroduction}
+                      >
+                        + Introduction
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="pretext-plus-editor__toc-footer-btn"
+                      onClick={() => onAddSection(null)}
+                    >
+                      + Section
+                    </button>
+                    {!hasConclusion && (
+                      <button
+                        type="button"
+                        className="pretext-plus-editor__toc-footer-btn"
+                        onClick={onAddConclusion}
+                      >
+                        + Conclusion
+                      </button>
+                    )}
+                  </div>
+                )}
+              </ChapterItem>
+            );
+          })}
         </ul>
-      )}
-
-      {/* Sections area — shown only when there are sections (or a chapter is loaded in book mode) */}
-      {(projectType !== "book" || currentChapterId != null) && (
+      ) : (
+        /* ── Article mode (or book with no chapters): flat section list ── */
         <>
-          {/* Divider label in book mode */}
-          {projectType === "book" && (
-            <div className="pretext-plus-editor__toc-sections-label">
-              Sections
-            </div>
-          )}
-
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
