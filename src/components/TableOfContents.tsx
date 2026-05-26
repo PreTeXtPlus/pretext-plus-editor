@@ -901,18 +901,18 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     canReorder={!!onChaptersReorder}
                     isBeingDragged={activeChapterId === ch.id}
                     onSelect={() => {
-                      onChapterSelect?.(ch.id);
                       // Clicking the same chapter while in a section → go back
                       // to whole-chapter (document) mode.
                       // Clicking a *different* chapter: the chapterKey effect in
                       // useSectionedEditing handles the mode reset automatically.
                       // Calling onToggleEditMode here for a chapter switch would
                       // merge stale sections and overwrite the incoming source.
-                      if (
-                        ch.id === currentChapterId &&
-                        editMode === "sectioned"
-                      )
-                        onToggleEditMode();
+                      if (ch.id === currentChapterId) {
+                        if (editMode === "sectioned") onToggleEditMode();
+                        return;
+                      }
+
+                      onChapterSelect?.(ch.id);
                     }}
                   >
                     {/* Sections nested beneath the active chapter */}
