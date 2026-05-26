@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -8,6 +8,7 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import {
@@ -15,6 +16,7 @@ import {
   arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
+import { mergeDocument } from "../../sectionUtils";
 import type {
   DocumentChapter,
   DocumentSection,
@@ -42,6 +44,8 @@ export interface BookTocProps {
       label?: string | null;
     },
   ) => void;
+  /** Reorder sections within the currently-active chapter. */
+  onReorderSections: (sections: DocumentSection[]) => void;
   onAddFirstSection?: () => void;
   editMode: "document" | "sectioned";
   onToggleEditMode: () => void;
@@ -50,49 +54,44 @@ export interface BookTocProps {
   currentChapterId: string | null | undefined;
   onChapterSelect?: (chapterId: string) => void;
   onChaptersReorder?: (chapters: DocumentChapter[]) => void;
-  /** Ids of chapters currently expanded.  Provided by `useBookChapters`. */
   expandedChapterIds: Set<string>;
-  /** Toggle a chapter's expanded state. */
   onToggleChapterExpanded: (chapterId: string) => void;
-  /**
-   * Parsed `{sections, wrapper}` for a non-active chapter, or `null` when
-   * the chapter hasn't been loaded yet.  Used to render section lists for
-   * chapters other than the currently active one.
-   */
   getChapterParse: (chapterId: string) => ChapterParseResult | null;
-  /**
-   * Called when a chapter is expanded for the first time and its content
-   * has not yet been fetched.  The host is expected to load the content
-   * and update the `chapters` array with `content` populated.
-   */
   onChapterRequestLoad?: (chapterId: string) => void;
-  /**
-   * Called when the user clicks the "+ Add chapter" row.  The host
-   * creates a new chapter record and appends it to `chapters`.
-   * `afterChapterId` is the chapter the new one should be inserted
-   * after, or `null` for "at the end."
-   */
   onChapterAdd?: (afterChapterId: string | null) => void;
-  /**
-   * Called when the user removes a chapter (×).  When omitted, the
-   * remove button is hidden.
-   */
   onChapterRemove?: (chapterId: string) => void;
+  /**
+   * Persist a chapter's updated content back to the host.  Required for
+   * cross-chapter section drag-and-drop to work; without it, drops between
+   * chapters are rejected.
+   */
+  onChapterContentChange?: (chapterId: string, content: string) => void;
+}
+
+interface DropTarget {
+  sectionId: string;
+  position: "before" | "after";
 }
 
 /**
- * Book-mode TOC body.  Renders a unified chapter tree where each chapter
- * can be independently expanded (via its chevron) to show its section list.
+ * Book-mode TOC body with unified drag-and-drop.
  *
- *   - The **active** chapter's sections come from `useSectionedEditing`
- *     and are fully editable / dnd-orderable within the chapter.
- *   - **Non-active expanded** chapters render their parsed sections from
- *     `useBookChapters` in a read-only list (drag handles re-enabled in
- *     Phase 4 for cross-chapter section moves).
+ * A single `DndContext` wraps both the chapter sortable and the per-chapter
+ * section sortables, so a drag can begin inside one chapter's section list
+ * and end inside another.  Section ids are globally unique, so we
+ * distinguish chapter vs section drags by id membership in `chapters`.
  *
- * Lazy load: expanding a chapter whose `content` is `undefined` fires
- * `onChapterRequestLoad`; until the content arrives a "Loading…" line
- * is shown.
+ * For section drops:
+ *   - same chapter, source = active: route through `onReorderSections`.
+ *   - same chapter, source = non-active: re-merge the chapter and emit
+ *     `onChapterContentChange`.
+ *   - cross-chapter: remove from source, splice into target, emit content
+ *     changes for both (route the active side through `onReorderSections`
+ *     so the live editor state stays in sync).
+ *
+ * The merge-into-section gesture (700 ms hover) is intentionally omitted
+ * here — cross-chapter merge would be confusing and the existing article
+ * flow doesn't apply.  Intra-chapter merge can be added back later.
  */
 const BookToc = ({
   sections,
@@ -103,6 +102,7 @@ const BookToc = ({
   onAddConclusion,
   onRemoveSection,
   onUpdateSection,
+  onReorderSections,
   onAddFirstSection,
   editMode,
   onToggleEditMode,
@@ -117,9 +117,13 @@ const BookToc = ({
   onChapterRequestLoad,
   onChapterAdd,
   onChapterRemove,
+  onChapterContentChange,
 }: BookTocProps) => {
   const edit = useSectionEdit();
-  const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
+
+  const [draggedChapterId, setDraggedChapterId] = useState<string | null>(null);
+  const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -130,32 +134,52 @@ const BookToc = ({
 
   const isLatex = sections.some((s) => !s.content.trimStart().startsWith("<"));
 
-  const handleRemove = (section: DocumentSection) => {
+  // ── Per-chapter section views ───────────────────────────────────────────
+  // For each expanded chapter, the sections currently displayed.  For the
+  // active chapter, these come from props (i.e. useSectionedEditing).  For
+  // non-active chapters, they come from the parsed map.
+  const chapterSectionsById = useMemo(() => {
+    const map = new Map<string, DocumentSection[]>();
+    for (const ch of chapters) {
+      if (!expandedChapterIds.has(ch.id)) continue;
+      if (ch.id === currentChapterId) {
+        map.set(ch.id, sections);
+      } else {
+        const parsed = getChapterParse(ch.id);
+        if (parsed) map.set(ch.id, parsed.sections);
+      }
+    }
+    return map;
+  }, [chapters, expandedChapterIds, currentChapterId, sections, getChapterParse]);
+
+  // Reverse index for hit-testing during drag: section id → chapter id.
+  const sectionToChapter = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [chapterId, secs] of chapterSectionsById.entries()) {
+      for (const s of secs) map.set(s.id, chapterId);
+    }
+    return map;
+  }, [chapterSectionsById]);
+
+  const chapterIdSet = useMemo(
+    () => new Set(chapters.map((c) => c.id)),
+    [chapters],
+  );
+
+  // Cached snapshot of the section being dragged so the overlay can render
+  // it even if the source list shifts during the drag.
+  const [draggedSection, setDraggedSection] = useState<DocumentSection | null>(
+    null,
+  );
+
+  // ── Handlers ────────────────────────────────────────────────────────────
+
+  const handleRemoveSectionWithConfirm = (section: DocumentSection) => {
     if (window.confirm(`Remove "${section.title}"? This cannot be undone.`)) {
       onRemoveSection(section.id);
     }
   };
 
-  const handleChapterDragStart = (event: DragStartEvent) => {
-    setActiveChapterId(event.active.id as string);
-  };
-
-  const handleChapterDragEnd = (event: DragEndEvent) => {
-    setActiveChapterId(null);
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const oldIndex = chapters.findIndex((ch) => ch.id === active.id);
-    const newIndex = chapters.findIndex((ch) => ch.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-    onChaptersReorder?.(arrayMove(chapters, oldIndex, newIndex));
-  };
-
-  /**
-   * Toggle expansion for `ch`.  If we're expanding a chapter whose content
-   * hasn't been loaded yet, fire `onChapterRequestLoad` so the host can
-   * fetch it.  The host is expected to update `chapters[i].content` once
-   * the fetch resolves; the section list then renders automatically.
-   */
   const toggleExpanded = (ch: DocumentChapter) => {
     const willExpand = !expandedChapterIds.has(ch.id);
     onToggleChapterExpanded(ch.id);
@@ -175,12 +199,159 @@ const BookToc = ({
     }
   };
 
+  // ── DnD: shared start/move/end ──────────────────────────────────────────
+
+  const clearDragState = () => {
+    setDraggedChapterId(null);
+    setDraggedSectionId(null);
+    setDropTarget(null);
+    setDraggedSection(null);
+  };
+
+  const handleDragStart = (event: DragStartEvent) => {
+    edit.cancelEdit();
+    const id = event.active.id as string;
+    if (chapterIdSet.has(id)) {
+      setDraggedChapterId(id);
+      return;
+    }
+    const chapterOfSection = sectionToChapter.get(id);
+    if (chapterOfSection) {
+      const sec = chapterSectionsById
+        .get(chapterOfSection)
+        ?.find((s) => s.id === id);
+      setDraggedSection(sec ?? null);
+      setDraggedSectionId(id);
+    }
+  };
+
+  const handleDragMove = (event: DragMoveEvent) => {
+    if (!draggedSectionId) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setDropTarget(null);
+      return;
+    }
+    // Only update drop indicator when over a section (not a chapter row).
+    if (!sectionToChapter.has(over.id as string)) {
+      setDropTarget(null);
+      return;
+    }
+    const activeRect = active.rect.current.translated;
+    if (!activeRect) return;
+    const activeCenter = activeRect.top + activeRect.height / 2;
+    const overCenter = over.rect.top + over.rect.height / 2;
+    setDropTarget({
+      sectionId: over.id as string,
+      position: activeCenter < overCenter ? "before" : "after",
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const wasChapter = draggedChapterId;
+    const wasSection = draggedSectionId;
+    const wasDropTarget = dropTarget;
+    const wasDraggedSection = draggedSection;
+    clearDragState();
+
+    const { active, over } = event;
+
+    // ── Chapter reorder ──
+    if (wasChapter) {
+      if (!over || active.id === over.id) return;
+      if (!chapterIdSet.has(over.id as string)) return;
+      const oldIndex = chapters.findIndex((ch) => ch.id === active.id);
+      const newIndex = chapters.findIndex((ch) => ch.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return;
+      onChaptersReorder?.(arrayMove(chapters, oldIndex, newIndex));
+      return;
+    }
+
+    // ── Section drag ──
+    if (!wasSection || !wasDraggedSection || !wasDropTarget) return;
+    if (!over) return;
+
+    const sourceChapterId = sectionToChapter.get(wasSection);
+    const targetChapterId = sectionToChapter.get(wasDropTarget.sectionId);
+    if (!sourceChapterId || !targetChapterId) return;
+
+    const sourceSections = chapterSectionsById.get(sourceChapterId) ?? [];
+    const targetSections = chapterSectionsById.get(targetChapterId) ?? [];
+
+    if (sourceChapterId === targetChapterId) {
+      const without = sourceSections.filter((s) => s.id !== wasSection);
+      const targetIdx = without.findIndex(
+        (s) => s.id === wasDropTarget.sectionId,
+      );
+      if (targetIdx === -1) return;
+      const insertAt =
+        wasDropTarget.position === "before" ? targetIdx : targetIdx + 1;
+      const next = [
+        ...without.slice(0, insertAt),
+        wasDraggedSection,
+        ...without.slice(insertAt),
+      ];
+      if (!validateInvariant(next)) return;
+      commitChapterSections(sourceChapterId, next);
+      return;
+    }
+
+    // Cross-chapter move.  We need a way to persist the non-active side;
+    // bail if the host hasn't supplied `onChapterContentChange`.
+    if (!onChapterContentChange) return;
+
+    const newSource = sourceSections.filter((s) => s.id !== wasSection);
+    if (!validateInvariant(newSource)) return;
+
+    const targetWithout = targetSections.filter((s) => s.id !== wasSection);
+    const targetIdx = targetWithout.findIndex(
+      (s) => s.id === wasDropTarget.sectionId,
+    );
+    if (targetIdx === -1) return;
+    const insertAt =
+      wasDropTarget.position === "before" ? targetIdx : targetIdx + 1;
+    const newTarget = [
+      ...targetWithout.slice(0, insertAt),
+      wasDraggedSection,
+      ...targetWithout.slice(insertAt),
+    ];
+    if (!validateInvariant(newTarget)) return;
+
+    commitChapterSections(sourceChapterId, newSource);
+    commitChapterSections(targetChapterId, newTarget);
+  };
+
+  /**
+   * Persist a chapter's new section ordering.  Uses the live editor state
+   * (`onReorderSections`) for the active chapter so the open editor pane
+   * stays in sync; uses the `mergeDocument` / `onChapterContentChange`
+   * round-trip for other chapters.
+   */
+  const commitChapterSections = (
+    chapterId: string,
+    nextSections: DocumentSection[],
+  ) => {
+    if (chapterId === currentChapterId) {
+      onReorderSections(nextSections);
+      return;
+    }
+    if (!onChapterContentChange) return;
+    const parsed = getChapterParse(chapterId);
+    if (!parsed) return;
+    const merged = mergeDocument(parsed.wrapper, nextSections);
+    onChapterContentChange(chapterId, merged);
+  };
+
+  // ── Render ──────────────────────────────────────────────────────────────
+
   return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
-      onDragStart={handleChapterDragStart}
-      onDragEnd={handleChapterDragEnd}
+      onDragStart={handleDragStart}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+      onDragCancel={clearDragState}
     >
       <SortableContext
         items={chapters.map((ch) => ch.id)}
@@ -197,19 +368,12 @@ const BookToc = ({
                 isActive={isActive}
                 isExpanded={isExpanded}
                 canReorder={!!onChaptersReorder}
-                isBeingDragged={activeChapterId === ch.id}
+                isBeingDragged={draggedChapterId === ch.id}
                 onSelect={() => {
-                  // Clicking the active chapter while in sectioned mode →
-                  // pop back to whole-chapter (document) editing.  Clicking
-                  // a different chapter selects it for editing; the
-                  // useSectionedEditing chapterKey effect handles the mode
-                  // reset automatically.
                   if (ch.id === currentChapterId) {
                     if (editMode === "sectioned") onToggleEditMode();
                     return;
                   }
-                  // Ensure the newly-selected chapter is expanded too so
-                  // its sections become visible without a second click.
                   if (!expandedChapterIds.has(ch.id)) {
                     onToggleChapterExpanded(ch.id);
                     if (ch.content === undefined) {
@@ -223,23 +387,25 @@ const BookToc = ({
                   onChapterRemove ? () => handleChapterRemoveClick(ch) : undefined
                 }
               >
-                {isExpanded && renderChapterChildren({
-                  chapter: ch,
-                  isActive,
-                  activeSections: sections,
-                  currentSectionId,
-                  edit,
-                  isLatex,
-                  readonly,
-                  onSelectSection,
-                  onAddSection,
-                  onAddIntroduction,
-                  onAddConclusion,
-                  onAddFirstSection,
-                  onUpdateSection,
-                  handleRemove,
-                  getChapterParse,
-                })}
+                {isExpanded &&
+                  renderChapterChildren({
+                    chapter: ch,
+                    isActive,
+                    sectionsForChapter: chapterSectionsById.get(ch.id),
+                    currentSectionId,
+                    draggedSectionId,
+                    dropTarget,
+                    edit,
+                    isLatex,
+                    readonly,
+                    onSelectSection,
+                    onAddSection,
+                    onAddIntroduction,
+                    onAddConclusion,
+                    onAddFirstSection,
+                    onUpdateSection,
+                    handleRemove: handleRemoveSectionWithConfirm,
+                  })}
               </ChapterItem>
             );
           })}
@@ -258,9 +424,9 @@ const BookToc = ({
         </ul>
       </SortableContext>
       <DragOverlay>
-        {activeChapterId &&
+        {draggedChapterId &&
           (() => {
-            const ch = chapters.find((c) => c.id === activeChapterId);
+            const ch = chapters.find((c) => c.id === draggedChapterId);
             return ch ? (
               <div className="pretext-plus-editor__toc-drag-overlay">
                 <span className="pretext-plus-editor__toc-drag-overlay-badge pretext-plus-editor__toc-type-badge--chapter">
@@ -272,22 +438,43 @@ const BookToc = ({
               </div>
             ) : null;
           })()}
+        {draggedSectionId && draggedSection && (
+          <div className="pretext-plus-editor__toc-drag-overlay">
+            <span className="pretext-plus-editor__toc-drag-overlay-badge">
+              {draggedSection.type}
+            </span>
+            <span className="pretext-plus-editor__toc-drag-overlay-title">
+              {draggedSection.title || "Untitled"}
+            </span>
+          </div>
+        )}
       </DragOverlay>
     </DndContext>
   );
 };
 
+/** Intro must be first, conclusion must be last (per chapter). */
+function validateInvariant(next: DocumentSection[]): boolean {
+  const introIdx = next.findIndex((s) => s.type === "introduction");
+  const conclusionIdx = next.findIndex((s) => s.type === "conclusion");
+  return (
+    (introIdx === -1 || introIdx === 0) &&
+    (conclusionIdx === -1 || conclusionIdx === next.length - 1)
+  );
+}
+
 // ---------------------------------------------------------------------------
-// renderChapterChildren — pure rendering for the section list (or loading
-// placeholder) shown under an expanded chapter.  Kept as a separate function
-// to avoid deep nesting in the main JSX.
+// renderChapterChildren — section list (or loading placeholder) shown
+// under an expanded chapter.
 // ---------------------------------------------------------------------------
 
 interface ChildrenOpts {
   chapter: DocumentChapter;
   isActive: boolean;
-  activeSections: DocumentSection[];
+  sectionsForChapter: DocumentSection[] | undefined;
   currentSectionId: string | null;
+  draggedSectionId: string | null;
+  dropTarget: DropTarget | null;
   edit: ReturnType<typeof useSectionEdit>;
   isLatex: boolean;
   readonly: boolean;
@@ -306,15 +493,16 @@ interface ChildrenOpts {
     },
   ) => void;
   handleRemove: (s: DocumentSection) => void;
-  getChapterParse: (chapterId: string) => ChapterParseResult | null;
 }
 
 function renderChapterChildren(opts: ChildrenOpts) {
   const {
     chapter,
     isActive,
-    activeSections,
+    sectionsForChapter,
     currentSectionId,
+    draggedSectionId,
+    dropTarget,
     edit,
     isLatex,
     readonly,
@@ -325,77 +513,49 @@ function renderChapterChildren(opts: ChildrenOpts) {
     onAddFirstSection,
     onUpdateSection,
     handleRemove,
-    getChapterParse,
   } = opts;
 
-  if (isActive) {
-    return (
-      <SectionList
-        sections={activeSections}
-        currentSectionId={currentSectionId}
-        activeDragId={null}
-        dropTarget={null}
-        mergeTargetId={null}
-        editingId={edit.editingId}
-        editDraft={edit.editDraft}
-        isLatex={isLatex}
-        readonly={readonly}
-        listClassName="pretext-plus-editor__toc-section-children"
-        role="group"
-        onSelectSection={onSelectSection}
-        onStartEdit={edit.startEdit}
-        onRemove={handleRemove}
-        onDraftChange={edit.setEditDraft}
-        onEditCommit={() => edit.commitEdit(onUpdateSection)}
-        onEditCancel={edit.cancelEdit}
-        onAddFirstSection={onAddFirstSection}
-        onAddSection={() => onAddSection(null)}
-        onAddIntroduction={onAddIntroduction}
-        onAddConclusion={onAddConclusion}
-      />
-    );
-  }
-
-  // Non-active expanded chapter: render parsed sections (read-only).
-  if (chapter.content === undefined) {
-    return (
-      <div className="pretext-plus-editor__toc-chapter-loading">
-        Loading…
-      </div>
-    );
-  }
-  const parsed = getChapterParse(chapter.id);
-  if (!parsed) {
+  if (sectionsForChapter === undefined) {
+    if (chapter.content === undefined) {
+      return (
+        <div className="pretext-plus-editor__toc-chapter-loading">Loading…</div>
+      );
+    }
     return (
       <div className="pretext-plus-editor__toc-chapter-loading">
         (No sections)
       </div>
     );
   }
+
   return (
     <SectionList
-      sections={parsed.sections}
-      currentSectionId={null}
-      activeDragId={null}
-      dropTarget={null}
+      sections={sectionsForChapter}
+      currentSectionId={isActive ? currentSectionId : null}
+      activeDragId={draggedSectionId}
+      dropTarget={
+        dropTarget
+          ? { id: dropTarget.sectionId, position: dropTarget.position }
+          : null
+      }
       mergeTargetId={null}
-      editingId={null}
-      editDraft={null}
-      isLatex={false}
-      readonly={true}
+      editingId={isActive ? edit.editingId : null}
+      editDraft={isActive ? edit.editDraft : null}
+      isLatex={isLatex}
+      readonly={!isActive || readonly}
+      dragEnabled={true}
       listClassName="pretext-plus-editor__toc-section-children"
       role="group"
-      onSelectSection={() => {
-        /* not actionable in read-only chapter view (Phase 3) */
-      }}
-      onStartEdit={() => {}}
-      onRemove={() => {}}
-      onDraftChange={() => {}}
-      onEditCommit={() => {}}
-      onEditCancel={() => {}}
-      onAddSection={() => {}}
-      onAddIntroduction={() => {}}
-      onAddConclusion={() => {}}
+      onSelectSection={isActive ? onSelectSection : () => {}}
+      onStartEdit={isActive ? edit.startEdit : () => {}}
+      onRemove={isActive ? handleRemove : () => {}}
+      onDraftChange={isActive ? edit.setEditDraft : () => {}}
+      onEditCommit={isActive ? () => edit.commitEdit(onUpdateSection) : () => {}}
+      onEditCancel={isActive ? edit.cancelEdit : () => {}}
+      onAddFirstSection={isActive ? onAddFirstSection : undefined}
+      onAddSection={isActive ? () => onAddSection(null) : () => {}}
+      onAddIntroduction={isActive ? onAddIntroduction : () => {}}
+      onAddConclusion={isActive ? onAddConclusion : () => {}}
     />
   );
 }

@@ -23,6 +23,13 @@ interface SortableSectionItemProps {
   canRemove: boolean;
   readonly: boolean;
   isLatex: boolean;
+  /**
+   * Explicit override: when set, controls whether the drag handle is shown
+   * regardless of `readonly`.  Used by book mode to keep sections in
+   * non-active (read-only) chapters draggable for cross-chapter moves.
+   * When undefined, drag follows `!readonly` (the original behavior).
+   */
+  dragEnabled?: boolean;
 }
 
 const SortableSectionItem = ({
@@ -42,8 +49,10 @@ const SortableSectionItem = ({
   canRemove,
   readonly,
   isLatex,
+  dragEnabled,
 }: SortableSectionItemProps) => {
-  const isDraggable = !readonly && isRegularDivision(section.type);
+  const dragAllowed = dragEnabled ?? !readonly;
+  const isDraggable = dragAllowed && isRegularDivision(section.type);
   const isEditing = editDraft !== null;
   const { attributes, listeners, setNodeRef } = useSortable({
     id: section.id,

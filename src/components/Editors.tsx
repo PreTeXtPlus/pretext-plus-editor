@@ -569,6 +569,7 @@ const Editors = (props: editorProps) => {
       onChapterRequestLoad={props.onChapterRequestLoad}
       onChapterAdd={props.onChapterAdd}
       onChapterRemove={props.onChapterRemove}
+      onChapterContentChange={props.onChapterContentChange}
     />
   );
 

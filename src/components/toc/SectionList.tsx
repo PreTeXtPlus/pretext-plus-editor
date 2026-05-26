@@ -26,6 +26,11 @@ interface SectionListProps {
   onAddSection: () => void;
   onAddIntroduction: () => void;
   onAddConclusion: () => void;
+  /**
+   * Override for the per-item drag toggle.  See `SortableSectionItem.dragEnabled`.
+   * Forwarded to every section in the list.
+   */
+  dragEnabled?: boolean;
 }
 
 /**
@@ -55,6 +60,7 @@ const SectionList = ({
   onAddSection,
   onAddIntroduction,
   onAddConclusion,
+  dragEnabled,
 }: SectionListProps) => {
   const hasIntroduction = sections.some((s) => s.type === "introduction");
   const hasConclusion = sections.some((s) => s.type === "conclusion");
@@ -105,6 +111,7 @@ const SectionList = ({
                 canRemove={true}
                 readonly={readonly}
                 isLatex={isLatex}
+                dragEnabled={dragEnabled}
               />
             ))}
             {!readonly && (

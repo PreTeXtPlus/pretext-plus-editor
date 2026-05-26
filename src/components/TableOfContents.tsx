@@ -115,6 +115,12 @@ export interface TableOfContentsProps {
    * the chapter remove (×) button is hidden.
    */
   onChapterRemove?: (chapterId: string) => void;
+  /**
+   * Persist a chapter's updated content (e.g. after a cross-chapter
+   * section drag).  When omitted, cross-chapter section drops are
+   * disabled and rejected silently.
+   */
+  onChapterContentChange?: (chapterId: string, content: string) => void;
 }
 
 /**
@@ -152,6 +158,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onChapterRequestLoad,
     onChapterAdd,
     onChapterRemove,
+    onChapterContentChange,
   } = props;
 
   if (isCollapsed) {
@@ -210,6 +217,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
           onAddConclusion={onAddConclusion}
           onRemoveSection={onRemoveSection}
           onUpdateSection={onUpdateSection}
+          onReorderSections={onReorderSections}
           onAddFirstSection={onAddFirstSection}
           editMode={editMode}
           onToggleEditMode={onToggleEditMode}
@@ -224,6 +232,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
           onChapterRequestLoad={onChapterRequestLoad}
           onChapterAdd={onChapterAdd}
           onChapterRemove={onChapterRemove}
+          onChapterContentChange={onChapterContentChange}
         />
       ) : (
         <ArticleToc
