@@ -81,6 +81,24 @@ function trimBoundaryWhitespaceNodes(
   return children.slice(start, end);
 }
 
+/**
+ * Drop whitespace-only text nodes from the END of a child list, leaving any
+ * leading whitespace alone.  Used to keep round-trips of `splitDocument` →
+ * `mergeDocument` stable: if we kept the trailing whitespace that originally
+ * separated sections, every re-merge would prepend more, growing the gap.
+ */
+function trimTrailingWhitespaceNodes(
+  children: Root["children"],
+): Root["children"] {
+  let end = children.length;
+  while (end > 0) {
+    const node = children[end - 1];
+    if (node.type !== "text" || /\S/.test(node.value)) break;
+    end -= 1;
+  }
+  return children.slice(0, end);
+}
+
 function trimBoundaryBlankLines(value: string): string {
   return value
     .replace(/^(?:[ \t]*\r?\n)+/, "")
@@ -148,8 +166,10 @@ export function splitDocument(xml: string): DocumentSplitResult {
     const sectionElements = docRoot.children.filter(
       (c) => c.type === "element" && SECTION_TAGS.has((c as Element).name),
     ) as Element[];
-    const nonSectionChildren = docRoot.children.filter(
-      (c) => !(c.type === "element" && SECTION_TAGS.has((c as Element).name)),
+    const nonSectionChildren = trimTrailingWhitespaceNodes(
+      docRoot.children.filter(
+        (c) => !(c.type === "element" && SECTION_TAGS.has((c as Element).name)),
+      ),
     );
 
     const wrapperRoot: Root = {
