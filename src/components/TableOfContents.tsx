@@ -18,7 +18,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import type {
-  ChapterSummary,
+  DocumentChapter,
   DocumentSection,
   DocumentSectionType,
 } from "../types/sections";
@@ -80,7 +80,7 @@ export interface TableOfContentsProps {
    * Book chapter summaries provided by the host.
    * Only meaningful when `projectType === "book"`.
    */
-  chapters?: ChapterSummary[];
+  chapters?: DocumentChapter[];
   /**
    * The id of the currently loaded/active chapter.
    * Only meaningful when `projectType === "book"`.
@@ -94,11 +94,11 @@ export interface TableOfContentsProps {
   onChapterSelect?: (chapterId: string) => void;
   /**
    * Called when the user drags chapters into a new order.
-   * Receives the full reordered `ChapterSummary[]`; the host is responsible
+   * Receives the full reordered `DocumentChapter[]`; the host is responsible
    * for persisting the new order (e.g., via a Rails PATCH request).
    * When omitted, chapter drag handles are hidden and reordering is disabled.
    */
-  onChaptersReorder?: (chapters: ChapterSummary[]) => void;
+  onChaptersReorder?: (chapters: DocumentChapter[]) => void;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -462,7 +462,7 @@ const AddSectionItem = ({
 // ChapterItem — a sortable chapter row (book mode)
 // ---------------------------------------------------------------------------
 interface ChapterItemProps {
-  chapter: ChapterSummary;
+  chapter: DocumentChapter;
   isActive: boolean;
   isExpanded: boolean;
   /** When true a drag handle is shown and the item participates in DnD. */

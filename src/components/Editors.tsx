@@ -22,7 +22,7 @@ import type {
   PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
-import type { DocumentSection, ChapterSummary } from "../types/sections";
+import type { DocumentSection, DocumentChapter } from "../types/sections";
 
 const startingContent = defaultContent;
 
@@ -122,7 +122,7 @@ export interface editorProps {
   /**
    * Controls the editing mode from the outside.  When provided, the
    * component operates in controlled mode; omit to use internal state
-   * (uncontrolled).
+   * (uncontrolled).  "document" can also mean a single chapter in a book project.
    */
   editMode?: "document" | "sectioned";
   /**
@@ -145,14 +145,14 @@ export interface editorProps {
   onSectionChange?: (section: DocumentSection) => void;
   /**
    * Whether this is an `"article"` (default) or `"book"` project.
-   * When `"book"`, the TOC shows a chapter list above the section list.
+   * When `"book"`, the TOC shows a chapter list that expands to show sections.
    */
   projectType?: "article" | "book";
   /**
    * Book chapter summaries used to populate the TOC chapter list.
    * Only meaningful when `projectType === "book"`.
    */
-  chapters?: ChapterSummary[];
+  chapters?: DocumentChapter[];
   /**
    * The id of the currently loaded/active chapter.
    * Only meaningful when `projectType === "book"`.
@@ -166,11 +166,11 @@ export interface editorProps {
   onChapterSelect?: (chapterId: string) => void;
   /**
    * Called when the user drags chapters into a new order.
-   * Receives the full reordered `ChapterSummary[]`; the host is responsible
+   * Receives the full reordered `DocumentChapter[]`; the host is responsible
    * for persisting the new order (e.g., via a Rails PATCH request).
    * When omitted, chapter drag handles are hidden.
    */
-  onChaptersReorder?: (chapters: ChapterSummary[]) => void;
+  onChaptersReorder?: (chapters: DocumentChapter[]) => void;
 }
 
 /**

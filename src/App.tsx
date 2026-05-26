@@ -3,12 +3,12 @@ import Editors from "./components/Editors";
 import { defaultContent } from "./defaultContent";
 import { useState } from "react";
 import type { FeedbackSubmission, SourceFormat } from "./types/editor";
-import type { ChapterSummary, DocumentSection } from "./types/sections";
+import type { DocumentChapter, DocumentSection } from "./types/sections";
 
 // ---------------------------------------------------------------------------
 // Book demo content — simulates chapters fetched from the Rails back-end
 // ---------------------------------------------------------------------------
-const bookChapters: ChapterSummary[] = [
+const bookChapters: DocumentChapter[] = [
   { id: "ch-intro", title: "Introduction", xmlId: "ch-intro" },
   { id: "ch-background", title: "Background", xmlId: "ch-background" },
   { id: "ch-methods", title: "Methods", xmlId: "ch-methods" },
@@ -137,7 +137,7 @@ function App() {
     "article",
   );
   const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
-  const [bookChapterList, setBookChapterList] = useState<ChapterSummary[]>(bookChapters);
+  const [bookChapterList, setBookChapterList] = useState<DocumentChapter[]>(bookChapters);
 
   const loadPretextDemo = () => {
     setSource(defaultContent);
