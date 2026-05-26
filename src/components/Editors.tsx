@@ -187,11 +187,11 @@ export interface editorProps {
    */
   onChapterContentChange?: (chapterId: string, content: string) => void;
   /**
-   * Called when the user clicks the "+ Add chapter" button.  The host
-   * should create a new chapter record on the back-end and append it to
-   * the `chapters` array.  `afterChapterId` is the id of the chapter
-   * immediately preceding the insertion point, or `null` to insert at
-   * the top.  Wired up in a later phase.
+   * Called when the user clicks the "+ Add chapter" row at the bottom
+   * of the chapter list.  The host should create a new chapter record
+   * on the back-end and append it to the `chapters` array.
+   * `afterChapterId` is the id of the chapter immediately preceding the
+   * insertion point, or `null` to append at the end of the list.
    */
   onChapterAdd?: (afterChapterId: string | null) => void;
   /**
@@ -565,6 +565,10 @@ const Editors = (props: editorProps) => {
       onChaptersReorder={props.onChaptersReorder}
       expandedChapterIds={bookChapters.expandedChapterIds}
       onToggleChapterExpanded={bookChapters.toggleChapterExpanded}
+      getChapterParse={bookChapters.getChapterParse}
+      onChapterRequestLoad={props.onChapterRequestLoad}
+      onChapterAdd={props.onChapterAdd}
+      onChapterRemove={props.onChapterRemove}
     />
   );
 

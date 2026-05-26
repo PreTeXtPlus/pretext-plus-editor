@@ -5,6 +5,7 @@ import type {
 } from "../types/sections";
 import ArticleToc from "./toc/ArticleToc";
 import BookToc from "./toc/BookToc";
+import type { ChapterParseResult } from "./toc/useBookChapters";
 import "./TableOfContents.css";
 
 export interface TableOfContentsProps {
@@ -88,10 +89,32 @@ export interface TableOfContentsProps {
    */
   expandedChapterIds?: Set<string>;
   /**
-   * Toggle a chapter's expanded state.  Wired to the chevron button in
-   * Phase 3.  Only meaningful when `projectType === "book"`.
+   * Toggle a chapter's expanded state.  Wired to the chevron button.
+   * Only meaningful when `projectType === "book"`.
    */
   onToggleChapterExpanded?: (chapterId: string) => void;
+  /**
+   * Looks up parsed `{sections, wrapper}` for a given chapter id.  Returns
+   * `null` for chapters whose `content` is not yet loaded or fails to
+   * parse.  Provided by `useBookChapters`.
+   */
+  getChapterParse?: (chapterId: string) => ChapterParseResult | null;
+  /**
+   * Called when a chapter is expanded for the first time and its content
+   * has not yet been fetched.  The host should fetch the chapter source
+   * and update the `chapters` prop with `content` populated.
+   */
+  onChapterRequestLoad?: (chapterId: string) => void;
+  /**
+   * Called when the user clicks the "+ Add chapter" row at the bottom of
+   * the chapter list.  When omitted, the row is hidden.
+   */
+  onChapterAdd?: (afterChapterId: string | null) => void;
+  /**
+   * Called when the user removes a chapter from the TOC.  When omitted,
+   * the chapter remove (×) button is hidden.
+   */
+  onChapterRemove?: (chapterId: string) => void;
 }
 
 /**
@@ -125,6 +148,10 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onChaptersReorder,
     expandedChapterIds,
     onToggleChapterExpanded,
+    getChapterParse,
+    onChapterRequestLoad,
+    onChapterAdd,
+    onChapterRemove,
   } = props;
 
   if (isCollapsed) {
@@ -191,8 +218,12 @@ const TableOfContents = (props: TableOfContentsProps) => {
           currentChapterId={currentChapterId}
           onChapterSelect={onChapterSelect}
           onChaptersReorder={onChaptersReorder}
-          expandedChapterIds={expandedChapterIds}
-          onToggleChapterExpanded={onToggleChapterExpanded}
+          expandedChapterIds={expandedChapterIds ?? new Set()}
+          onToggleChapterExpanded={onToggleChapterExpanded ?? (() => {})}
+          getChapterParse={getChapterParse ?? (() => null)}
+          onChapterRequestLoad={onChapterRequestLoad}
+          onChapterAdd={onChapterAdd}
+          onChapterRemove={onChapterRemove}
         />
       ) : (
         <ArticleToc

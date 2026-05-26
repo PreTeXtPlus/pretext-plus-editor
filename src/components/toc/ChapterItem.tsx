@@ -10,6 +10,10 @@ interface ChapterItemProps {
   /** The item is being dragged — render as invisible placeholder. */
   isBeingDragged: boolean;
   onSelect: () => void;
+  /** Toggle the chevron to expand/collapse this chapter's sections. */
+  onToggleExpanded?: () => void;
+  /** When true, show a small × button on hover that triggers `onRemove`. */
+  onRemove?: () => void;
   children?: React.ReactNode;
 }
 
@@ -20,6 +24,8 @@ const ChapterItem = ({
   canReorder,
   isBeingDragged,
   onSelect,
+  onToggleExpanded,
+  onRemove,
   children,
 }: ChapterItemProps) => {
   const { attributes, listeners, setNodeRef } = useSortable({
@@ -50,12 +56,16 @@ const ChapterItem = ({
             ⠿
           </span>
         )}
-        <span
+        <button
+          type="button"
           className="pretext-plus-editor__toc-chapter-expand"
-          aria-hidden="true"
+          onClick={onToggleExpanded}
+          disabled={!onToggleExpanded}
+          aria-label={isExpanded ? "Collapse chapter" : "Expand chapter"}
+          title={isExpanded ? "Collapse chapter" : "Expand chapter"}
         >
           {isExpanded ? "▾" : "›"}
-        </span>
+        </button>
         <button
           type="button"
           className="pretext-plus-editor__toc-chapter-btn"
@@ -75,6 +85,17 @@ const ChapterItem = ({
             {chapter.title || <em>Untitled chapter</em>}
           </span>
         </button>
+        {onRemove && (
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-action-btn pretext-plus-editor__toc-action-btn--danger"
+            onClick={onRemove}
+            title="Remove chapter"
+            aria-label={`Remove chapter "${chapter.title}"`}
+          >
+            ✕
+          </button>
+        )}
       </div>
       {isExpanded && children && (
         <div className="pretext-plus-editor__toc-chapter-sections">

@@ -458,6 +458,20 @@
   flex-shrink: 0;
   text-align: center;
   line-height: 1;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pretext-plus-editor__toc-chapter-expand:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.pretext-plus-editor__toc-chapter-expand:not(:disabled):hover {
+  color: #555;
 }
 
 .pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-expand {
@@ -528,6 +542,15 @@
   color: #888;
   font-size: 0.82rem;
   text-align: center;
+}
+
+.pretext-plus-editor__toc-chapter-loading {
+  padding: 6px 12px 6px 22px;
+  color: #888;
+  font-size: 0.82rem;
+  font-style: italic;
+  background: #fafbfc;
+  border-left: 2px solid #e0d4f7;
 }
 
 

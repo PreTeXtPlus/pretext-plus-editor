@@ -187,16 +187,24 @@ function App() {
   };
 
   const handleChapterSelect = (chapterId: string) => {
-    const chapterSource =
-      bookChapterList.find((c) => c.id === chapterId)?.content ??
-      SERVER_CHAPTER_SOURCES[chapterId] ??
-      "";
-    // Simulate an async fetch: update both source and currentChapterId together
-    // so React 18 batching delivers them in the same render (no stale-sections flash).
+    const cached = bookChapterList.find((c) => c.id === chapterId)?.content;
+    const chapterSource = cached ?? SERVER_CHAPTER_SOURCES[chapterId] ?? "";
+    // Update both source and currentChapterId together so React 18 batching
+    // delivers them in the same render (no stale-sections flash).
     setCurrentChapterId(chapterId);
     setSource(chapterSource);
     setPretextSource(chapterSource);
     setSourceFormat("pretext");
+    // Populate the chapter's content field so other parts of the editor
+    // (e.g. read-only section preview for non-active expanded chapters)
+    // can render its sections without an extra fetch.
+    if (cached === undefined) {
+      setBookChapterList((prev) =>
+        prev.map((ch) =>
+          ch.id === chapterId ? { ...ch, content: chapterSource } : ch,
+        ),
+      );
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -244,7 +252,7 @@ function App() {
     };
     SERVER_CHAPTER_SOURCES[newId] = newChapter.content!;
     setBookChapterList((prev) => {
-      if (afterChapterId === null) return [newChapter, ...prev];
+      if (afterChapterId === null) return [...prev, newChapter];
       const idx = prev.findIndex((c) => c.id === afterChapterId);
       if (idx === -1) return [...prev, newChapter];
       return [...prev.slice(0, idx + 1), newChapter, ...prev.slice(idx + 1)];
@@ -323,9 +331,20 @@ function App() {
         sourceFormat={sourceFormat}
         pretextSource={pretextSource}
         onContentChange={(value, meta) => {
-          setSource(value || "");
+          const nextSource = value || "";
+          setSource(nextSource);
           setSourceFormat(meta?.sourceFormat || "pretext");
           setPretextSource(meta?.pretextSource);
+          // In book mode, mirror live edits into the active chapter's
+          // `content` so the read-only previews of other chapters stay
+          // consistent if the user re-collapses and re-expands later.
+          if (projectType === "book" && currentChapterId) {
+            setBookChapterList((prev) =>
+              prev.map((ch) =>
+                ch.id === currentChapterId ? { ...ch, content: nextSource } : ch,
+              ),
+            );
+          }
         }}
         title={title}
         onTitleChange={(value) => setTitle(value || "Document Title")}
