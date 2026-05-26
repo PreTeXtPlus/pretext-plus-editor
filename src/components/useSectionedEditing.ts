@@ -198,26 +198,28 @@ export function useSectionedEditing({
         : contentState.pretextSource ?? "";
     if (!toSplit.trim()) {
       setSections([]); // eslint-disable-line react-hooks/set-state-in-effect
-      setDocumentWrapper("");  
-      setCurrentSectionId(null);  
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      onSectionsChange?.([]);
     } else {
       try {
         const { wrapper, sections: split } =
           sourceFormat === "latex"
             ? splitLatexDocument(toSplit)
             : splitDocument(toSplit);
-        setDocumentWrapper(wrapper);  
-        setSections(split);  
-        setCurrentSectionId(split[0]?.id ?? null);  
+        setDocumentWrapper(wrapper);
+        setSections(split);
+        setCurrentSectionId(split[0]?.id ?? null);
         onSectionsChange?.(split);
       } catch {
-        setSections([]);  
-        setDocumentWrapper("");  
-        setCurrentSectionId(null);  
+        setSections([]);
+        setDocumentWrapper("");
+        setCurrentSectionId(null);
+        onSectionsChange?.([]);
       }
     }
     // Switch back to document mode so the user starts fresh on the new chapter.
-    setInternalEditMode("document");  
+    setInternalEditMode("document");
     onEditModeChange?.("document");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterKey]); // only fire when the chapter changes
