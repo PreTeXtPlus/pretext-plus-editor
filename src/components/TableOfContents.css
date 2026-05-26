@@ -21,6 +21,27 @@
   padding-top: 8px;
 }
 
+/* ── Parse-error banner ─────────────────────────────── */
+.pretext-plus-editor__toc-parse-error {
+  background: #fde8e8;
+  color: #842029;
+  border-bottom: 1px solid #f5c2c7;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-parse-error-detail {
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #6c1f24;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow-y: auto;
+}
+
 /* ── Header ─────────────────────────────────────────── */
 .pretext-plus-editor__toc-header {
   display: flex;

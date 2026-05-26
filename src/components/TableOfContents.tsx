@@ -127,6 +127,12 @@ export interface TableOfContentsProps {
    * with the given title.  Only meaningful in book mode.
    */
   onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
+  /**
+   * When set, the current source XML cannot be parsed and the TOC will
+   * display the message as a red warning banner.  Section-list operations
+   * (re-parsing, mode switching) remain blocked until the XML is fixed.
+   */
+  parseError?: string | null;
 }
 
 /**
@@ -166,6 +172,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onChapterRemove,
     onChapterContentChange,
     onSelectSectionInChapter,
+    parseError,
   } = props;
 
   if (isCollapsed) {
@@ -213,6 +220,20 @@ const TableOfContents = (props: TableOfContentsProps) => {
           </button>
         </div>
       </div>
+
+      {parseError && (
+        <div
+          className="pretext-plus-editor__toc-parse-error"
+          role="alert"
+          title={parseError}
+        >
+          <strong>Cannot parse source.</strong> Section operations are
+          disabled until the XML is well-formed.
+          <div className="pretext-plus-editor__toc-parse-error-detail">
+            {parseError}
+          </div>
+        </div>
+      )}
 
       {isBookMode ? (
         <BookToc

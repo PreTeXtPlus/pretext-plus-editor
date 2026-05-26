@@ -339,6 +339,7 @@ const Editors = (props: editorProps) => {
     handleReorderSections,
     handleMergeSection,
     requestSectionNavigation,
+    parseError,
   } = useSectionedEditing({
     contentState,
     controlledEditMode: props.editMode,
@@ -586,6 +587,7 @@ const Editors = (props: editorProps) => {
       onChapterRemove={props.onChapterRemove}
       onChapterContentChange={props.onChapterContentChange}
       onSelectSectionInChapter={handleSelectSectionInChapter}
+      parseError={parseError}
     />
   );
 

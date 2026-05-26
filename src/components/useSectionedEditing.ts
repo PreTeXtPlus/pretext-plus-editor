@@ -39,6 +39,19 @@ import {
   rewrapLatexSection,
 } from "../sectionUtils";
 
+/**
+ * Render a parser-thrown error into a short single-line string suitable
+ * for a banner.  Preserves line/column hints when the parser supplies
+ * them (xast-util-from-xml uses VFileMessage-style errors).
+ */
+function formatParseError(err: unknown): string {
+  if (err instanceof Error) {
+    const msg = err.message.split("\n")[0].trim();
+    return msg || "The source XML is not well-formed.";
+  }
+  return "The source XML is not well-formed.";
+}
+
 export interface SectionedEditingOptions {
   contentState: EditorContentState;
   /** Externally controlled edit mode (controlled usage). */
@@ -101,6 +114,13 @@ export interface SectionedEditingResult {
    * book mode to land on a specific section after switching chapters.
    */
   requestSectionNavigation: (sectionTitle: string | null) => void;
+  /**
+   * A human-readable message describing why the source content can't be
+   * parsed, or `null` when it parses cleanly.  Surfaced as a warning
+   * banner in the TOC so the user knows section operations are blocked
+   * until the XML is fixed.
+   */
+  parseError: string | null;
 }
 
 export function useSectionedEditing({
@@ -121,6 +141,7 @@ export function useSectionedEditing({
   const [documentWrapper, setDocumentWrapper] = useState<string>("");
   const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
   const [isTocCollapsed, setIsTocCollapsed] = useState(true);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   // Pending section title to navigate to after a mode switch
   const pendingNavTitle = useRef<string | null>(null);
@@ -174,10 +195,12 @@ export function useSectionedEditing({
           ? splitLatexDocument(toSplit)
           : splitDocument(toSplit);
       setDocumentWrapper(wrapper); // eslint-disable-line react-hooks/set-state-in-effect
-      setSections(split);  
-      setCurrentSectionId(split[0]?.id ?? null);  
-    } catch {
-      // ignore parse errors; TOC will be empty
+      setSections(split);
+      setCurrentSectionId(split[0]?.id ?? null);
+    } catch (err) {
+      // Record the parse failure so the TOC can show a banner; sections
+      // stay empty and TOC operations are blocked until the XML is fixed.
+      setParseError(formatParseError(err));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
@@ -208,6 +231,7 @@ export function useSectionedEditing({
       setCurrentSectionId(null);
       onSectionsChange?.([]);
       pendingNavTitle.current = null;
+      setParseError(null);
       setInternalEditMode("document");
       onEditModeChange?.("document");
       return;
@@ -219,16 +243,18 @@ export function useSectionedEditing({
         sourceFormat === "latex"
           ? splitLatexDocument(toSplit)
           : splitDocument(toSplit));
-    } catch {
+    } catch (err) {
       setSections([]);
       setDocumentWrapper("");
       setCurrentSectionId(null);
       onSectionsChange?.([]);
       pendingNavTitle.current = null;
+      setParseError(formatParseError(err));
       setInternalEditMode("document");
       onEditModeChange?.("document");
       return;
     }
+    setParseError(null);
     setDocumentWrapper(wrapper);
     setSections(split);
     onSectionsChange?.(split);
@@ -274,9 +300,11 @@ export function useSectionedEditing({
       ({ wrapper, sections: fresh } = isLatexDoc
         ? splitLatexDocument(source)
         : splitDocument(source));
-    } catch {
-      return; // ignore parse errors
+    } catch (err) {
+      setParseError(formatParseError(err));
+      return;
     }
+    setParseError(null);
     // Carry forward existing IDs where titles match to keep selection stable
     const titleToId = new Map(sections.map((s) => [s.title, s.id]));
     const remapped = fresh.map((s) => ({
@@ -342,11 +370,19 @@ export function useSectionedEditing({
         : contentState.sourceFormat === "pretext"
         ? contentState.sourceContent
         : contentState.pretextSource ?? "";
-      const { wrapper, sections: split } = isLatexDoc
-        ? splitLatexDocument(toSplit)
-        : splitDocument(toSplit);
+      let wrapper: string;
+      let split: DocumentSection[];
+      try {
+        ({ wrapper, sections: split } = isLatexDoc
+          ? splitLatexDocument(toSplit)
+          : splitDocument(toSplit));
+      } catch (err) {
+        setParseError(formatParseError(err));
+        return;
+      }
       // If the document has no sections, stay in document mode.
       if (split.length === 0) return;
+      setParseError(null);
       setDocumentWrapper(wrapper);
       setSections(split);
       // Navigate to the pending section (by title) if requested
@@ -424,9 +460,17 @@ export function useSectionedEditing({
    */
   const handleAddFirstSection = () => {
     if (!supportsSectioned) return;
-    const { wrapper, sections: wrapped } = isLatexDoc
-      ? wrapLatexDocumentAsSection(contentState.sourceContent)
-      : wrapDocumentAsSection(contentState.sourceContent);
+    let wrapper: string;
+    let wrapped: DocumentSection[];
+    try {
+      ({ wrapper, sections: wrapped } = isLatexDoc
+        ? wrapLatexDocumentAsSection(contentState.sourceContent)
+        : wrapDocumentAsSection(contentState.sourceContent));
+    } catch (err) {
+      setParseError(formatParseError(err));
+      return;
+    }
+    setParseError(null);
     setDocumentWrapper(wrapper);
     setSections(wrapped);
     setCurrentSectionId(wrapped[0]?.id ?? null);
@@ -603,5 +647,6 @@ export function useSectionedEditing({
     handleReorderSections,
     handleMergeSection,
     requestSectionNavigation,
+    parseError,
   };
 }
