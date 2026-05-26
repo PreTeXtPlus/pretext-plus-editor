@@ -95,6 +95,12 @@ export interface SectionedEditingResult {
   ) => void;
   handleReorderSections: (nextSections: DocumentSection[]) => void;
   handleMergeSection: (sourceId: string, targetId: string) => void;
+  /**
+   * Queue a section-title navigation request that will be applied the
+   * next time the chapter-key effect re-splits the document.  Used by
+   * book mode to land on a specific section after switching chapters.
+   */
+  requestSectionNavigation: (sectionTitle: string | null) => void;
 }
 
 export function useSectionedEditing({
@@ -201,26 +207,51 @@ export function useSectionedEditing({
       setDocumentWrapper("");
       setCurrentSectionId(null);
       onSectionsChange?.([]);
-    } else {
-      try {
-        const { wrapper, sections: split } =
-          sourceFormat === "latex"
-            ? splitLatexDocument(toSplit)
-            : splitDocument(toSplit);
-        setDocumentWrapper(wrapper);
-        setSections(split);
-        setCurrentSectionId(split[0]?.id ?? null);
-        onSectionsChange?.(split);
-      } catch {
-        setSections([]);
-        setDocumentWrapper("");
-        setCurrentSectionId(null);
-        onSectionsChange?.([]);
-      }
+      pendingNavTitle.current = null;
+      setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
     }
-    // Switch back to document mode so the user starts fresh on the new chapter.
-    setInternalEditMode("document");
-    onEditModeChange?.("document");
+    let split: DocumentSection[];
+    let wrapper: string;
+    try {
+      ({ wrapper, sections: split } =
+        sourceFormat === "latex"
+          ? splitLatexDocument(toSplit)
+          : splitDocument(toSplit));
+    } catch {
+      setSections([]);
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      onSectionsChange?.([]);
+      pendingNavTitle.current = null;
+      setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
+    }
+    setDocumentWrapper(wrapper);
+    setSections(split);
+    onSectionsChange?.(split);
+
+    // If a cross-chapter navigation request was queued, honor it by landing
+    // directly on the requested section in sectioned mode.  Otherwise reset
+    // to the first section in document mode so the user starts fresh on
+    // the newly-loaded chapter.
+    const pendingTitle = pendingNavTitle.current;
+    const target = pendingTitle
+      ? split.find((s) => s.title === pendingTitle) ?? null
+      : null;
+    pendingNavTitle.current = null;
+
+    if (target) {
+      setCurrentSectionId(target.id);
+      setInternalEditMode("sectioned");
+      onEditModeChange?.("sectioned");
+    } else {
+      setCurrentSectionId(split[0]?.id ?? null);
+      setInternalEditMode("document");
+      onEditModeChange?.("document");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chapterKey]); // only fire when the chapter changes
 
@@ -545,6 +576,10 @@ export function useSectionedEditing({
     onContentUpdate(doMerge(nextSections));
   };
 
+  const requestSectionNavigation = (sectionTitle: string | null) => {
+    pendingNavTitle.current = sectionTitle;
+  };
+
   return {
     editMode,
     sections,
@@ -567,5 +602,6 @@ export function useSectionedEditing({
     handleUpdateSectionMetadata,
     handleReorderSections,
     handleMergeSection,
+    requestSectionNavigation,
   };
 }

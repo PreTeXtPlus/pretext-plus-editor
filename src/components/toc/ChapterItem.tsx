@@ -14,6 +14,10 @@ interface ChapterItemProps {
   onToggleExpanded?: () => void;
   /** When true, show a small × button on hover that triggers `onRemove`. */
   onRemove?: () => void;
+  /** Show a drop-target line above this chapter row. */
+  isDropBefore?: boolean;
+  /** Show a drop-target line below this chapter row. */
+  isDropAfter?: boolean;
   children?: React.ReactNode;
 }
 
@@ -26,6 +30,8 @@ const ChapterItem = ({
   onSelect,
   onToggleExpanded,
   onRemove,
+  isDropBefore,
+  isDropAfter,
   children,
 }: ChapterItemProps) => {
   const { attributes, listeners, setNodeRef } = useSortable({
@@ -40,6 +46,8 @@ const ChapterItem = ({
       className={[
         "pretext-plus-editor__toc-chapter-item",
         isActive ? "pretext-plus-editor__toc-chapter-item--active" : "",
+        isDropBefore ? "pretext-plus-editor__toc-chapter-item--drop-before" : "",
+        isDropAfter ? "pretext-plus-editor__toc-chapter-item--drop-after" : "",
       ]
         .filter(Boolean)
         .join(" ")}

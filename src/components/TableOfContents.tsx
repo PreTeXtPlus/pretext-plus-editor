@@ -121,6 +121,12 @@ export interface TableOfContentsProps {
    * disabled and rejected silently.
    */
   onChapterContentChange?: (chapterId: string, content: string) => void;
+  /**
+   * Handle a section click that targets a chapter other than the active
+   * one.  The host should switch active chapter and land on the section
+   * with the given title.  Only meaningful in book mode.
+   */
+  onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
 }
 
 /**
@@ -159,6 +165,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onChapterAdd,
     onChapterRemove,
     onChapterContentChange,
+    onSelectSectionInChapter,
   } = props;
 
   if (isCollapsed) {
@@ -233,6 +240,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
           onChapterAdd={onChapterAdd}
           onChapterRemove={onChapterRemove}
           onChapterContentChange={onChapterContentChange}
+          onSelectSectionInChapter={onSelectSectionInChapter}
         />
       ) : (
         <ArticleToc

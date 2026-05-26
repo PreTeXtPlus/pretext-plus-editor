@@ -338,6 +338,7 @@ const Editors = (props: editorProps) => {
     handleUpdateSectionMetadata,
     handleReorderSections,
     handleMergeSection,
+    requestSectionNavigation,
   } = useSectionedEditing({
     contentState,
     controlledEditMode: props.editMode,
@@ -364,6 +365,20 @@ const Editors = (props: editorProps) => {
     if (!props.currentChapterId) return;
     _expandChapter(props.currentChapterId);
   }, [props.projectType, props.currentChapterId, _expandChapter]);
+
+  /**
+   * Handle a section click inside a non-active chapter: queue the section
+   * title for navigation and ask the host to load that chapter.  When the
+   * chapter switch completes, the chapterKey effect in useSectionedEditing
+   * lands directly on the requested section in sectioned mode.
+   */
+  const handleSelectSectionInChapter = (
+    chapterId: string,
+    sectionTitle: string,
+  ) => {
+    requestSectionNavigation(sectionTitle);
+    props.onChapterSelect?.(chapterId);
+  };
 
   // ── Sync props → internal state ────────────────────────────────────────────
   useEffect(() => {
@@ -570,6 +585,7 @@ const Editors = (props: editorProps) => {
       onChapterAdd={props.onChapterAdd}
       onChapterRemove={props.onChapterRemove}
       onChapterContentChange={props.onChapterContentChange}
+      onSelectSectionInChapter={handleSelectSectionInChapter}
     />
   );
 

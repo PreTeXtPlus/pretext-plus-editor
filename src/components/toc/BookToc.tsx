@@ -13,7 +13,6 @@ import {
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
 import { mergeDocument } from "../../sectionUtils";
@@ -66,6 +65,12 @@ export interface BookTocProps {
    * chapters are rejected.
    */
   onChapterContentChange?: (chapterId: string, content: string) => void;
+  /**
+   * Handle a section click in a chapter that isn't currently active.
+   * The parent switches the active chapter and lands directly on the
+   * named section in sectioned mode.
+   */
+  onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
 }
 
 interface DropTarget {
@@ -118,12 +123,17 @@ const BookToc = ({
   onChapterAdd,
   onChapterRemove,
   onChapterContentChange,
+  onSelectSectionInChapter,
 }: BookTocProps) => {
   const edit = useSectionEdit();
 
   const [draggedChapterId, setDraggedChapterId] = useState<string | null>(null);
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [chapterDropTarget, setChapterDropTarget] = useState<{
+    chapterId: string;
+    position: "before" | "after";
+  } | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -205,6 +215,7 @@ const BookToc = ({
     setDraggedChapterId(null);
     setDraggedSectionId(null);
     setDropTarget(null);
+    setChapterDropTarget(null);
     setDraggedSection(null);
   };
 
@@ -226,50 +237,69 @@ const BookToc = ({
   };
 
   const handleDragMove = (event: DragMoveEvent) => {
-    if (!draggedSectionId) return;
     const { active, over } = event;
     if (!over || active.id === over.id) {
       setDropTarget(null);
-      return;
-    }
-    // Only update drop indicator when over a section (not a chapter row).
-    if (!sectionToChapter.has(over.id as string)) {
-      setDropTarget(null);
+      setChapterDropTarget(null);
       return;
     }
     const activeRect = active.rect.current.translated;
     if (!activeRect) return;
     const activeCenter = activeRect.top + activeRect.height / 2;
     const overCenter = over.rect.top + over.rect.height / 2;
-    setDropTarget({
-      sectionId: over.id as string,
-      position: activeCenter < overCenter ? "before" : "after",
-    });
+    const position: "before" | "after" =
+      activeCenter < overCenter ? "before" : "after";
+
+    if (draggedChapterId) {
+      if (chapterIdSet.has(over.id as string)) {
+        setChapterDropTarget({ chapterId: over.id as string, position });
+      } else {
+        setChapterDropTarget(null);
+      }
+      return;
+    }
+
+    if (!draggedSectionId) return;
+    if (!sectionToChapter.has(over.id as string)) {
+      setDropTarget(null);
+      return;
+    }
+    setDropTarget({ sectionId: over.id as string, position });
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const wasChapter = draggedChapterId;
     const wasSection = draggedSectionId;
     const wasDropTarget = dropTarget;
+    const wasChapterDropTarget = chapterDropTarget;
     const wasDraggedSection = draggedSection;
     clearDragState();
 
-    const { active, over } = event;
+    const { active } = event;
 
     // ── Chapter reorder ──
     if (wasChapter) {
-      if (!over || active.id === over.id) return;
-      if (!chapterIdSet.has(over.id as string)) return;
-      const oldIndex = chapters.findIndex((ch) => ch.id === active.id);
-      const newIndex = chapters.findIndex((ch) => ch.id === over.id);
-      if (oldIndex === -1 || newIndex === -1) return;
-      onChaptersReorder?.(arrayMove(chapters, oldIndex, newIndex));
+      if (!wasChapterDropTarget) return;
+      const activeChapter = chapters.find((ch) => ch.id === active.id);
+      if (!activeChapter) return;
+      const without = chapters.filter((ch) => ch.id !== active.id);
+      const targetIdx = without.findIndex(
+        (ch) => ch.id === wasChapterDropTarget.chapterId,
+      );
+      if (targetIdx === -1) return;
+      const insertAt =
+        wasChapterDropTarget.position === "before" ? targetIdx : targetIdx + 1;
+      const next = [
+        ...without.slice(0, insertAt),
+        activeChapter,
+        ...without.slice(insertAt),
+      ];
+      onChaptersReorder?.(next);
       return;
     }
 
     // ── Section drag ──
     if (!wasSection || !wasDraggedSection || !wasDropTarget) return;
-    if (!over) return;
 
     const sourceChapterId = sectionToChapter.get(wasSection);
     const targetChapterId = sectionToChapter.get(wasDropTarget.sectionId);
@@ -369,6 +399,14 @@ const BookToc = ({
                 isExpanded={isExpanded}
                 canReorder={!!onChaptersReorder}
                 isBeingDragged={draggedChapterId === ch.id}
+                isDropBefore={
+                  chapterDropTarget?.chapterId === ch.id &&
+                  chapterDropTarget.position === "before"
+                }
+                isDropAfter={
+                  chapterDropTarget?.chapterId === ch.id &&
+                  chapterDropTarget.position === "after"
+                }
                 onSelect={() => {
                   if (ch.id === currentChapterId) {
                     if (editMode === "sectioned") onToggleEditMode();
@@ -405,6 +443,7 @@ const BookToc = ({
                     onAddFirstSection,
                     onUpdateSection,
                     handleRemove: handleRemoveSectionWithConfirm,
+                    onSelectSectionInChapter,
                   })}
               </ChapterItem>
             );
@@ -493,6 +532,7 @@ interface ChildrenOpts {
     },
   ) => void;
   handleRemove: (s: DocumentSection) => void;
+  onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
 }
 
 function renderChapterChildren(opts: ChildrenOpts) {
@@ -513,6 +553,7 @@ function renderChapterChildren(opts: ChildrenOpts) {
     onAddFirstSection,
     onUpdateSection,
     handleRemove,
+    onSelectSectionInChapter,
   } = opts;
 
   if (sectionsForChapter === undefined) {
@@ -546,7 +587,16 @@ function renderChapterChildren(opts: ChildrenOpts) {
       dragEnabled={true}
       listClassName="pretext-plus-editor__toc-section-children"
       role="group"
-      onSelectSection={isActive ? onSelectSection : () => {}}
+      onSelectSection={
+        isActive
+          ? onSelectSection
+          : (sectionId: string) => {
+              if (!onSelectSectionInChapter) return;
+              const sec = sectionsForChapter?.find((s) => s.id === sectionId);
+              if (!sec) return;
+              onSelectSectionInChapter(chapter.id, sec.title);
+            }
+      }
       onStartEdit={isActive ? edit.startEdit : () => {}}
       onRemove={isActive ? handleRemove : () => {}}
       onDraftChange={isActive ? edit.setEditDraft : () => {}}
