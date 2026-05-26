@@ -326,16 +326,17 @@ const Editors = (props: editorProps) => {
     currentChapterId: _currentChapterId,
     onChapterSelect: _onChapterSelect,
   } = props;
+  const _firstChapterId = _chapters?.[0]?.id;
   useEffect(() => {
     if (
       _projectType === "book" &&
-      _chapters?.length &&
+      _firstChapterId &&
       !_currentChapterId &&
       _onChapterSelect
     ) {
-      _onChapterSelect(_chapters[0].id);
+      _onChapterSelect(_firstChapterId);
     }
-  }, [_projectType, _chapters, _currentChapterId, _onChapterSelect]);
+  }, [_projectType, _firstChapterId, _currentChapterId, _onChapterSelect]);
 
   // ── Derived preview content ────────────────────────────────────────────────
   /** In sectioned mode, preview uses the current section; otherwise full doc. */
