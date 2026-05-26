@@ -182,14 +182,12 @@ export function useSectionedEditing({
   // mode (where the normal debounced refresh is suppressed to avoid clobbering
   // in-progress edits).  We also reset to document mode so the user starts fresh
   // on the newly-loaded chapter rather than landing in a potentially stale section.
-  const isFirstChapterKeyRender = useRef(true);
+  const previousChapterKey = useRef(chapterKey);
   useEffect(() => {
+    if (chapterKey === previousChapterKey.current) return;
+    previousChapterKey.current = chapterKey;
     if (chapterKey == null) return;
-    // Skip the initial render — mount-time parsing handles the first chapter.
-    if (isFirstChapterKeyRender.current) {
-      isFirstChapterKeyRender.current = false;
-      return;
-    }
+
     const { sourceContent, sourceFormat } = contentState;
     if (sourceFormat === "markdown") return;
     const toSplit =
