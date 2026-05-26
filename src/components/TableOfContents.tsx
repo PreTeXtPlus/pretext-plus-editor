@@ -971,7 +971,6 @@ const TableOfContents = (props: TableOfContentsProps) => {
                       listClassName: "pretext-plus-editor__toc-section-children",
                       role: "group",
                     })}
-
                   </ChapterItem>
                 );
               })}
@@ -996,22 +995,19 @@ const TableOfContents = (props: TableOfContentsProps) => {
         </DndContext>
       ) : (
         /* ── Article mode (or book with no chapters): flat section list ── */
-        <>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={handleDragStart}
-            onDragMove={handleDragMove}
-            onDragEnd={handleDragEnd}
-            onDragCancel={clearDragState}
-          >
-            {renderSectionList({
-              listClassName: "pretext-plus-editor__toc-list",
-              role: "list",
-            })}
-          </DndContext>
-
-        </>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragMove={handleDragMove}
+          onDragEnd={handleDragEnd}
+          onDragCancel={clearDragState}
+        >
+          {renderSectionList({
+            listClassName: "pretext-plus-editor__toc-list",
+            role: "list",
+          })}
+        </DndContext>
       )}
     </div>
   );
