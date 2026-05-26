@@ -81,6 +81,17 @@ export interface TableOfContentsProps {
    * When omitted, chapter drag handles are hidden and reordering is disabled.
    */
   onChaptersReorder?: (chapters: DocumentChapter[]) => void;
+  /**
+   * The set of chapter ids whose section list should be displayed expanded.
+   * Owned by the parent `useBookChapters` hook.  Only meaningful when
+   * `projectType === "book"`.
+   */
+  expandedChapterIds?: Set<string>;
+  /**
+   * Toggle a chapter's expanded state.  Wired to the chevron button in
+   * Phase 3.  Only meaningful when `projectType === "book"`.
+   */
+  onToggleChapterExpanded?: (chapterId: string) => void;
 }
 
 /**
@@ -112,6 +123,8 @@ const TableOfContents = (props: TableOfContentsProps) => {
     currentChapterId,
     onChapterSelect,
     onChaptersReorder,
+    expandedChapterIds,
+    onToggleChapterExpanded,
   } = props;
 
   if (isCollapsed) {
@@ -178,6 +191,8 @@ const TableOfContents = (props: TableOfContentsProps) => {
           currentChapterId={currentChapterId}
           onChapterSelect={onChapterSelect}
           onChaptersReorder={onChaptersReorder}
+          expandedChapterIds={expandedChapterIds}
+          onToggleChapterExpanded={onToggleChapterExpanded}
         />
       ) : (
         <ArticleToc

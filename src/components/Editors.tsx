@@ -10,6 +10,7 @@ import DocinfoEditor from "./DocinfoEditor";
 import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
+import { useBookChapters } from "./toc/useBookChapters";
 import { useSectionedEditing } from "./useSectionedEditing";
 import "./Editors.css";
 
@@ -348,6 +349,22 @@ const Editors = (props: editorProps) => {
     chapterKey: props.currentChapterId,
   });
 
+  // ── Book-mode chapter state ────────────────────────────────────────────────
+  // useBookChapters owns the per-chapter parsed-section map and the set of
+  // expanded chapter ids.  When the active chapter changes (currentChapterId),
+  // we auto-expand it so behavior matches the pre-refactor "only the active
+  // chapter is expanded" baseline.  Phase 3 wires the chevron buttons to
+  // toggleChapterExpanded so the set can hold more than one id at a time.
+  const bookChapters = useBookChapters({
+    chapters: props.chapters ?? [],
+  });
+  const { expandChapter: _expandChapter } = bookChapters;
+  useEffect(() => {
+    if (props.projectType !== "book") return;
+    if (!props.currentChapterId) return;
+    _expandChapter(props.currentChapterId);
+  }, [props.projectType, props.currentChapterId, _expandChapter]);
+
   // ── Sync props → internal state ────────────────────────────────────────────
   useEffect(() => {
     const handleResize = () => setIsNarrowScreen(window.innerWidth < 800);
@@ -546,6 +563,8 @@ const Editors = (props: editorProps) => {
       currentChapterId={props.currentChapterId}
       onChapterSelect={props.onChapterSelect}
       onChaptersReorder={props.onChaptersReorder}
+      expandedChapterIds={bookChapters.expandedChapterIds}
+      onToggleChapterExpanded={bookChapters.toggleChapterExpanded}
     />
   );
 
