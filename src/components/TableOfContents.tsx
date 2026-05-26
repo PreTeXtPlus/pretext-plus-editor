@@ -916,65 +916,56 @@ const TableOfContents = (props: TableOfContentsProps) => {
                     }}
                   >
                     {/* Sections nested beneath the active chapter */}
-                    <DndContext
-                      sensors={sensors}
-                      collisionDetection={closestCenter}
-                      onDragStart={handleDragStart}
-                      onDragMove={handleDragMove}
-                      onDragEnd={handleDragEnd}
-                      onDragCancel={clearDragState}
+                    <SortableContext
+                      items={sections.map((s) => s.id)}
+                      strategy={() => null}
                     >
-                      <SortableContext
-                        items={sections.map((s) => s.id)}
-                        strategy={() => null}
+                      <ul
+                        className="pretext-plus-editor__toc-section-children"
+                        role="group"
                       >
-                        <ul
-                          className="pretext-plus-editor__toc-section-children"
-                          role="group"
-                        >
-                          {sections.length === 0 ? (
-                            <li className="pretext-plus-editor__toc-no-sections">
-                              <span>No sections</span>
-                              {onAddFirstSection && (
-                                <button
-                                  type="button"
-                                  className="pretext-plus-editor__toc-footer-btn"
-                                  onClick={onAddFirstSection}
-                                  title="Wrap the document content in a section to enable section editing"
-                                >
-                                  + Create sections
-                                </button>
-                              )}
-                            </li>
-                          ) : (
-                            <>
-                              {items}
-                              {!readonly && (
-                                <AddSectionItem
-                                  hasIntroduction={hasIntroduction}
-                                  hasConclusion={hasConclusion}
-                                  onAddSection={() => onAddSection(null)}
-                                  onAddIntroduction={onAddIntroduction}
-                                  onAddConclusion={onAddConclusion}
-                                />
-                              )}
-                            </>
-                          )}
-                        </ul>
-                      </SortableContext>
-                      <DragOverlay>
-                        {activeSection && (
-                          <div className="pretext-plus-editor__toc-drag-overlay">
-                            <span className="pretext-plus-editor__toc-drag-overlay-badge">
-                              {activeSection.type}
-                            </span>
-                            <span className="pretext-plus-editor__toc-drag-overlay-title">
-                              {activeSection.title || "Untitled"}
-                            </span>
-                          </div>
+                        {sections.length === 0 ? (
+                          <li className="pretext-plus-editor__toc-no-sections">
+                            <span>No sections</span>
+                            {onAddFirstSection && (
+                              <button
+                                type="button"
+                                className="pretext-plus-editor__toc-footer-btn"
+                                onClick={onAddFirstSection}
+                                title="Wrap the document content in a section to enable section editing"
+                              >
+                                + Create sections
+                              </button>
+                            )}
+                          </li>
+                        ) : (
+                          <>
+                            {items}
+                            {!readonly && (
+                              <AddSectionItem
+                                hasIntroduction={hasIntroduction}
+                                hasConclusion={hasConclusion}
+                                onAddSection={() => onAddSection(null)}
+                                onAddIntroduction={onAddIntroduction}
+                                onAddConclusion={onAddConclusion}
+                              />
+                            )}
+                          </>
                         )}
-                      </DragOverlay>
-                    </DndContext>
+                      </ul>
+                    </SortableContext>
+                    <DragOverlay>
+                      {activeSection && (
+                        <div className="pretext-plus-editor__toc-drag-overlay">
+                          <span className="pretext-plus-editor__toc-drag-overlay-badge">
+                            {activeSection.type}
+                          </span>
+                          <span className="pretext-plus-editor__toc-drag-overlay-title">
+                            {activeSection.title || "Untitled"}
+                          </span>
+                        </div>
+                      )}
+                    </DragOverlay>
 
                   </ChapterItem>
                 );
