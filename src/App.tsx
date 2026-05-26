@@ -7,14 +7,14 @@ import type { DocumentChapter, DocumentSection } from "./types/sections";
 
 // ---------------------------------------------------------------------------
 // Book demo content — simulates chapters fetched from the Rails back-end
+//
+// The "server-side" map holds the full source for every chapter, including
+// ones the editor has not yet asked for.  The client-facing `chapters` array
+// (state inside App) starts with metadata-only entries (no `content`); when
+// the editor calls `onChapterRequestLoad`, we simulate an async fetch from
+// this map and populate the chapter's `content` field.
 // ---------------------------------------------------------------------------
-const bookChapters: DocumentChapter[] = [
-  { id: "ch-intro", title: "Introduction", xmlId: "ch-intro" },
-  { id: "ch-background", title: "Background", xmlId: "ch-background" },
-  { id: "ch-methods", title: "Methods", xmlId: "ch-methods" },
-];
-
-const bookChapterSources: Record<string, string> = {
+const SERVER_CHAPTER_SOURCES: Record<string, string> = {
   "ch-intro": `<chapter xml:id="ch-intro">
   <title>Introduction</title>
   <introduction>
@@ -59,6 +59,12 @@ const bookChapterSources: Record<string, string> = {
   </conclusion>
 </chapter>`,
 };
+
+const bookChapters: DocumentChapter[] = [
+  { id: "ch-intro", title: "Introduction", xmlId: "ch-intro" },
+  { id: "ch-background", title: "Background", xmlId: "ch-background" },
+  { id: "ch-methods", title: "Methods", xmlId: "ch-methods" },
+];
 
 const latexDemoContent = String.raw`
 
@@ -181,13 +187,95 @@ function App() {
   };
 
   const handleChapterSelect = (chapterId: string) => {
-    const chapterSource = bookChapterSources[chapterId] ?? "";
+    const chapterSource =
+      bookChapterList.find((c) => c.id === chapterId)?.content ??
+      SERVER_CHAPTER_SOURCES[chapterId] ??
+      "";
     // Simulate an async fetch: update both source and currentChapterId together
     // so React 18 batching delivers them in the same render (no stale-sections flash).
     setCurrentChapterId(chapterId);
     setSource(chapterSource);
     setPretextSource(chapterSource);
     setSourceFormat("pretext");
+  };
+
+  // -------------------------------------------------------------------------
+  // New chapter callbacks (Phase 1: declared and wired into the demo state,
+  // not yet driven by the editor UI — that lands in subsequent phases).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Simulate the back-end fetch of a chapter's source.  In a real host this
+   * would be an authenticated HTTP request to Rails; here we just read from
+   * the in-memory SERVER_CHAPTER_SOURCES map after a short delay.
+   */
+  const handleChapterRequestLoad = (chapterId: string) => {
+    console.log("Chapter load requested:", chapterId);
+    setTimeout(() => {
+      setBookChapterList((prev) =>
+        prev.map((ch) =>
+          ch.id === chapterId
+            ? { ...ch, content: SERVER_CHAPTER_SOURCES[chapterId] ?? "" }
+            : ch,
+        ),
+      );
+    }, 150);
+  };
+
+  /**
+   * Persist an updated chapter content back to the "server" and reflect it
+   * in the in-memory chapter list so subsequent reads see the new value.
+   */
+  const handleChapterContentChange = (chapterId: string, content: string) => {
+    console.log("Chapter content changed:", chapterId, `(${content.length} chars)`);
+    SERVER_CHAPTER_SOURCES[chapterId] = content;
+    setBookChapterList((prev) =>
+      prev.map((ch) => (ch.id === chapterId ? { ...ch, content } : ch)),
+    );
+  };
+
+  const handleChapterAdd = (afterChapterId: string | null) => {
+    const newId = `ch-${Math.random().toString(36).slice(2, 8)}`;
+    const newChapter: DocumentChapter = {
+      id: newId,
+      title: "New Chapter",
+      xmlId: newId,
+      content: `<chapter xml:id="${newId}">\n  <title>New Chapter</title>\n</chapter>`,
+    };
+    SERVER_CHAPTER_SOURCES[newId] = newChapter.content!;
+    setBookChapterList((prev) => {
+      if (afterChapterId === null) return [newChapter, ...prev];
+      const idx = prev.findIndex((c) => c.id === afterChapterId);
+      if (idx === -1) return [...prev, newChapter];
+      return [...prev.slice(0, idx + 1), newChapter, ...prev.slice(idx + 1)];
+    });
+    console.log("Chapter added:", newId);
+  };
+
+  const handleChapterRemove = (chapterId: string) => {
+    console.log("Chapter removed:", chapterId);
+    delete SERVER_CHAPTER_SOURCES[chapterId];
+    setBookChapterList((prev) => prev.filter((c) => c.id !== chapterId));
+    if (currentChapterId === chapterId) setCurrentChapterId(null);
+  };
+
+  const handleChapterUpdate = (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => {
+    console.log("Chapter updated:", chapterId, changes);
+    setBookChapterList((prev) =>
+      prev.map((ch) =>
+        ch.id === chapterId
+          ? {
+              ...ch,
+              title: changes.title ?? ch.title,
+              xmlId: changes.xmlId === null ? undefined : changes.xmlId ?? ch.xmlId,
+              label: changes.label === null ? undefined : changes.label ?? ch.label,
+            }
+          : ch,
+      ),
+    );
   };
 
   const handleSectionsChange = (sections: DocumentSection[]) => {
@@ -267,6 +355,15 @@ function App() {
             ? (reordered) => setBookChapterList(reordered)
             : undefined
         }
+        onChapterRequestLoad={
+          projectType === "book" ? handleChapterRequestLoad : undefined
+        }
+        onChapterContentChange={
+          projectType === "book" ? handleChapterContentChange : undefined
+        }
+        onChapterAdd={projectType === "book" ? handleChapterAdd : undefined}
+        onChapterRemove={projectType === "book" ? handleChapterRemove : undefined}
+        onChapterUpdate={projectType === "book" ? handleChapterUpdate : undefined}
       />
     </>
   );

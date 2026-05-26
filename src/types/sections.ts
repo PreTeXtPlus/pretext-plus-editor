@@ -43,9 +43,12 @@ export interface DocumentSection {
 }
 
 /**
- * A lightweight summary of a book chapter used to populate the TOC when the
- * editor is in `"book"` project mode.  Full chapter source is fetched on
- * demand by the host via `onChapterSelect`.
+ * A book chapter entry used to populate the TOC when the editor is in
+ * `"book"` project mode.  Chapters are managed by the host (typically
+ * persisted as separate database records) and provided to the editor as
+ * a list.  Each chapter optionally carries its own PreTeXt source in
+ * `content`; chapters without `content` are considered not-yet-loaded
+ * and may be loaded on demand via `onChapterRequestLoad`.
  */
 export interface DocumentChapter {
   /** Stable identifier for this chapter (e.g. a Rails record id or UUID). */
@@ -56,6 +59,12 @@ export interface DocumentChapter {
   xmlId?: string;
   /** Optional `label` attribute from the PreTeXt source. */
   label?: string;
+  /**
+   * Full PreTeXt XML source for this chapter.  `undefined` means the
+   * chapter has not yet been loaded from the back-end; the editor will
+   * call `onChapterRequestLoad(id)` when it needs the content.
+   */
+  content?: string;
 }
 
 /**

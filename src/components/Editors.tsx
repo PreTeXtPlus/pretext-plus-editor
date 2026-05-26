@@ -171,6 +171,42 @@ export interface editorProps {
    * When omitted, chapter drag handles are hidden.
    */
   onChaptersReorder?: (chapters: DocumentChapter[]) => void;
+  /**
+   * Called when the editor needs a chapter's `content` and the chapter
+   * doesn't already have it.  The host should fetch the chapter source
+   * from the back-end and update the `chapters` prop with the loaded
+   * `content` for that id.  Wired up in a later phase.
+   */
+  onChapterRequestLoad?: (chapterId: string) => void;
+  /**
+   * Called whenever a chapter's `content` changes from within the editor
+   * (direct content edit, section reorder, or a section moved in/out of
+   * this chapter).  The host is responsible for persisting the change.
+   * Wired up in a later phase.
+   */
+  onChapterContentChange?: (chapterId: string, content: string) => void;
+  /**
+   * Called when the user clicks the "+ Add chapter" button.  The host
+   * should create a new chapter record on the back-end and append it to
+   * the `chapters` array.  `afterChapterId` is the id of the chapter
+   * immediately preceding the insertion point, or `null` to insert at
+   * the top.  Wired up in a later phase.
+   */
+  onChapterAdd?: (afterChapterId: string | null) => void;
+  /**
+   * Called when the user removes a chapter from the TOC.  The host
+   * should delete the corresponding back-end record and update the
+   * `chapters` array accordingly.  Wired up in a later phase.
+   */
+  onChapterRemove?: (chapterId: string) => void;
+  /**
+   * Called when the user edits a chapter's title or other metadata
+   * (xml:id, label).  Wired up in a later phase.
+   */
+  onChapterUpdate?: (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => void;
 }
 
 /**
