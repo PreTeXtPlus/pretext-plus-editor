@@ -158,12 +158,9 @@ export function useSectionedEditing({
     if (supportsSectioned) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSections([]);
-     
     setDocumentWrapper("");
-     
     setCurrentSectionId(null);
     pendingNavTitle.current = null;
-     
     setInternalEditMode("document");
   }, [supportsSectioned]);
 
@@ -232,7 +229,7 @@ export function useSectionedEditing({
       onSectionsChange?.([]);
       pendingNavTitle.current = null;
       setParseError(null);
-      setInternalEditMode("document");
+      if (!controlledEditMode) setInternalEditMode("document");
       onEditModeChange?.("document");
       return;
     }
@@ -250,7 +247,7 @@ export function useSectionedEditing({
       onSectionsChange?.([]);
       pendingNavTitle.current = null;
       setParseError(formatParseError(err));
-      setInternalEditMode("document");
+      if (!controlledEditMode) setInternalEditMode("document");
       onEditModeChange?.("document");
       return;
     }
@@ -271,11 +268,11 @@ export function useSectionedEditing({
 
     if (target) {
       setCurrentSectionId(target.id);
-      setInternalEditMode("sectioned");
+      if (!controlledEditMode) setInternalEditMode("sectioned");
       onEditModeChange?.("sectioned");
     } else {
       setCurrentSectionId(split[0]?.id ?? null);
-      setInternalEditMode("document");
+      if (!controlledEditMode) setInternalEditMode("document");
       onEditModeChange?.("document");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

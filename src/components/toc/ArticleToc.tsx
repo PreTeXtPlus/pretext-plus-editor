@@ -15,6 +15,7 @@ import type {
 import SectionList from "./SectionList";
 import { useSectionDnd } from "./useSectionDnd";
 import { useSectionEdit } from "./useSectionEdit";
+import { TYPE_LABELS } from "./types";
 
 export interface ArticleTocProps {
   sections: DocumentSection[];
@@ -139,7 +140,7 @@ const ArticleToc = ({
           {activeSection && (
             <div className="pretext-plus-editor__toc-drag-overlay">
               <span className="pretext-plus-editor__toc-drag-overlay-badge">
-                {activeSection.type}
+                {TYPE_LABELS[activeSection.type] ?? activeSection.type}
               </span>
               <span className="pretext-plus-editor__toc-drag-overlay-title">
                 {activeSection.title || "Untitled"}

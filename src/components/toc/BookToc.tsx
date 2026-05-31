@@ -24,6 +24,7 @@ import type {
 import ChapterItem from "./ChapterItem";
 import SectionList from "./SectionList";
 import { useSectionEdit } from "./useSectionEdit";
+import { TYPE_LABELS } from "./types";
 import type { ChapterParseResult } from "./useBookChapters";
 
 export interface BookTocProps {
@@ -480,7 +481,7 @@ const BookToc = ({
         {draggedSectionId && draggedSection && (
           <div className="pretext-plus-editor__toc-drag-overlay">
             <span className="pretext-plus-editor__toc-drag-overlay-badge">
-              {draggedSection.type}
+              {TYPE_LABELS[draggedSection.type] ?? draggedSection.type}
             </span>
             <span className="pretext-plus-editor__toc-drag-overlay-title">
               {draggedSection.title || "Untitled"}
