@@ -5,7 +5,7 @@ import type {
   DragStartEvent,
 } from "@dnd-kit/core";
 import type { DocumentSection } from "../../types/sections";
-import { isRegularDivision } from "./types";
+import { isRegularDivision, validateSectionOrder } from "./types";
 
 export interface SectionDndState {
   activeId: string | null;
@@ -163,13 +163,7 @@ export function useSectionDnd({
       ...without.slice(insertAt),
     ];
 
-    // Validate invariant: intro first, conclusion last.
-    const introIdx = next.findIndex((s) => s.type === "introduction");
-    const conclusionIdx = next.findIndex((s) => s.type === "conclusion");
-    const valid =
-      (introIdx === -1 || introIdx === 0) &&
-      (conclusionIdx === -1 || conclusionIdx === next.length - 1);
-    if (valid) onReorderSections(next);
+    if (validateSectionOrder(next)) onReorderSections(next);
   };
 
   return {

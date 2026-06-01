@@ -24,7 +24,8 @@ import type {
 import ChapterItem from "./ChapterItem";
 import SectionList from "./SectionList";
 import { useSectionEdit } from "./useSectionEdit";
-import { TYPE_LABELS } from "./types";
+import { useChapterEdit } from "./useChapterEdit";
+import { TYPE_LABELS, validateSectionOrder } from "./types";
 import type { ChapterParseResult } from "./useBookChapters";
 
 export interface BookTocProps {
@@ -72,6 +73,14 @@ export interface BookTocProps {
    * named section in sectioned mode.
    */
   onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
+  /**
+   * Commit edited chapter properties (title, xml:id, label).  When provided,
+   * an edit (✎) button is shown on each chapter row.
+   */
+  onUpdateChapter?: (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => void;
 }
 
 interface DropTarget {
@@ -125,8 +134,10 @@ const BookToc = ({
   onChapterRemove,
   onChapterContentChange,
   onSelectSectionInChapter,
+  onUpdateChapter,
 }: BookTocProps) => {
   const edit = useSectionEdit();
+  const chapterEdit = useChapterEdit();
 
   const [draggedChapterId, setDraggedChapterId] = useState<string | null>(null);
   const [draggedSectionId, setDraggedSectionId] = useState<string | null>(null);
@@ -222,6 +233,7 @@ const BookToc = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     edit.cancelEdit();
+    chapterEdit.cancelEdit();
     const id = event.active.id as string;
     if (chapterIdSet.has(id)) {
       setDraggedChapterId(id);
@@ -322,7 +334,7 @@ const BookToc = ({
         wasDraggedSection,
         ...without.slice(insertAt),
       ];
-      if (!validateInvariant(next)) return;
+      if (!validateSectionOrder(next)) return;
       commitChapterSections(sourceChapterId, next);
       return;
     }
@@ -332,7 +344,7 @@ const BookToc = ({
     if (!onChapterContentChange) return;
 
     const newSource = sourceSections.filter((s) => s.id !== wasSection);
-    if (!validateInvariant(newSource)) return;
+    if (!validateSectionOrder(newSource)) return;
 
     const targetWithout = targetSections.filter((s) => s.id !== wasSection);
     const targetIdx = targetWithout.findIndex(
@@ -346,7 +358,7 @@ const BookToc = ({
       wasDraggedSection,
       ...targetWithout.slice(insertAt),
     ];
-    if (!validateInvariant(newTarget)) return;
+    if (!validateSectionOrder(newTarget)) return;
 
     commitChapterSections(sourceChapterId, newSource);
     commitChapterSections(targetChapterId, newTarget);
@@ -425,6 +437,19 @@ const BookToc = ({
                 onRemove={
                   onChapterRemove ? () => handleChapterRemoveClick(ch) : undefined
                 }
+                onStartEdit={
+                  onUpdateChapter ? () => chapterEdit.startEdit(ch) : undefined
+                }
+                editDraft={
+                  chapterEdit.editingId === ch.id ? chapterEdit.editDraft : null
+                }
+                onDraftChange={chapterEdit.setEditDraft}
+                onEditCommit={
+                  onUpdateChapter
+                    ? () => chapterEdit.commitEdit(onUpdateChapter)
+                    : undefined
+                }
+                onEditCancel={chapterEdit.cancelEdit}
               >
                 {isExpanded &&
                   renderChapterChildren({
@@ -492,16 +517,6 @@ const BookToc = ({
     </DndContext>
   );
 };
-
-/** Intro must be first, conclusion must be last (per chapter). */
-function validateInvariant(next: DocumentSection[]): boolean {
-  const introIdx = next.findIndex((s) => s.type === "introduction");
-  const conclusionIdx = next.findIndex((s) => s.type === "conclusion");
-  return (
-    (introIdx === -1 || introIdx === 0) &&
-    (conclusionIdx === -1 || conclusionIdx === next.length - 1)
-  );
-}
 
 // ---------------------------------------------------------------------------
 // renderChapterChildren — section list (or loading placeholder) shown

@@ -394,6 +394,67 @@ export function ensureSectionWrapper(
 }
 
 // ---------------------------------------------------------------------------
+// Chapter wrapper utilities (book mode)
+// ---------------------------------------------------------------------------
+
+/**
+ * Strip the outer `<chapter>` element from a chapter XML string, returning
+ * just its inner content (title, sections, etc.).  Behaves exactly like
+ * {@link stripSectionWrapper}: the enclosing element is dropped but all
+ * children are kept, so the user edits the chapter body without ever seeing
+ * or editing the `<chapter>` division tag itself.
+ */
+export function stripChapterWrapper(chapterXml: string): string {
+  return stripSectionWrapper(chapterXml);
+}
+
+/** Escape a string for safe use inside a double-quoted XML attribute value. */
+function escapeAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Re-wrap chapter body content (as produced by the code editor) with the
+ * original `<chapter>` element, preserving its tag name and all attributes
+ * (e.g. `xml:id`, `label`).
+ *
+ * The attributes are recovered from `originalChapterXml` — the last known
+ * full chapter source — so that editing the body never drops them.  String
+ * concatenation (rather than re-serialising via xast) keeps this robust to
+ * invalid inner XML while the user is mid-edit.
+ */
+export function rewrapChapter(
+  innerXml: string,
+  originalChapterXml: string,
+): string {
+  let name = "chapter";
+  const attrs: Record<string, string> = {};
+  try {
+    const tree: Root = fromXml(originalChapterXml);
+    const el = tree.children.find((n) => n.type === "element") as
+      | Element
+      | undefined;
+    if (el) {
+      name = el.name;
+      for (const [key, value] of Object.entries(el.attributes ?? {})) {
+        if (value == null) continue;
+        attrs[key] = String(value);
+      }
+    }
+  } catch {
+    // Fall back to a bare <chapter> wrapper if the original can't be parsed.
+  }
+  const attrStr = Object.entries(attrs)
+    .map(([key, value]) => ` ${key}="${escapeAttribute(value)}"`)
+    .join("");
+  const normalizedInner = trimBoundaryBlankLines(innerXml);
+  return `<${name}${attrStr}>\n${normalizedInner}\n</${name}>`;
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers (not exported)
 // ---------------------------------------------------------------------------
 
@@ -1030,6 +1091,74 @@ export function updateSectionMetadata(
   } catch {
     // If parsing fails just update the in-memory fields without touching content.
     return { ...section, title: newTitle, type: newType };
+  }
+}
+
+/**
+ * Update the `<title>`, `xml:id`, and `label` of a chapter XML string.
+ *
+ * Mirrors {@link updateSectionMetadata} but operates on a raw chapter source
+ * string and never changes the element's tag name (a chapter is always a
+ * chapter).  Pass `null`/empty for `xmlId` or `label` to remove the
+ * attribute; omit a key (or pass `undefined`) to leave it unchanged.
+ */
+export function updateChapterMetadata(
+  chapterXml: string,
+  changes: {
+    title?: string;
+    xmlId?: string | null;
+    label?: string | null;
+  },
+): string {
+  try {
+    const tree: Root = fromXml(chapterXml);
+    const el = tree.children.find((n) => n.type === "element") as
+      | Element
+      | undefined;
+    if (!el) return chapterXml;
+
+    const newEl: Element = { ...el, attributes: { ...el.attributes } };
+
+    if (changes.xmlId !== undefined) {
+      if (changes.xmlId === null || changes.xmlId === "") {
+        delete newEl.attributes["xml:id"];
+      } else {
+        newEl.attributes["xml:id"] = changes.xmlId;
+      }
+    }
+
+    if (changes.label !== undefined) {
+      if (changes.label === null || changes.label === "") {
+        delete newEl.attributes["label"];
+      } else {
+        newEl.attributes["label"] = changes.label;
+      }
+    }
+
+    if (changes.title !== undefined) {
+      const titleIndex = newEl.children.findIndex(
+        (c) => c.type === "element" && (c as Element).name === "title",
+      );
+      const titleNode: Element = {
+        type: "element",
+        name: "title",
+        attributes: {},
+        children: [{ type: "text", value: changes.title }],
+      };
+      if (titleIndex === -1) {
+        newEl.children = [titleNode, ...newEl.children];
+      } else {
+        newEl.children = [
+          ...newEl.children.slice(0, titleIndex),
+          titleNode,
+          ...newEl.children.slice(titleIndex + 1),
+        ];
+      }
+    }
+
+    return toXml({ type: "root", children: [newEl] } as Root);
+  } catch {
+    return chapterXml;
   }
 }
 

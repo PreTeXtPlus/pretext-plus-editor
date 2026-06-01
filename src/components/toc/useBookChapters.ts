@@ -8,15 +8,14 @@
  *
  * A chapter whose `content` is `undefined` (not yet loaded from the
  * back-end) maps to `null`.  The map is recomputed whenever the `chapters`
- * array reference changes; splitting is cheap enough that we don't bother
- * caching individual chapter parses across renders.
+ * array reference changes.
  *
  * This hook does NOT own the active-chapter editing state — that remains in
  * {@link useSectionedEditing}, which still operates on a single source string.
  * Phases 3 and 4 layer multi-chapter rendering and cross-chapter DnD on top
  * of this map.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { splitDocument } from "../../sectionUtils";
 import type {
@@ -48,19 +47,13 @@ export interface BookChaptersState {
 
 export interface BookChaptersOptions {
   chapters: DocumentChapter[];
-  /**
-   * Optional initial expanded ids.  When omitted, no chapter starts
-   * expanded; callers typically expand the active chapter explicitly.
-   */
-  initialExpandedIds?: string[];
 }
 
 export function useBookChapters({
   chapters,
-  initialExpandedIds,
 }: BookChaptersOptions): BookChaptersState {
   const [expandedChapterIds, setExpandedChapterIds] = useState<Set<string>>(
-    () => new Set(initialExpandedIds ?? []),
+    () => new Set<string>(),
   );
 
   const chapterSectionsById = useMemo(() => {
@@ -83,35 +76,37 @@ export function useBookChapters({
     return next;
   }, [chapters]);
 
-  const expandChapter = (chapterId: string) => {
+  const expandChapter = useCallback((chapterId: string) => {
     setExpandedChapterIds((prev) => {
       if (prev.has(chapterId)) return prev;
       const next = new Set(prev);
       next.add(chapterId);
       return next;
     });
-  };
+  }, []);
 
-  const collapseChapter = (chapterId: string) => {
+  const collapseChapter = useCallback((chapterId: string) => {
     setExpandedChapterIds((prev) => {
       if (!prev.has(chapterId)) return prev;
       const next = new Set(prev);
       next.delete(chapterId);
       return next;
     });
-  };
+  }, []);
 
-  const toggleChapterExpanded = (chapterId: string) => {
+  const toggleChapterExpanded = useCallback((chapterId: string) => {
     setExpandedChapterIds((prev) => {
       const next = new Set(prev);
       if (next.has(chapterId)) next.delete(chapterId);
       else next.add(chapterId);
       return next;
     });
-  };
+  }, []);
 
-  const getChapterParse = (chapterId: string) =>
-    chapterSectionsById.get(chapterId) ?? null;
+  const getChapterParse = useCallback(
+    (chapterId: string) => chapterSectionsById.get(chapterId) ?? null,
+    [chapterSectionsById],
+  );
 
   return {
     expandedChapterIds,

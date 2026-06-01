@@ -128,6 +128,14 @@ export interface TableOfContentsProps {
    */
   onSelectSectionInChapter?: (chapterId: string, sectionTitle: string) => void;
   /**
+   * Commit edited chapter properties (title, xml:id, label) from the inline
+   * chapter edit form.  When omitted, the chapter edit (✎) button is hidden.
+   */
+  onUpdateChapter?: (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => void;
+  /**
    * When set, the current source XML cannot be parsed and the TOC will
    * display the message as a red warning banner.  Section-list operations
    * (re-parsing, mode switching) remain blocked until the XML is fixed.
@@ -172,6 +180,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onChapterRemove,
     onChapterContentChange,
     onSelectSectionInChapter,
+    onUpdateChapter,
     parseError,
   } = props;
 
@@ -191,7 +200,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     );
   }
 
-  const isBookMode = projectType === "book" && chapters.length > 0;
+  const isBookMode = projectType === "book";
 
   return (
     <div className="pretext-plus-editor__toc">
@@ -262,6 +271,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
           onChapterRemove={onChapterRemove}
           onChapterContentChange={onChapterContentChange}
           onSelectSectionInChapter={onSelectSectionInChapter}
+          onUpdateChapter={onUpdateChapter}
         />
       ) : (
         <ArticleToc

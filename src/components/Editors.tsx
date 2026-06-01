@@ -15,6 +15,7 @@ import { useSectionedEditing } from "./useSectionedEditing";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
+import { updateChapterMetadata } from "../sectionUtils";
 import { defaultContent } from "../defaultContent";
 import type {
   EditorContentChange,
@@ -327,6 +328,9 @@ const Editors = (props: editorProps) => {
     setIsTocCollapsed,
     activeSourceContent,
     updateSectionContent,
+    isBookChapterBody,
+    updateChapterBodyContent,
+    updateActiveChapterMetadata,
     handleRefreshSections,
     switchEditMode,
     handleSelectSectionInDocMode,
@@ -381,6 +385,31 @@ const Editors = (props: editorProps) => {
     props.onChapterSelect?.(chapterId);
   };
 
+  /**
+   * Commit edited chapter properties (title, xml:id, label) from the inline
+   * chapter edit form.  Updates the host's chapter metadata (so the TOC label
+   * and persisted record reflect the change) and keeps the chapter's XML
+   * source in sync: the active chapter is updated through the live editor
+   * state; other already-loaded chapters via `onChapterContentChange`.
+   */
+  const handleUpdateChapter = (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => {
+    props.onChapterUpdate?.(chapterId, changes);
+    if (chapterId === props.currentChapterId) {
+      updateActiveChapterMetadata(changes);
+      return;
+    }
+    const content = props.chapters?.find((c) => c.id === chapterId)?.content;
+    if (content && props.onChapterContentChange) {
+      props.onChapterContentChange(
+        chapterId,
+        updateChapterMetadata(content, changes),
+      );
+    }
+  };
+
   // ── Sync props → internal state ────────────────────────────────────────────
   useEffect(() => {
     const handleResize = () => setIsNarrowScreen(window.innerWidth < 800);
@@ -388,7 +417,11 @@ const Editors = (props: editorProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Auto-select the first chapter when a book is loaded with no chapter active.
+  // Auto-select the first chapter on initial book load (but not after deletions).
+  // hadChapterRef tracks whether we've ever seen a non-null currentChapterId
+  // while in book mode; once set, the effect won't auto-select again, leaving
+  // post-deletion navigation to the host.
+  const hadChapterRef = useRef(false);
   const {
     projectType: _projectType,
     chapters: _chapters,
@@ -397,14 +430,16 @@ const Editors = (props: editorProps) => {
   } = props;
   const _firstChapterId = _chapters?.[0]?.id;
   useEffect(() => {
-    if (
-      _projectType === "book" &&
-      _firstChapterId &&
-      !_currentChapterId &&
-      _onChapterSelect
-    ) {
-      _onChapterSelect(_firstChapterId);
+    if (_projectType !== "book") {
+      hadChapterRef.current = false;
+      return;
     }
+    if (_currentChapterId) {
+      hadChapterRef.current = true;
+      return;
+    }
+    if (hadChapterRef.current || !_firstChapterId || !_onChapterSelect) return;
+    _onChapterSelect(_firstChapterId);
   }, [_projectType, _firstChapterId, _currentChapterId, _onChapterSelect]);
 
   // ── Derived preview content ────────────────────────────────────────────────
@@ -482,6 +517,8 @@ const Editors = (props: editorProps) => {
       onChange={
         editMode === "sectioned"
           ? (c) => updateSectionContent(c)
+          : isBookChapterBody
+          ? (c) => updateChapterBodyContent(c)
           : updateContentState
       }
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
@@ -587,6 +624,9 @@ const Editors = (props: editorProps) => {
       onChapterRemove={props.onChapterRemove}
       onChapterContentChange={props.onChapterContentChange}
       onSelectSectionInChapter={handleSelectSectionInChapter}
+      onUpdateChapter={
+        props.projectType === "book" ? handleUpdateChapter : undefined
+      }
       parseError={parseError}
     />
   );

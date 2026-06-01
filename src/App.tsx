@@ -187,24 +187,27 @@ function App() {
   };
 
   const handleChapterSelect = (chapterId: string) => {
-    const cached = bookChapterList.find((c) => c.id === chapterId)?.content;
-    const chapterSource = cached ?? SERVER_CHAPTER_SOURCES[chapterId] ?? "";
+    const chapterSource =
+      bookChapterList.find((c) => c.id === chapterId)?.content ??
+      SERVER_CHAPTER_SOURCES[chapterId] ??
+      "";
+    // Flush any unsaved edits from the outgoing chapter into bookChapterList
+    // so that collapsing/re-expanding it later shows the edited sections.
+    // We snapshot `source` (the live editor content) rather than ch.content
+    // (which is only updated on saves/DnD) to avoid losing in-flight edits.
+    setBookChapterList((prev) =>
+      prev.map((ch) => {
+        if (ch.id === chapterId) return { ...ch, content: chapterSource };
+        if (ch.id === currentChapterId) return { ...ch, content: source };
+        return ch;
+      }),
+    );
     // Update both source and currentChapterId together so React 18 batching
     // delivers them in the same render (no stale-sections flash).
     setCurrentChapterId(chapterId);
     setSource(chapterSource);
     setPretextSource(chapterSource);
     setSourceFormat("pretext");
-    // Populate the chapter's content field so other parts of the editor
-    // (e.g. read-only section preview for non-active expanded chapters)
-    // can render its sections without an extra fetch.
-    if (cached === undefined) {
-      setBookChapterList((prev) =>
-        prev.map((ch) =>
-          ch.id === chapterId ? { ...ch, content: chapterSource } : ch,
-        ),
-      );
-    }
   };
 
   // -------------------------------------------------------------------------
@@ -331,20 +334,9 @@ function App() {
         sourceFormat={sourceFormat}
         pretextSource={pretextSource}
         onContentChange={(value, meta) => {
-          const nextSource = value || "";
-          setSource(nextSource);
+          setSource(value || "");
           setSourceFormat(meta?.sourceFormat || "pretext");
           setPretextSource(meta?.pretextSource);
-          // In book mode, mirror live edits into the active chapter's
-          // `content` so the read-only previews of other chapters stay
-          // consistent if the user re-collapses and re-expands later.
-          if (projectType === "book" && currentChapterId) {
-            setBookChapterList((prev) =>
-              prev.map((ch) =>
-                ch.id === currentChapterId ? { ...ch, content: nextSource } : ch,
-              ),
-            );
-          }
         }}
         title={title}
         onTitleChange={(value) => setTitle(value || "Document Title")}

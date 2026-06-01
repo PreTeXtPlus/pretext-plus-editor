@@ -37,6 +37,9 @@ import {
   stripLatexSectionWrapper,
   rewrapSection,
   rewrapLatexSection,
+  stripChapterWrapper,
+  rewrapChapter,
+  updateChapterMetadata,
 } from "../sectionUtils";
 
 /**
@@ -89,6 +92,28 @@ export interface SectionedEditingResult {
   activeSourceContent: string;
   /** Called by the code editor when the user edits section content. */
   updateSectionContent: (content: string | undefined) => void;
+  /**
+   * True when the editor is showing a single book chapter in document mode.
+   * In this state {@link activeSourceContent} has the `<chapter>` wrapper
+   * stripped and {@link updateChapterBodyContent} (not the raw content
+   * update) must be used to propagate edits.
+   */
+  isBookChapterBody: boolean;
+  /**
+   * Called by the code editor when the user edits the body of a book chapter
+   * in document mode.  Re-wraps the inner content with the chapter's original
+   * `<chapter>` tag (preserving its attributes) before propagating.
+   */
+  updateChapterBodyContent: (content: string | undefined) => void;
+  /**
+   * Update the active chapter's title / xml:id / label.  Keeps the document
+   * wrapper and merged source in sync so the change survives later edits.
+   */
+  updateActiveChapterMetadata: (changes: {
+    title?: string;
+    xmlId?: string | null;
+    label?: string | null;
+  }) => void;
   handleRefreshSections: () => void;
   switchEditMode: (mode: "document" | "sectioned") => void;
   handleSelectSectionInDocMode: (id: string) => void;
@@ -161,6 +186,7 @@ export function useSectionedEditing({
     setDocumentWrapper("");
     setCurrentSectionId(null);
     pendingNavTitle.current = null;
+    setParseError(null);
     setInternalEditMode("document");
   }, [supportsSectioned]);
 
@@ -212,18 +238,24 @@ export function useSectionedEditing({
   useEffect(() => {
     if (chapterKey === previousChapterKey.current) return;
     previousChapterKey.current = chapterKey;
-    if (chapterKey == null) return;
+    if (chapterKey == null) {
+      // Transitioning out of book mode (or clearing the active chapter) —
+      // reset stale chapter state so the TOC doesn't carry over old sections.
+      setSections([]); // eslint-disable-line react-hooks/set-state-in-effect
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      pendingNavTitle.current = null;
+      setParseError(null);
+      if (!controlledEditMode) setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
+    }
 
     const { sourceContent, sourceFormat } = contentState;
     if (sourceFormat === "markdown") return;
-    const toSplit =
-      sourceFormat === "latex"
-        ? sourceContent
-        : sourceFormat === "pretext"
-        ? sourceContent
-        : contentState.pretextSource ?? "";
+    const toSplit = sourceContent;
     if (!toSplit.trim()) {
-      setSections([]); // eslint-disable-line react-hooks/set-state-in-effect
+      setSections([]);
       setDocumentWrapper("");
       setCurrentSectionId(null);
       onSectionsChange?.([]);
@@ -344,14 +376,30 @@ export function useSectionedEditing({
       : null;
 
   /**
+   * True when a book chapter is loaded and we're editing it as a whole
+   * (document mode).  In this case the code editor shows the chapter body
+   * with its `<chapter>` wrapper stripped, mirroring how sectioned mode hides
+   * the `<section>` wrapper.  Chapters are always PreTeXt, so LaTeX is excluded.
+   */
+  const isBookChapterBody =
+    editMode === "document" &&
+    chapterKey != null &&
+    !isLatexDoc &&
+    contentState.sourceContent.trim().length > 0;
+
+  /**
    * The content to show in the code editor.  In sectioned mode the outer
-   * division wrapper is stripped so the user edits inner content only.
+   * division wrapper is stripped so the user edits inner content only; in
+   * book document mode the `<chapter>` wrapper is stripped likewise.
    */
   const activeSourceContent = (() => {
     if (editMode === "sectioned" && currentSection) {
       return isLatexDoc
         ? stripLatexSectionWrapper(currentSection.content, currentSection.type)
         : stripSectionWrapper(currentSection.content);
+    }
+    if (isBookChapterBody) {
+      return stripChapterWrapper(contentState.sourceContent);
     }
     return contentState.sourceContent;
   })();
@@ -445,6 +493,38 @@ export function useSectionedEditing({
       // Section XML is currently invalid (e.g. user is mid-edit of a tag name).
       // Keep the section content updated in state, but don't attempt to re-merge
       // the broken XML into the full document — it will sync when fixed.
+    }
+  };
+
+  /**
+   * Handle a body edit while a book chapter is shown in document mode.
+   * Re-wraps the inner content with the chapter's original `<chapter>` tag
+   * (attributes preserved) and propagates the full chapter source.
+   */
+  const updateChapterBodyContent = (newContent: string | undefined) => {
+    const rewrapped = rewrapChapter(newContent || "", contentState.sourceContent);
+    if (rewrapped === contentState.sourceContent) return;
+    onContentUpdate(rewrapped);
+  };
+
+  /**
+   * Update the active chapter's title / xml:id / label.  Applies the change
+   * to the stored wrapper (when present) so re-merges keep it, then propagates
+   * the full chapter source.  Sections are left untouched, preserving the
+   * current selection.
+   */
+  const updateActiveChapterMetadata = (changes: {
+    title?: string;
+    xmlId?: string | null;
+    label?: string | null;
+  }) => {
+    // Apply the change to the current full source so any in-progress body
+    // edits (not yet re-split into `sections`) are preserved.
+    onContentUpdate(updateChapterMetadata(contentState.sourceContent, changes));
+    // Also patch the stored wrapper so a later section edit (sectioned mode)
+    // re-merges with the updated title/attributes instead of reverting them.
+    if (documentWrapper) {
+      setDocumentWrapper(updateChapterMetadata(documentWrapper, changes));
     }
   };
 
@@ -632,6 +712,9 @@ export function useSectionedEditing({
     setIsTocCollapsed,
     activeSourceContent,
     updateSectionContent,
+    isBookChapterBody,
+    updateChapterBodyContent,
+    updateActiveChapterMetadata,
     handleRefreshSections,
     switchEditMode,
     handleSelectSectionInDocMode,
