@@ -37,7 +37,23 @@ import {
   stripLatexSectionWrapper,
   rewrapSection,
   rewrapLatexSection,
+  stripChapterWrapper,
+  rewrapChapter,
+  updateChapterMetadata,
 } from "../sectionUtils";
+
+/**
+ * Render a parser-thrown error into a short single-line string suitable
+ * for a banner.  Preserves line/column hints when the parser supplies
+ * them (xast-util-from-xml uses VFileMessage-style errors).
+ */
+function formatParseError(err: unknown): string {
+  if (err instanceof Error) {
+    const msg = err.message.split("\n")[0].trim();
+    return msg || "The source XML is not well-formed.";
+  }
+  return "The source XML is not well-formed.";
+}
 
 export interface SectionedEditingOptions {
   contentState: EditorContentState;
@@ -50,6 +66,12 @@ export interface SectionedEditingOptions {
   onSectionChange?: (section: DocumentSection) => void;
   /** Called with the merged full-document source whenever section content changes. */
   onContentUpdate: (source: string) => void;
+  /**
+   * When set (book mode), changing this value triggers an immediate section
+   * re-parse and resets to document mode so the newly-loaded chapter is
+   * reflected in the TOC even when the editor was previously in sectioned mode.
+   */
+  chapterKey?: string | null;
 }
 
 export interface SectionedEditingResult {
@@ -70,6 +92,28 @@ export interface SectionedEditingResult {
   activeSourceContent: string;
   /** Called by the code editor when the user edits section content. */
   updateSectionContent: (content: string | undefined) => void;
+  /**
+   * True when the editor is showing a single book chapter in document mode.
+   * In this state {@link activeSourceContent} has the `<chapter>` wrapper
+   * stripped and {@link updateChapterBodyContent} (not the raw content
+   * update) must be used to propagate edits.
+   */
+  isBookChapterBody: boolean;
+  /**
+   * Called by the code editor when the user edits the body of a book chapter
+   * in document mode.  Re-wraps the inner content with the chapter's original
+   * `<chapter>` tag (preserving its attributes) before propagating.
+   */
+  updateChapterBodyContent: (content: string | undefined) => void;
+  /**
+   * Update the active chapter's title / xml:id / label.  Keeps the document
+   * wrapper and merged source in sync so the change survives later edits.
+   */
+  updateActiveChapterMetadata: (changes: {
+    title?: string;
+    xmlId?: string | null;
+    label?: string | null;
+  }) => void;
   handleRefreshSections: () => void;
   switchEditMode: (mode: "document" | "sectioned") => void;
   handleSelectSectionInDocMode: (id: string) => void;
@@ -89,6 +133,19 @@ export interface SectionedEditingResult {
   ) => void;
   handleReorderSections: (nextSections: DocumentSection[]) => void;
   handleMergeSection: (sourceId: string, targetId: string) => void;
+  /**
+   * Queue a section-title navigation request that will be applied the
+   * next time the chapter-key effect re-splits the document.  Used by
+   * book mode to land on a specific section after switching chapters.
+   */
+  requestSectionNavigation: (sectionTitle: string | null) => void;
+  /**
+   * A human-readable message describing why the source content can't be
+   * parsed, or `null` when it parses cleanly.  Surfaced as a warning
+   * banner in the TOC so the user knows section operations are blocked
+   * until the XML is fixed.
+   */
+  parseError: string | null;
 }
 
 export function useSectionedEditing({
@@ -99,6 +156,7 @@ export function useSectionedEditing({
   onSectionsChange,
   onSectionChange,
   onContentUpdate,
+  chapterKey,
 }: SectionedEditingOptions): SectionedEditingResult {
   const [internalEditMode, setInternalEditMode] = useState<
     "document" | "sectioned"
@@ -108,6 +166,7 @@ export function useSectionedEditing({
   const [documentWrapper, setDocumentWrapper] = useState<string>("");
   const [currentSectionId, setCurrentSectionId] = useState<string | null>(null);
   const [isTocCollapsed, setIsTocCollapsed] = useState(true);
+  const [parseError, setParseError] = useState<string | null>(null);
 
   // Pending section title to navigate to after a mode switch
   const pendingNavTitle = useRef<string | null>(null);
@@ -122,10 +181,12 @@ export function useSectionedEditing({
 
   useEffect(() => {
     if (supportsSectioned) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSections([]);
     setDocumentWrapper("");
     setCurrentSectionId(null);
     pendingNavTitle.current = null;
+    setParseError(null);
     setInternalEditMode("document");
   }, [supportsSectioned]);
 
@@ -156,14 +217,98 @@ export function useSectionedEditing({
         sourceFormat === "latex"
           ? splitLatexDocument(toSplit)
           : splitDocument(toSplit);
-      setDocumentWrapper(wrapper);
+      setDocumentWrapper(wrapper); // eslint-disable-line react-hooks/set-state-in-effect
       setSections(split);
       setCurrentSectionId(split[0]?.id ?? null);
-    } catch {
-      // ignore parse errors; TOC will be empty
+    } catch (err) {
+      // Record the parse failure so the TOC can show a banner; sections
+      // stay empty and TOC operations are blocked until the XML is fixed.
+      setParseError(formatParseError(err));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount
+
+  // ── Chapter-key change: reset sections when the host loads a new chapter ───
+  // This is needed in book mode: when the host fetches a new chapter and updates
+  // `source`, the sections must be re-parsed even if the editor was in sectioned
+  // mode (where the normal debounced refresh is suppressed to avoid clobbering
+  // in-progress edits).  We also reset to document mode so the user starts fresh
+  // on the newly-loaded chapter rather than landing in a potentially stale section.
+  const previousChapterKey = useRef(chapterKey);
+  useEffect(() => {
+    if (chapterKey === previousChapterKey.current) return;
+    previousChapterKey.current = chapterKey;
+    if (chapterKey == null) {
+      // Transitioning out of book mode (or clearing the active chapter) —
+      // reset stale chapter state so the TOC doesn't carry over old sections.
+      setSections([]); // eslint-disable-line react-hooks/set-state-in-effect
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      pendingNavTitle.current = null;
+      setParseError(null);
+      if (!controlledEditMode) setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
+    }
+
+    const { sourceContent, sourceFormat } = contentState;
+    if (sourceFormat === "markdown") return;
+    const toSplit = sourceContent;
+    if (!toSplit.trim()) {
+      setSections([]);
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      onSectionsChange?.([]);
+      pendingNavTitle.current = null;
+      setParseError(null);
+      if (!controlledEditMode) setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
+    }
+    let split: DocumentSection[];
+    let wrapper: string;
+    try {
+      ({ wrapper, sections: split } =
+        sourceFormat === "latex"
+          ? splitLatexDocument(toSplit)
+          : splitDocument(toSplit));
+    } catch (err) {
+      setSections([]);
+      setDocumentWrapper("");
+      setCurrentSectionId(null);
+      onSectionsChange?.([]);
+      pendingNavTitle.current = null;
+      setParseError(formatParseError(err));
+      if (!controlledEditMode) setInternalEditMode("document");
+      onEditModeChange?.("document");
+      return;
+    }
+    setParseError(null);
+    setDocumentWrapper(wrapper);
+    setSections(split);
+    onSectionsChange?.(split);
+
+    // If a cross-chapter navigation request was queued, honor it by landing
+    // directly on the requested section in sectioned mode.  Otherwise reset
+    // to the first section in document mode so the user starts fresh on
+    // the newly-loaded chapter.
+    const pendingTitle = pendingNavTitle.current;
+    const target = pendingTitle
+      ? split.find((s) => s.title === pendingTitle) ?? null
+      : null;
+    pendingNavTitle.current = null;
+
+    if (target) {
+      setCurrentSectionId(target.id);
+      if (!controlledEditMode) setInternalEditMode("sectioned");
+      onEditModeChange?.("sectioned");
+    } else {
+      setCurrentSectionId(split[0]?.id ?? null);
+      if (!controlledEditMode) setInternalEditMode("document");
+      onEditModeChange?.("document");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapterKey]); // only fire when the chapter changes
 
   // ── Refresh sections ───────────────────────────────────────────────────────
 
@@ -184,9 +329,11 @@ export function useSectionedEditing({
       ({ wrapper, sections: fresh } = isLatexDoc
         ? splitLatexDocument(source)
         : splitDocument(source));
-    } catch {
-      return; // ignore parse errors
+    } catch (err) {
+      setParseError(formatParseError(err));
+      return;
     }
+    setParseError(null);
     // Carry forward existing IDs where titles match to keep selection stable
     const titleToId = new Map(sections.map((s) => [s.title, s.id]));
     const remapped = fresh.map((s) => ({
@@ -229,14 +376,30 @@ export function useSectionedEditing({
       : null;
 
   /**
+   * True when a book chapter is loaded and we're editing it as a whole
+   * (document mode).  In this case the code editor shows the chapter body
+   * with its `<chapter>` wrapper stripped, mirroring how sectioned mode hides
+   * the `<section>` wrapper.  Chapters are always PreTeXt, so LaTeX is excluded.
+   */
+  const isBookChapterBody =
+    editMode === "document" &&
+    chapterKey != null &&
+    !isLatexDoc &&
+    contentState.sourceContent.trim().length > 0;
+
+  /**
    * The content to show in the code editor.  In sectioned mode the outer
-   * division wrapper is stripped so the user edits inner content only.
+   * division wrapper is stripped so the user edits inner content only; in
+   * book document mode the `<chapter>` wrapper is stripped likewise.
    */
   const activeSourceContent = (() => {
     if (editMode === "sectioned" && currentSection) {
       return isLatexDoc
         ? stripLatexSectionWrapper(currentSection.content, currentSection.type)
         : stripSectionWrapper(currentSection.content);
+    }
+    if (isBookChapterBody) {
+      return stripChapterWrapper(contentState.sourceContent);
     }
     return contentState.sourceContent;
   })();
@@ -252,11 +415,19 @@ export function useSectionedEditing({
         : contentState.sourceFormat === "pretext"
         ? contentState.sourceContent
         : contentState.pretextSource ?? "";
-      const { wrapper, sections: split } = isLatexDoc
-        ? splitLatexDocument(toSplit)
-        : splitDocument(toSplit);
+      let wrapper: string;
+      let split: DocumentSection[];
+      try {
+        ({ wrapper, sections: split } = isLatexDoc
+          ? splitLatexDocument(toSplit)
+          : splitDocument(toSplit));
+      } catch (err) {
+        setParseError(formatParseError(err));
+        return;
+      }
       // If the document has no sections, stay in document mode.
       if (split.length === 0) return;
+      setParseError(null);
       setDocumentWrapper(wrapper);
       setSections(split);
       // Navigate to the pending section (by title) if requested
@@ -325,6 +496,38 @@ export function useSectionedEditing({
     }
   };
 
+  /**
+   * Handle a body edit while a book chapter is shown in document mode.
+   * Re-wraps the inner content with the chapter's original `<chapter>` tag
+   * (attributes preserved) and propagates the full chapter source.
+   */
+  const updateChapterBodyContent = (newContent: string | undefined) => {
+    const rewrapped = rewrapChapter(newContent || "", contentState.sourceContent);
+    if (rewrapped === contentState.sourceContent) return;
+    onContentUpdate(rewrapped);
+  };
+
+  /**
+   * Update the active chapter's title / xml:id / label.  Applies the change
+   * to the stored wrapper (when present) so re-merges keep it, then propagates
+   * the full chapter source.  Sections are left untouched, preserving the
+   * current selection.
+   */
+  const updateActiveChapterMetadata = (changes: {
+    title?: string;
+    xmlId?: string | null;
+    label?: string | null;
+  }) => {
+    // Apply the change to the current full source so any in-progress body
+    // edits (not yet re-split into `sections`) are preserved.
+    onContentUpdate(updateChapterMetadata(contentState.sourceContent, changes));
+    // Also patch the stored wrapper so a later section edit (sectioned mode)
+    // re-merges with the updated title/attributes instead of reverting them.
+    if (documentWrapper) {
+      setDocumentWrapper(updateChapterMetadata(documentWrapper, changes));
+    }
+  };
+
   // ── TOC action handlers ────────────────────────────────────────────────────
 
   /**
@@ -334,9 +537,17 @@ export function useSectionedEditing({
    */
   const handleAddFirstSection = () => {
     if (!supportsSectioned) return;
-    const { wrapper, sections: wrapped } = isLatexDoc
-      ? wrapLatexDocumentAsSection(contentState.sourceContent)
-      : wrapDocumentAsSection(contentState.sourceContent);
+    let wrapper: string;
+    let wrapped: DocumentSection[];
+    try {
+      ({ wrapper, sections: wrapped } = isLatexDoc
+        ? wrapLatexDocumentAsSection(contentState.sourceContent)
+        : wrapDocumentAsSection(contentState.sourceContent));
+    } catch (err) {
+      setParseError(formatParseError(err));
+      return;
+    }
+    setParseError(null);
     setDocumentWrapper(wrapper);
     setSections(wrapped);
     setCurrentSectionId(wrapped[0]?.id ?? null);
@@ -486,6 +697,10 @@ export function useSectionedEditing({
     onContentUpdate(doMerge(nextSections));
   };
 
+  const requestSectionNavigation = (sectionTitle: string | null) => {
+    pendingNavTitle.current = sectionTitle;
+  };
+
   return {
     editMode,
     sections,
@@ -497,6 +712,9 @@ export function useSectionedEditing({
     setIsTocCollapsed,
     activeSourceContent,
     updateSectionContent,
+    isBookChapterBody,
+    updateChapterBodyContent,
+    updateActiveChapterMetadata,
     handleRefreshSections,
     switchEditMode,
     handleSelectSectionInDocMode,
@@ -508,5 +726,7 @@ export function useSectionedEditing({
     handleUpdateSectionMetadata,
     handleReorderSections,
     handleMergeSection,
+    requestSectionNavigation,
+    parseError,
   };
 }

@@ -21,6 +21,27 @@
   padding-top: 8px;
 }
 
+/* ── Parse-error banner ─────────────────────────────── */
+.pretext-plus-editor__toc-parse-error {
+  background: #fde8e8;
+  color: #842029;
+  border-bottom: 1px solid #f5c2c7;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-parse-error-detail {
+  margin-top: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: #6c1f24;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow-y: auto;
+}
+
 /* ── Header ─────────────────────────────────────────── */
 .pretext-plus-editor__toc-header {
   display: flex;
@@ -379,6 +400,14 @@
   border-bottom: 2px solid #3b82f6;
 }
 
+.pretext-plus-editor__toc-chapter-item--drop-before {
+  box-shadow: inset 0 2px 0 0 #3b82f6;
+}
+
+.pretext-plus-editor__toc-chapter-item--drop-after {
+  box-shadow: inset 0 -2px 0 0 #3b82f6;
+}
+
 /* ── Drag overlay (floating card) ────────────────── */
 .pretext-plus-editor__toc-drag-overlay {
   display: flex;
@@ -412,7 +441,126 @@
   color: #1e293b;
 }
 
-/* ── No-sections placeholder ────────────────────────── */
+/* ── Chapter list (book mode) ────────────────────────── */
+
+/* Chapter items live in the main toc-list; no separate list needed */
+.pretext-plus-editor__toc-chapter-item {
+  display: flex;
+  flex-direction: column;
+  border-left: 3px solid transparent;
+}
+
+.pretext-plus-editor__toc-chapter-item--active {
+  border-left-color: #7c3aed;
+}
+
+.pretext-plus-editor__toc-chapter-row {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 6px 0 2px;
+}
+
+/* Chapter drag handle — shares base styles with section drag handle */
+.pretext-plus-editor__toc-chapter-drag-handle {
+  font-size: 1rem;
+  color: #bbb;
+  cursor: grab;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0 2px;
+  -webkit-user-drag: element;
+}
+
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-drag-handle {
+  color: #888;
+}
+
+.pretext-plus-editor__toc-chapter-drag-handle:active {
+  cursor: grabbing;
+}
+
+.pretext-plus-editor__toc-chapter-expand {
+  font-size: 0.72rem;
+  color: #999;
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  line-height: 1;
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pretext-plus-editor__toc-chapter-expand:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.pretext-plus-editor__toc-chapter-expand:not(:disabled):hover {
+  color: #555;
+}
+
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-expand {
+  color: #7c3aed;
+}
+
+.pretext-plus-editor__toc-chapter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #333;
+  padding: 5px 4px 5px 0;
+}
+
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-btn {
+  color: #111;
+}
+
+.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-row {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-row {
+  background: #f3e8ff;
+}
+
+.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-btn {
+  font-weight: 600;
+}
+
+.pretext-plus-editor__toc-type-badge--chapter {
+  background: #7c3aed;
+}
+
+/* ── Nested sections under active chapter ───────────── */
+.pretext-plus-editor__toc-chapter-sections {
+  border-left: 2px solid #e0d4f7;
+  margin-left: 20px;
+}
+
+/* Slightly tighter section items when nested */
+.pretext-plus-editor__toc-chapter-sections .pretext-plus-editor__toc-item-row {
+  min-height: 28px;
+}
+
+/* Nested footer buttons */
+.pretext-plus-editor__toc-footer--nested {
+  margin-left: 20px;
+  border-left: 2px solid #e0d4f7;
+  border-top: 1px solid #dde0e6;
+}
+
+
 .pretext-plus-editor__toc-no-sections {
   list-style: none;
   display: flex;
@@ -425,12 +573,81 @@
   text-align: center;
 }
 
+.pretext-plus-editor__toc-chapter-loading {
+  padding: 6px 12px 6px 22px;
+  color: #888;
+  font-size: 0.82rem;
+  font-style: italic;
+  background: #fafbfc;
+  border-left: 2px solid #e0d4f7;
+}
 
-/* ── Footer ──────────────────────────────────────────── */
-.pretext-plus-editor__toc-footer {
+
+/* ── Add section inline item ─────────────────────────── */
+.pretext-plus-editor__toc-add-item {
+  list-style: none;
+  position: relative;
+}
+
+.pretext-plus-editor__toc-add-item-trigger {
+  display: block;
+  width: 100%;
+  padding: 4px 8px 4px 16px;
+  background: none;
+  border: none;
+  border-top: 1px dashed #ccd0d8;
+  font: inherit;
+  font-size: 0.78rem;
+  color: #aaa;
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s, background 0.15s;
+}
+
+.pretext-plus-editor__toc-add-item-trigger:hover {
+  color: #2563eb;
+  background: #f0f4ff;
+}
+
+.pretext-plus-editor__toc-add-menu-popup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-add-menu-popup--below {
+  top: calc(100% + 4px);
+}
+
+.pretext-plus-editor__toc-add-menu-popup--above {
+  bottom: calc(100% + 4px);
+}
+
+.pretext-plus-editor__toc-add-menu-item {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  color: #333;
+}
+
+.pretext-plus-editor__toc-add-menu-item:hover {
+  background: #e0e8ff;
+  color: #2563eb;
+}
+
+.pretext-plus-editor__toc-footer {
   padding: 8px;
   border-top: 1px solid #dde0e6;
   flex-shrink: 0;

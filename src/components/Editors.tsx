@@ -10,10 +10,12 @@ import DocinfoEditor from "./DocinfoEditor";
 import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
+import { useBookChapters } from "./toc/useBookChapters";
 import { useSectionedEditing } from "./useSectionedEditing";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
+import { updateChapterMetadata } from "../sectionUtils";
 import { defaultContent } from "../defaultContent";
 import type {
   EditorContentChange,
@@ -22,7 +24,7 @@ import type {
   PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
-import type { DocumentSection } from "../types/sections";
+import type { DocumentSection, DocumentChapter } from "../types/sections";
 
 const startingContent = defaultContent;
 
@@ -122,7 +124,7 @@ export interface editorProps {
   /**
    * Controls the editing mode from the outside.  When provided, the
    * component operates in controlled mode; omit to use internal state
-   * (uncontrolled).
+   * (uncontrolled).  "document" can also mean a single chapter in a book project.
    */
   editMode?: "document" | "sectioned";
   /**
@@ -143,6 +145,70 @@ export interface editorProps {
    * `"sectioned"` mode.
    */
   onSectionChange?: (section: DocumentSection) => void;
+  /**
+   * Whether this is an `"article"` (default) or `"book"` project.
+   * When `"book"`, the TOC shows a chapter list that expands to show sections.
+   */
+  projectType?: "article" | "book";
+  /**
+   * Book chapter summaries used to populate the TOC chapter list.
+   * Only meaningful when `projectType === "book"`.
+   */
+  chapters?: DocumentChapter[];
+  /**
+   * The id of the currently loaded/active chapter.
+   * Only meaningful when `projectType === "book"`.
+   */
+  currentChapterId?: string | null;
+  /**
+   * Called when the user clicks a chapter in the TOC.
+   * The host should fetch that chapter's source from the server and update
+   * the `source` and `currentChapterId` props accordingly.
+   */
+  onChapterSelect?: (chapterId: string) => void;
+  /**
+   * Called when the user drags chapters into a new order.
+   * Receives the full reordered `DocumentChapter[]`; the host is responsible
+   * for persisting the new order (e.g., via a Rails PATCH request).
+   * When omitted, chapter drag handles are hidden.
+   */
+  onChaptersReorder?: (chapters: DocumentChapter[]) => void;
+  /**
+   * Called when the editor needs a chapter's `content` and the chapter
+   * doesn't already have it.  The host should fetch the chapter source
+   * from the back-end and update the `chapters` prop with the loaded
+   * `content` for that id.  Wired up in a later phase.
+   */
+  onChapterRequestLoad?: (chapterId: string) => void;
+  /**
+   * Called whenever a chapter's `content` changes from within the editor
+   * (direct content edit, section reorder, or a section moved in/out of
+   * this chapter).  The host is responsible for persisting the change.
+   * Wired up in a later phase.
+   */
+  onChapterContentChange?: (chapterId: string, content: string) => void;
+  /**
+   * Called when the user clicks the "+ Add chapter" row at the bottom
+   * of the chapter list.  The host should create a new chapter record
+   * on the back-end and append it to the `chapters` array.
+   * `afterChapterId` is the id of the chapter immediately preceding the
+   * insertion point, or `null` to append at the end of the list.
+   */
+  onChapterAdd?: (afterChapterId: string | null) => void;
+  /**
+   * Called when the user removes a chapter from the TOC.  The host
+   * should delete the corresponding back-end record and update the
+   * `chapters` array accordingly.  Wired up in a later phase.
+   */
+  onChapterRemove?: (chapterId: string) => void;
+  /**
+   * Called when the user edits a chapter's title or other metadata
+   * (xml:id, label).  Wired up in a later phase.
+   */
+  onChapterUpdate?: (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => void;
 }
 
 /**
@@ -262,6 +328,9 @@ const Editors = (props: editorProps) => {
     setIsTocCollapsed,
     activeSourceContent,
     updateSectionContent,
+    isBookChapterBody,
+    updateChapterBodyContent,
+    updateActiveChapterMetadata,
     handleRefreshSections,
     switchEditMode,
     handleSelectSectionInDocMode,
@@ -273,6 +342,8 @@ const Editors = (props: editorProps) => {
     handleUpdateSectionMetadata,
     handleReorderSections,
     handleMergeSection,
+    requestSectionNavigation,
+    parseError,
   } = useSectionedEditing({
     contentState,
     controlledEditMode: props.editMode,
@@ -281,7 +352,63 @@ const Editors = (props: editorProps) => {
     onSectionsChange: props.onSectionsChange,
     onSectionChange: props.onSectionChange,
     onContentUpdate: updateContentState,
+    chapterKey: props.currentChapterId,
   });
+
+  // ── Book-mode chapter state ────────────────────────────────────────────────
+  // useBookChapters owns the per-chapter parsed-section map and the set of
+  // expanded chapter ids.  When the active chapter changes (currentChapterId),
+  // we auto-expand it so behavior matches the pre-refactor "only the active
+  // chapter is expanded" baseline.  Phase 3 wires the chevron buttons to
+  // toggleChapterExpanded so the set can hold more than one id at a time.
+  const bookChapters = useBookChapters({
+    chapters: props.chapters ?? [],
+  });
+  const { expandChapter: _expandChapter } = bookChapters;
+  useEffect(() => {
+    if (props.projectType !== "book") return;
+    if (!props.currentChapterId) return;
+    _expandChapter(props.currentChapterId);
+  }, [props.projectType, props.currentChapterId, _expandChapter]);
+
+  /**
+   * Handle a section click inside a non-active chapter: queue the section
+   * title for navigation and ask the host to load that chapter.  When the
+   * chapter switch completes, the chapterKey effect in useSectionedEditing
+   * lands directly on the requested section in sectioned mode.
+   */
+  const handleSelectSectionInChapter = (
+    chapterId: string,
+    sectionTitle: string,
+  ) => {
+    requestSectionNavigation(sectionTitle);
+    props.onChapterSelect?.(chapterId);
+  };
+
+  /**
+   * Commit edited chapter properties (title, xml:id, label) from the inline
+   * chapter edit form.  Updates the host's chapter metadata (so the TOC label
+   * and persisted record reflect the change) and keeps the chapter's XML
+   * source in sync: the active chapter is updated through the live editor
+   * state; other already-loaded chapters via `onChapterContentChange`.
+   */
+  const handleUpdateChapter = (
+    chapterId: string,
+    changes: { title?: string; xmlId?: string | null; label?: string | null },
+  ) => {
+    props.onChapterUpdate?.(chapterId, changes);
+    if (chapterId === props.currentChapterId) {
+      updateActiveChapterMetadata(changes);
+      return;
+    }
+    const content = props.chapters?.find((c) => c.id === chapterId)?.content;
+    if (content && props.onChapterContentChange) {
+      props.onChapterContentChange(
+        chapterId,
+        updateChapterMetadata(content, changes),
+      );
+    }
+  };
 
   // ── Sync props → internal state ────────────────────────────────────────────
   useEffect(() => {
@@ -289,6 +416,31 @@ const Editors = (props: editorProps) => {
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
+
+  // Auto-select the first chapter on initial book load (but not after deletions).
+  // hadChapterRef tracks whether we've ever seen a non-null currentChapterId
+  // while in book mode; once set, the effect won't auto-select again, leaving
+  // post-deletion navigation to the host.
+  const hadChapterRef = useRef(false);
+  const {
+    projectType: _projectType,
+    chapters: _chapters,
+    currentChapterId: _currentChapterId,
+    onChapterSelect: _onChapterSelect,
+  } = props;
+  const _firstChapterId = _chapters?.[0]?.id;
+  useEffect(() => {
+    if (_projectType !== "book") {
+      hadChapterRef.current = false;
+      return;
+    }
+    if (_currentChapterId) {
+      hadChapterRef.current = true;
+      return;
+    }
+    if (hadChapterRef.current || !_firstChapterId || !_onChapterSelect) return;
+    _onChapterSelect(_firstChapterId);
+  }, [_projectType, _firstChapterId, _currentChapterId, _onChapterSelect]);
 
   // ── Derived preview content ────────────────────────────────────────────────
   /** In sectioned mode, preview uses the current section; otherwise full doc. */
@@ -365,6 +517,8 @@ const Editors = (props: editorProps) => {
       onChange={
         editMode === "sectioned"
           ? (c) => updateSectionContent(c)
+          : isBookChapterBody
+          ? (c) => updateChapterBodyContent(c)
           : updateContentState
       }
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
@@ -457,6 +611,23 @@ const Editors = (props: editorProps) => {
         switchEditMode(editMode === "document" ? "sectioned" : "document")
       }
       readonly={editMode === "document"}
+      projectType={props.projectType}
+      chapters={props.chapters}
+      currentChapterId={props.currentChapterId}
+      onChapterSelect={props.onChapterSelect}
+      onChaptersReorder={props.onChaptersReorder}
+      expandedChapterIds={bookChapters.expandedChapterIds}
+      onToggleChapterExpanded={bookChapters.toggleChapterExpanded}
+      getChapterParse={bookChapters.getChapterParse}
+      onChapterRequestLoad={props.onChapterRequestLoad}
+      onChapterAdd={props.onChapterAdd}
+      onChapterRemove={props.onChapterRemove}
+      onChapterContentChange={props.onChapterContentChange}
+      onSelectSectionInChapter={handleSelectSectionInChapter}
+      onUpdateChapter={
+        props.projectType === "book" ? handleUpdateChapter : undefined
+      }
+      parseError={parseError}
     />
   );
 

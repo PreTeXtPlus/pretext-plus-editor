@@ -24,6 +24,7 @@ export type {
   DocumentSection,
   DocumentSectionType,
   DocumentSplitResult,
+  DocumentChapter as ChapterSummary,
 } from "./types/sections";
 export {
   splitDocument,
