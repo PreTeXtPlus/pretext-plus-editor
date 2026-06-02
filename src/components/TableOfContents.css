@@ -671,3 +671,167 @@
   color: #2563eb;
 }
 
+/* ── Hidden-section-list note (e.g. Markdown mode) ── */
+.pretext-plus-editor__toc-hidden-sections-note {
+  padding: 12px 12px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-style: italic;
+  line-height: 1.4;
+  flex: 1;
+}
+
+/* ── Assets panel ────────────────────────────────── */
+.pretext-plus-editor__toc-assets {
+  flex-shrink: 0;
+  border-top: 1px solid #dde0e6;
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+}
+
+.pretext-plus-editor__toc-assets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 4px 4px;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font: inherit;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border-radius: 3px;
+}
+
+.pretext-plus-editor__toc-assets-toggle:hover {
+  background: #e3e6ec;
+}
+
+.pretext-plus-editor__toc-assets-chevron {
+  font-size: 0.7rem;
+  color: #888;
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-count {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #fff;
+  background: #94a3b8;
+  border-radius: 999px;
+  padding: 0 5px;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-assets-body {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.pretext-plus-editor__toc-assets-empty {
+  margin: 0;
+  padding: 8px 12px;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
+
+.pretext-plus-editor__toc-assets-add-link {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0;
+}
+
+.pretext-plus-editor__toc-assets-add-link:hover {
+  text-decoration: underline;
+}
+
+.pretext-plus-editor__toc-assets-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0;
+}
+
+.pretext-plus-editor__toc-asset-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 8px;
+  min-height: 30px;
+}
+
+.pretext-plus-editor__toc-asset-item:hover {
+  background: #e8eaf0;
+}
+
+.pretext-plus-editor__toc-asset-thumb {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e2e8f0;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-asset-thumb-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.pretext-plus-editor__toc-asset-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow: hidden;
+}
+
+.pretext-plus-editor__toc-asset-label {
+  font-size: 0.78rem;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-asset-filename {
+  font-size: 0.68rem;
+  color: #94a3b8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-asset-item .pretext-plus-editor__toc-action-btn {
+  opacity: 0;
+  transition: opacity 0.1s;
+  pointer-events: none;
+}
+
+.pretext-plus-editor__toc-asset-item:hover .pretext-plus-editor__toc-action-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+

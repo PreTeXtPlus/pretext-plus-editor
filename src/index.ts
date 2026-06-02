@@ -17,6 +17,7 @@ export type {
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
+  ProjectAsset,
   PretextProjectCopyRequest,
   SourceFormat,
 } from "./types/editor";
