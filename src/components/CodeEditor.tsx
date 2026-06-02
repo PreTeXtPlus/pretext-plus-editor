@@ -1,5 +1,5 @@
 import { Editor } from "@monaco-editor/react";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { registerCodeEditorCompletions } from "./codeEditorCompletions";
 import CodeEditorMenu from "./CodeEditorMenu";
 import type { SourceFormat } from "../types/editor";
@@ -31,6 +31,12 @@ interface CodeEditorProps {
   canConvertToPretext?: boolean;
 }
 
+/** Imperative handle exposed via `forwardRef` for programmatic control. */
+export interface CodeEditorHandle {
+  /** Insert `text` at the current cursor position (or replace the selection). */
+  insertAtCursor: (text: string) => void;
+}
+
 /** Static Monaco editor options shared across all instances of this component. */
 const options = {
   automaticLayout: true,
@@ -53,8 +59,10 @@ const options = {
  *
  * Content is synced from props only when the prop value differs from what the
  * editor model already contains, to prevent cursor jumps on re-render.
+ *
+ * Exposes a {@link CodeEditorHandle} via `forwardRef` for programmatic control.
  */
-const CodeEditor = ({
+const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   content,
   sourceFormat,
   onChange,
@@ -64,7 +72,7 @@ const CodeEditor = ({
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
-}: CodeEditorProps) => {
+}, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
@@ -75,6 +83,19 @@ const CodeEditor = ({
   const [canRedo, setCanRedo] = useState(false);
   const onRebuildRef = useRef(onRebuild);
   const onSaveRef = useRef(onSave);
+
+  useImperativeHandle(ref, () => ({
+    insertAtCursor: (text: string) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      const selection = editor.getSelection();
+      if (!selection) return;
+      editor.executeEdits("insert-asset", [
+        { range: selection, text, forceMoveMarkers: true },
+      ]);
+      editor.focus();
+    },
+  }), []);
 
   useEffect(() => {
     onRebuildRef.current = onRebuild;
@@ -241,6 +262,8 @@ const CodeEditor = ({
       </div>
     </div>
   );
-};
+});
+
+CodeEditor.displayName = "CodeEditor";
 
 export default CodeEditor;

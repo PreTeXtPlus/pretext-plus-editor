@@ -2,7 +2,11 @@ import "./App.css";
 import Editors from "./components/Editors";
 import { defaultContent } from "./defaultContent";
 import { useState } from "react";
-import type { FeedbackSubmission, SourceFormat } from "./types/editor";
+import type {
+  FeedbackSubmission,
+  ProjectAsset,
+  SourceFormat,
+} from "./types/editor";
 import type { DocumentChapter, DocumentSection } from "./types/sections";
 
 // ---------------------------------------------------------------------------
@@ -137,6 +141,41 @@ function App() {
   const [editMode, setEditMode] = useState<"document" | "sectioned">(
     "document",
   );
+
+  // ---------------------------------------------------------------------------
+  // Asset demo state — simulates a Rails-backed library + project association
+  //
+  // libraryAssets = all assets across all projects for this user
+  // projectAssetIds = which library assets are associated with the current project
+  // ---------------------------------------------------------------------------
+  const [libraryAssets, setLibraryAssets] = useState<ProjectAsset[]>([
+    {
+      id: "asset-1",
+      name: "Euler Formula",
+      filename: "euler-formula.png",
+      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Euler%27s_formula.svg/320px-Euler%27s_formula.svg.png",
+      contentType: "image/png",
+    },
+    {
+      id: "asset-2",
+      name: "Markdown Logo",
+      filename: "markdown-logo.svg",
+      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Markdown-mark.svg/208px-Markdown-mark.svg.png",
+      contentType: "image/svg+xml",
+    },
+    {
+      id: "asset-3",
+      name: "PreTeXt Logo",
+      filename: "pretext-logo.png",
+      url: "https://pretextbook.org/images/ptx-logo.png",
+      contentType: "image/png",
+    },
+  ]);
+  // Only asset-1 is associated with the current project initially
+  const [projectAssetIds, setProjectAssetIds] = useState<Set<string>>(
+    new Set(["asset-1"]),
+  );
+  const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
 
   // Book-mode state
   const [projectType, setProjectType] = useState<"article" | "book">(
@@ -308,6 +347,60 @@ function App() {
     console.log("Feedback submitted:", feedback);
   };
 
+  const handleAssetInsert = (asset: ProjectAsset) => {
+    // The editor inserts the format-specific snippet automatically.
+    // This callback is a notification hook for host-side side-effects.
+    console.log("Asset inserted:", asset.filename);
+  };
+
+  const handleAssetUpload = async (file: File): Promise<ProjectAsset> => {
+    console.log("Asset upload started:", file.name, file.type, file.size);
+    // Simulate Rails: upload file, create library asset record, associate with project
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    const objectUrl = URL.createObjectURL(file);
+    const baseName = file.name.replace(/\.[^.]+$/, "");
+    const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
+    const newAsset: ProjectAsset = {
+      id: `asset-${Date.now()}`,
+      name: baseName,
+      filename: file.name,
+      url: objectUrl,
+      contentType: file.type || (ext ? `image/${ext}` : undefined),
+    };
+    setLibraryAssets((prev) => [...prev, newAsset]);
+    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    console.log("Asset upload complete:", newAsset);
+    return newAsset;
+  };
+
+  const handleAssetAddUrl = async (
+    url: string,
+    name: string,
+  ): Promise<ProjectAsset> => {
+    console.log("Asset URL add started:", url, name);
+    // Simulate Rails: download the image, store it, create library + project record
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
+    const newAsset: ProjectAsset = {
+      id: `asset-${Date.now()}`,
+      name: name || filename.replace(/\.[^.]+$/, ""),
+      filename,
+      url,
+    };
+    setLibraryAssets((prev) => [...prev, newAsset]);
+    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    console.log("Asset URL add complete:", newAsset);
+    return newAsset;
+  };
+
+  const handleAssetAddFromLibrary = async (asset: ProjectAsset) => {
+    console.log("Adding library asset to project:", asset.id, asset.name);
+    // Simulate Rails: create the project–asset join record
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    setProjectAssetIds((prev) => new Set([...prev, asset.id]));
+    console.log("Asset added to project:", asset.filename);
+  };
+
   return (
     <>
       <div className="app-demo-toolbar">
@@ -375,6 +468,12 @@ function App() {
         onChapterAdd={projectType === "book" ? handleChapterAdd : undefined}
         onChapterRemove={projectType === "book" ? handleChapterRemove : undefined}
         onChapterUpdate={projectType === "book" ? handleChapterUpdate : undefined}
+        projectAssets={projectAssets}
+        libraryAssets={libraryAssets}
+        onAssetInsert={handleAssetInsert}
+        onAssetUpload={handleAssetUpload}
+        onAssetAddUrl={handleAssetAddUrl}
+        onAssetAddFromLibrary={handleAssetAddFromLibrary}
       />
     </>
   );

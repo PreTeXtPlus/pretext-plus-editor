@@ -1,12 +1,13 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import CodeEditor from "./CodeEditor";
+import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 import { VisualEditor } from "@pretextbook/visual-editor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
+import AssetPickerDialog from "./AssetPickerDialog";
 import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
@@ -22,6 +23,7 @@ import type {
   EditorContentState,
   FeedbackSubmission,
   PretextProjectCopyRequest,
+  ProjectAsset,
   SourceFormat,
 } from "../types/editor";
 import type { DocumentSection, DocumentChapter } from "../types/sections";
@@ -209,6 +211,47 @@ export interface editorProps {
     chapterId: string,
     changes: { title?: string; xmlId?: string | null; label?: string | null },
   ) => void;
+  /**
+   * Assets already associated with this project.  Shown in the TOC Assets
+   * panel and highlighted in the picker Library tab.  When omitted, the
+   * Assets panel and picker are hidden entirely.
+   */
+  projectAssets?: ProjectAsset[];
+  /**
+   * All assets available in the user's library (across all projects).
+   * Shown in the picker Library tab; assets not in `projectAssets` display
+   * an "Add to project" affordance.  Defaults to `projectAssets` when omitted.
+   */
+  libraryAssets?: ProjectAsset[];
+  /**
+   * Optional notification called after the editor inserts the asset snippet at
+   * the cursor.  The component handles insertion automatically (format-specific
+   * snippet: `<image source="…"/>` for PreTeXt, `\includegraphics{…}` for
+   * LaTeX, `![name](…)` for Markdown).  Use this hook for analytics, saving,
+   * or any additional host-side side-effects.
+   */
+  onAssetInsert?: (asset: ProjectAsset) => void;
+  /**
+   * Called when the user uploads a file from the asset picker Upload tab.
+   * The host uploads to the server and returns the created {@link ProjectAsset}
+   * (with a server-assigned `filename`).  The asset is also added to the
+   * project automatically by the host.
+   */
+  onAssetUpload?: (file: File) => Promise<ProjectAsset>;
+  /**
+   * Called when the user submits an external URL in the asset picker URL tab.
+   * The host downloads the image, stores it in the library, associates it with
+   * this project, and returns the created {@link ProjectAsset} with a stable
+   * `filename`.  When omitted, the URL is inserted directly without a
+   * server-side record.
+   */
+  onAssetAddUrl?: (url: string, name: string) => Promise<ProjectAsset>;
+  /**
+   * Called when the user picks a library asset not yet in this project.
+   * The host should create the project–asset association (e.g. a Rails join
+   * record).  Called before `onAssetInsert`.
+   */
+  onAssetAddFromLibrary?: (asset: ProjectAsset) => Promise<void> | void;
 }
 
 /**
@@ -278,6 +321,7 @@ const Editors = (props: editorProps) => {
   const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
   const [isDocinfoEditorOpen, setIsDocinfoEditorOpen] = useState(false);
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [internalDocinfo, setInternalDocinfo] = useState(props.docinfo ?? "");
   const [internalCommonDocinfo, setInternalCommonDocinfo] = useState(
     props.commonDocinfo ?? "",
@@ -290,6 +334,7 @@ const Editors = (props: editorProps) => {
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
+  const codeEditorRef = useRef<CodeEditorHandle>(null);
 
   // ── Content update callback ────────────────────────────────────────────────
   /**
@@ -410,6 +455,34 @@ const Editors = (props: editorProps) => {
     }
   };
 
+  // ── Asset insertion ────────────────────────────────────────────────────────
+  /**
+   * Build a source-format–appropriate snippet for inserting an asset reference.
+   * - PreTeXt: `<image source="filename"/>`
+   * - LaTeX:   `\includegraphics{filename}`
+   * - Markdown: `![name](filename)`
+   */
+  const buildAssetSnippet = (asset: ProjectAsset): string => {
+    switch (contentState.sourceFormat) {
+      case "latex":
+        return `\\includegraphics{${asset.filename}}`;
+      case "markdown":
+        return `![${asset.name}](${asset.filename})`;
+      case "pretext":
+      default:
+        return `<image source="${asset.filename}"/>`;
+    }
+  };
+
+  /**
+   * Insert the asset snippet at the Monaco cursor, then notify the host via
+   * `onAssetInsert` (optional — useful for host-side analytics or side-effects).
+   */
+  const handleAssetInsert = (asset: ProjectAsset) => {
+    codeEditorRef.current?.insertAtCursor(buildAssetSnippet(asset));
+    props.onAssetInsert?.(asset);
+  };
+
   // ── Sync props → internal state ────────────────────────────────────────────
   useEffect(() => {
     const handleResize = () => setIsNarrowScreen(window.innerWidth < 800);
@@ -512,6 +585,7 @@ const Editors = (props: editorProps) => {
   // ── Build editor sub-components ────────────────────────────────────────────
   const codeEditor = (
     <CodeEditor
+      ref={codeEditorRef}
       content={activeSourceContent}
       sourceFormat={contentState.sourceFormat}
       onChange={
@@ -586,7 +660,10 @@ const Editors = (props: editorProps) => {
   }
 
   // ── TOC sidebar ────────────────────────────────────────────────────────────
-  const tocSidebar = isMarkdownDoc ? null : (
+  // For markdown, hide the sidebar unless the host has provided assets — in
+  // that case we show the assets panel with a note replacing the section list.
+  const tocSidebar =
+    isMarkdownDoc && props.projectAssets === undefined ? null : (
     <TableOfContents
       sections={sections}
       currentSectionId={currentSectionId ?? sections[0]?.id ?? null}
@@ -628,6 +705,14 @@ const Editors = (props: editorProps) => {
         props.projectType === "book" ? handleUpdateChapter : undefined
       }
       parseError={parseError}
+      hideSectionList={isMarkdownDoc}
+      assets={props.projectAssets}
+      onAssetInsert={handleAssetInsert}
+      onOpenAssetPicker={
+        props.projectAssets !== undefined
+          ? () => setIsAssetPickerOpen(true)
+          : undefined
+      }
     />
   );
 
@@ -800,6 +885,21 @@ const Editors = (props: editorProps) => {
                   useCommonDocinfo: value.useCommonDocinfo,
                 });
               }
+            }}
+          />
+        ) : null}
+        {isAssetPickerOpen && props.projectAssets !== undefined ? (
+          <AssetPickerDialog
+            open={isAssetPickerOpen}
+            onClose={() => setIsAssetPickerOpen(false)}
+            projectAssets={props.projectAssets}
+            libraryAssets={props.libraryAssets}
+            onUpload={props.onAssetUpload}
+            onAddUrl={props.onAssetAddUrl}
+            onAddFromLibrary={props.onAssetAddFromLibrary}
+            onInsert={(asset) => {
+              handleAssetInsert(asset);
+              setIsAssetPickerOpen(false);
             }}
           />
         ) : null}
