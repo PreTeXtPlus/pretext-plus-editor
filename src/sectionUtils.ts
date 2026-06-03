@@ -110,6 +110,12 @@ function trimBoundaryBlankLines(value: string): string {
 // ---------------------------------------------------------------------------
 
 /**
+ * @deprecated Use `splitContentIntoSections` instead.  The `wrapper` /
+ * `DocumentSplitResult` pattern is being removed as part of the
+ * sections-as-DB-records refactor — the Rails app now owns the document
+ * shell and reconstruction.  This function will be deleted once all internal
+ * callers are migrated.
+ *
  * Split a PreTeXt document into its top-level sections.
  *
  * The returned `wrapper` is an opaque XML string encoding the document shell
@@ -218,6 +224,10 @@ export function splitDocument(xml: string): DocumentSplitResult {
 }
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Reconstruct a complete PreTeXt document from a wrapper and an ordered
  * list of sections.
  *
@@ -629,6 +639,10 @@ function splitLatexByEnvironments(latex: string): DocumentSplitResult {
 }
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Split a LaTeX document into its top-level sections.
  *
  * Supports two splitting styles:
@@ -648,6 +662,10 @@ export function splitLatexDocument(latex: string): DocumentSplitResult {
 }
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Reconstruct a complete LaTeX document from a wrapper and an ordered list
  * of sections.
  */
@@ -812,6 +830,10 @@ export function createLatexConclusion(): DocumentSection {
 const PRETEXT_HEADER_TAGS: ReadonlySet<string> = new Set(["title", "docinfo"]);
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Wrap all body content of a PreTeXt document (i.e. everything that is not
  * `<title>` or `<docinfo>`) into a single new `<section>`.
  *
@@ -904,6 +926,10 @@ export function wrapDocumentAsSection(
 }
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Wrap all body content of a LaTeX document (everything between
  * `\begin{document}` and `\end{document}`, or the entire string if there is
  * no `\begin{document}`) into a single `\section{title}`.
@@ -1167,6 +1193,10 @@ export function updateChapterMetadata(
 // ---------------------------------------------------------------------------
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Wrap a single section into a complete, valid PreTeXt document suitable for
  * an isolated preview build.
  *
@@ -1249,6 +1279,10 @@ export function wrapSectionAsDocument(
 }
 
 /**
+ * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
+ * removed in the sections-as-DB-records refactor.  Will be deleted once
+ * all internal callers are migrated.
+ *
  * Wrap a single LaTeX section into a complete, buildable LaTeX document.
  *
  * Reconstructs `preamble + section.content + closing` using the opaque
@@ -1271,4 +1305,68 @@ export function wrapLatexSectionAsDocument(
   const parts = [w.preamble, section.content.trim()];
   parts.push(w.closing || "\\end{document}");
   return parts.join("\n\n");
+}
+
+// ---------------------------------------------------------------------------
+// New architecture: sections as first-class DB records
+// ---------------------------------------------------------------------------
+
+/**
+ * Split a section-less PreTeXt article or chapter XML blob into an array of
+ * `DocumentSection` objects, one per top-level section element.
+ *
+ * This is the **migration-path helper** for the sections-as-DB-records
+ * architecture.  Unlike the deprecated `splitDocument`, this function returns
+ * only the sections array — it discards the document shell (article/chapter
+ * wrapper, docinfo), which is now owned exclusively by the Rails back-end.
+ *
+ * Usage:
+ * 1. Call this with the chapter or article's content blob.
+ * 2. Pass the resulting array to the host's `onSectionsCreate` callback so
+ *    all records can be created in a single Rails transaction.
+ * 3. The host clears the chapter/article `content` field once the sections
+ *    are persisted.
+ *
+ * Returns an empty array when the source has no splittable section children
+ * (e.g. bare paragraph content with no `<section>` elements).  In that case
+ * the caller should offer an "Add section" affordance instead.
+ */
+export function splitContentIntoSections(xml: string): DocumentSection[] {
+  let normalized = xml.trim();
+  if (normalized.startsWith("<?xml")) {
+    const end = normalized.indexOf("?>");
+    if (end !== -1) normalized = normalized.slice(end + 2).trim();
+  }
+
+  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
+  const syntheticRoot = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+
+  if (!syntheticRoot) return [];
+
+  const elementChildren = syntheticRoot.children.filter(
+    (n) => n.type === "element",
+  ) as Element[];
+
+  // If wrapped in a document root (article, chapter, …), look inside it.
+  let candidates: Element[];
+  if (
+    elementChildren.length === 1 &&
+    DOCUMENT_ROOT_TAGS.has(elementChildren[0].name)
+  ) {
+    candidates = elementChildren[0].children.filter(
+      (c) => c.type === "element" && SECTION_TAGS.has((c as Element).name),
+    ) as Element[];
+  } else {
+    // Bare section elements or fragments.
+    candidates = elementChildren.filter((el) => SECTION_TAGS.has(el.name));
+  }
+
+  return candidates.map((el) => ({
+    id: generateId(),
+    title: extractTitle(el) || untitledLabel(el.name),
+    content: toXml({ type: "root", children: [el] } as Root),
+    type: tagToType(el.name),
+  }));
 }

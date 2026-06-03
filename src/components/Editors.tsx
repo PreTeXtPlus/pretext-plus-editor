@@ -26,7 +26,19 @@ import type {
   PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
-import type { DocumentSection, DocumentChapter } from "../types/sections";
+import type {
+  DocumentSection,
+  DocumentChapter,
+  DocumentSectionType,
+} from "../types/sections";
+import {
+  splitContentIntoSections,
+  createNewSection,
+  rewrapSection,
+  rewrapLatexSection,
+  stripSectionWrapper,
+  stripLatexSectionWrapper,
+} from "../sectionUtils";
 
 const startingContent = defaultContent;
 
@@ -211,6 +223,106 @@ export interface editorProps {
     chapterId: string,
     changes: { title?: string; xmlId?: string | null; label?: string | null },
   ) => void;
+  // ── New sections-as-DB-records API ──────────────────────────────────────────
+  // When these props are provided the editor operates in the new "sections are
+  // DB records" mode: the host owns all section state and the editor never
+  // reconstructs a full document.  When omitted the editor falls back to the
+  // legacy `useSectionedEditing` behavior for backward compatibility.
+
+  /**
+   * Ordered list of section summaries for the currently active article/chapter.
+   * Pass an empty array for an unsectioned document.  The TOC renders this list;
+   * the editor loads one section's content at a time via the `source` prop.
+   *
+   * When provided, enables the new sections-as-DB-records editing mode and
+   * bypasses the legacy `useSectionedEditing` hook.
+   */
+  sections?: DocumentSection[];
+
+  /**
+   * The id of the section currently open for editing (controlled).
+   * When provided alongside `sections`, the editor reads the active section
+   * content from `source`.  When omitted the first section is active
+   * (uncontrolled).
+   *
+   * NOTE: Named `currentSectionId` to distinguish from the internal state
+   * used in legacy mode.  If the Rails schema evolves to pass position/parentId
+   * on each section record, the active section's metadata lives in `sections`.
+   */
+  currentSectionId?: string | null;
+
+  /**
+   * Called when the user clicks a different section in the TOC.
+   * The host should update `source` to that section's XML content and
+   * update `currentSectionId`.
+   */
+  onSectionSelect?: (sectionId: string) => void;
+
+  /**
+   * Called when the user edits the content of the current section.
+   * Receives the rewrapped full section XML (including outer division tag).
+   * Replaces `onSectionChange` from the legacy API.
+   */
+  onSectionContentChange?: (sectionId: string, content: string) => void;
+
+  /**
+   * Called when the user adds a new section via the TOC UI.
+   * `afterId` is `null` to append; a section id to insert after.
+   * `section` is the new `DocumentSection` with a client-generated id — the
+   * host may replace it with a server-assigned id after persisting.
+   *
+   * NOTE: Callback style (individual CRUD vs full-array) is TBD pending Rails
+   * schema finalization.  Currently individual CRUD for single-record mutations.
+   */
+  onSectionAdd?: (afterId: string | null, section: DocumentSection) => void;
+
+  /**
+   * Called when the user removes a section.
+   * The host should delete the record and update `sections`.
+   */
+  onSectionRemove?: (sectionId: string) => void;
+
+  /**
+   * Called when the user renames or changes the type/metadata of a section
+   * via the inline TOC edit form.
+   */
+  onSectionUpdate?: (
+    sectionId: string,
+    changes: {
+      title?: string;
+      type?: DocumentSectionType;
+      xmlId?: string | null;
+      label?: string | null;
+    },
+  ) => void;
+
+  /**
+   * Called when the user reorders sections via drag-and-drop.
+   * Receives the full reordered sections array.
+   *
+   * NOTE: May be replaced by individual position-update callbacks if the
+   * Rails side cannot handle bulk reorder in one transaction.
+   */
+  onSectionsReorder?: (sections: DocumentSection[]) => void;
+
+  /**
+   * Called when the user merges all sections back to a section-less state.
+   * Provides the merged XML body string (all sections concatenated, outer
+   * division tags stripped) so the host can populate the chapter/article
+   * `content` field.  The host should then delete all section records.
+   */
+  onSectionsMergeToContent?: (mergedContent: string) => void;
+
+  /**
+   * Called when the user splits a section-less content blob into sections
+   * (migration flow).  Fires a single batch callback so the host can create
+   * all records in one Rails transaction.  After persisting, the host should
+   * update `sections` and clear `source`.
+   */
+  onSectionsCreate?: (sections: DocumentSection[]) => void;
+
+  // ── End new API ──────────────────────────────────────────────────────────────
+
   /**
    * Assets already associated with this project.  When omitted, the Assets
    * button and modal are hidden entirely.
@@ -386,6 +498,86 @@ const Editors = (props: editorProps) => {
     chapterKey: props.currentChapterId,
   });
 
+  // ── New sections-as-DB-records mode ───────────────────────────────────────
+  // When `props.sections` is provided we are in the new model.  The host owns
+  // all section state; we just track which section id is selected internally
+  // for uncontrolled usage and wire the slim CRUD callbacks.
+  const isNewSectionsMode = props.sections !== undefined;
+
+  // Internal selected-section id for uncontrolled usage in new mode.
+  const [internalNewSectionId, setInternalNewSectionId] = useState<
+    string | null
+  >(() => props.sections?.[0]?.id ?? null);
+
+  // The resolved active section id (controlled wins over internal).
+  const newModeSectionId =
+    props.currentSectionId !== undefined
+      ? props.currentSectionId
+      : internalNewSectionId;
+
+  const newModeSection = isNewSectionsMode
+    ? (props.sections?.find((s) => s.id === newModeSectionId) ??
+      props.sections?.[0] ??
+      null)
+    : null;
+
+  // In new mode, the active source shown in the code editor is the inner body
+  // of the current section (outer division tag stripped), matching legacy mode.
+  const newModeActiveSource = newModeSection
+    ? contentState.sourceFormat === "latex"
+      ? stripLatexSectionWrapper(newModeSection.content, newModeSection.type)
+      : stripSectionWrapper(newModeSection.content)
+    : contentState.sourceContent;
+
+  // Handler for code-editor changes in new mode: rewrap and call back.
+  const handleNewModeSectionContentChange = (
+    newContent: string | undefined,
+  ) => {
+    if (!newModeSection) {
+      updateContentState(newContent);
+      return;
+    }
+    const inner = newContent || "";
+    const wrapped =
+      contentState.sourceFormat === "latex"
+        ? rewrapLatexSection(
+            inner,
+            newModeSection.type,
+            newModeSection.title,
+            newModeSection.content,
+          )
+        : rewrapSection(inner, newModeSection.type);
+    if (wrapped === newModeSection.content) return;
+    props.onSectionContentChange?.(newModeSection.id, wrapped);
+    props.onContentChange(wrapped, {
+      sourceContent: wrapped,
+      sourceFormat: contentState.sourceFormat,
+      pretextSource:
+        contentState.sourceFormat === "pretext" ? wrapped : undefined,
+    });
+  };
+
+  // Handler for the "split content into sections" migration action.
+  const handleSplitIntoSections = () => {
+    const sections = splitContentIntoSections(contentState.sourceContent);
+    if (sections.length > 0) {
+      props.onSectionsCreate?.(sections);
+    }
+  };
+
+  // Handler for adding a new section in new mode.
+  const handleNewModeAddSection = (afterId: string | null) => {
+    const newSec = createNewSection();
+    props.onSectionAdd?.(afterId, newSec);
+    setInternalNewSectionId(newSec.id);
+  };
+
+  // Handler for section select in new mode.
+  const handleNewModeSectionSelect = (id: string) => {
+    setInternalNewSectionId(id);
+    props.onSectionSelect?.(id);
+  };
+
   // ── Book-mode chapter state ────────────────────────────────────────────────
   // useBookChapters owns the per-chapter parsed-section map and the set of
   // expanded chapter ids.  When the active chapter changes (currentChapterId),
@@ -492,12 +684,12 @@ const Editors = (props: editorProps) => {
   // ── Derived preview content ────────────────────────────────────────────────
   /** In sectioned mode, preview uses the current section; otherwise full doc. */
   const previewContent = (() => {
-    if (editMode === "sectioned" && currentSection) {
+    const activeSection = isNewSectionsMode ? newModeSection : currentSection;
+    const effectiveEditMode = isNewSectionsMode ? "sectioned" : editMode;
+    if (effectiveEditMode === "sectioned" && activeSection) {
       if (contentState.sourceFormat === "pretext") {
-        // Just the section with its outer division tag — no <pretext>/<article> wrapper.
-        return currentSection.content || undefined;
+        return activeSection.content || undefined;
       }
-      // For non-PreTeXt sources we fall back to the full converted PreTeXt.
       return contentState.pretextSource ?? undefined;
     }
     return (
@@ -509,7 +701,9 @@ const Editors = (props: editorProps) => {
   })();
 
   const previewUnavailable =
-    editMode !== "sectioned" && contentState.pretextError !== undefined;
+    !isNewSectionsMode &&
+    editMode !== "sectioned" &&
+    contentState.pretextError !== undefined;
 
   // ── Preview rebuild helpers ────────────────────────────────────────────────
   /** Triggers a full-page preview rebuild without saving. */
@@ -560,10 +754,12 @@ const Editors = (props: editorProps) => {
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
-      content={activeSourceContent}
+      content={isNewSectionsMode ? newModeActiveSource : activeSourceContent}
       sourceFormat={contentState.sourceFormat}
       onChange={
-        editMode === "sectioned"
+        isNewSectionsMode
+          ? handleNewModeSectionContentChange
+          : editMode === "sectioned"
           ? (c) => updateSectionContent(c)
           : isBookChapterBody
           ? (c) => updateChapterBodyContent(c)
@@ -612,7 +808,9 @@ const Editors = (props: editorProps) => {
     );
   } else {
     const visualContent =
-      editMode === "sectioned" && currentSection
+      isNewSectionsMode && newModeSection
+        ? newModeActiveSource
+        : editMode === "sectioned" && currentSection
         ? activeSourceContent
         : previewContent || "";
     // The Tiptap visual editor only understands PreTeXt XML.
@@ -628,7 +826,9 @@ const Editors = (props: editorProps) => {
         canEdit={canEditVisually}
         editDisabledReason={editDisabledReason}
         onChange={(content) => {
-          if (editMode === "sectioned") {
+          if (isNewSectionsMode) {
+            handleNewModeSectionContentChange(content);
+          } else if (editMode === "sectioned") {
             updateSectionContent(content);
           } else {
             updateContentState(content);
@@ -644,29 +844,60 @@ const Editors = (props: editorProps) => {
   const tocSidebar =
     isMarkdownDoc && props.projectAssets === undefined ? null : (
     <TableOfContents
-      sections={sections}
-      currentSectionId={currentSectionId ?? sections[0]?.id ?? null}
+      sections={isNewSectionsMode ? (props.sections ?? []) : sections}
+      currentSectionId={
+        isNewSectionsMode
+          ? (newModeSectionId ?? null)
+          : (currentSectionId ?? sections[0]?.id ?? null)
+      }
       isCollapsed={isTocCollapsed}
       onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
       onSelectSection={
-        editMode === "sectioned"
+        isNewSectionsMode
+          ? handleNewModeSectionSelect
+          : editMode === "sectioned"
           ? setCurrentSectionId
           : handleSelectSectionInDocMode
       }
-      onAddSection={handleAddSection}
+      onAddSection={
+        isNewSectionsMode ? handleNewModeAddSection : handleAddSection
+      }
       onAddIntroduction={handleAddIntroduction}
       onAddConclusion={handleAddConclusion}
-      onRemoveSection={handleRemoveSection}
-      onUpdateSection={handleUpdateSectionMetadata}
-      onReorderSections={handleReorderSections}
-      onMergeSections={handleMergeSection}
-      onAddFirstSection={handleAddFirstSection}
-      onRefresh={editMode === "sectioned" ? handleRefreshSections : undefined}
-      editMode={editMode}
-      onToggleEditMode={() =>
-        switchEditMode(editMode === "document" ? "sectioned" : "document")
+      onRemoveSection={
+        isNewSectionsMode
+          ? (id) => props.onSectionRemove?.(id)
+          : handleRemoveSection
       }
-      readonly={editMode === "document"}
+      onUpdateSection={
+        isNewSectionsMode
+          ? (id, changes) => props.onSectionUpdate?.(id, changes)
+          : handleUpdateSectionMetadata
+      }
+      onReorderSections={
+        isNewSectionsMode
+          ? (secs) => props.onSectionsReorder?.(secs)
+          : handleReorderSections
+      }
+      onMergeSections={isNewSectionsMode ? undefined : handleMergeSection}
+      onAddFirstSection={
+        isNewSectionsMode ? handleSplitIntoSections : handleAddFirstSection
+      }
+      onRefresh={
+        isNewSectionsMode
+          ? undefined
+          : editMode === "sectioned"
+          ? handleRefreshSections
+          : undefined
+      }
+      editMode={isNewSectionsMode ? "sectioned" : editMode}
+      onToggleEditMode={
+        isNewSectionsMode
+          ? undefined
+          : () =>
+              switchEditMode(editMode === "document" ? "sectioned" : "document")
+      }
+      readonly={isNewSectionsMode ? false : editMode === "document"}
       projectType={props.projectType}
       chapters={props.chapters}
       currentChapterId={props.currentChapterId}
@@ -674,16 +905,20 @@ const Editors = (props: editorProps) => {
       onChaptersReorder={props.onChaptersReorder}
       expandedChapterIds={bookChapters.expandedChapterIds}
       onToggleChapterExpanded={bookChapters.toggleChapterExpanded}
-      getChapterParse={bookChapters.getChapterParse}
+      getChapterParse={isNewSectionsMode ? undefined : bookChapters.getChapterParse}
       onChapterRequestLoad={props.onChapterRequestLoad}
       onChapterAdd={props.onChapterAdd}
       onChapterRemove={props.onChapterRemove}
-      onChapterContentChange={props.onChapterContentChange}
-      onSelectSectionInChapter={handleSelectSectionInChapter}
+      onChapterContentChange={
+        isNewSectionsMode ? undefined : props.onChapterContentChange
+      }
+      onSelectSectionInChapter={
+        isNewSectionsMode ? undefined : handleSelectSectionInChapter
+      }
       onUpdateChapter={
         props.projectType === "book" ? handleUpdateChapter : undefined
       }
-      parseError={parseError}
+      parseError={isNewSectionsMode ? null : parseError}
       hideSectionList={isMarkdownDoc}
     />
   );

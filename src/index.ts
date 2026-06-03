@@ -25,12 +25,16 @@ export type {
 export type {
   DocumentSection,
   DocumentSectionType,
-  DocumentSplitResult,
+  /** @deprecated Use `DocumentChapter` directly. */
   DocumentChapter as ChapterSummary,
+  DocumentChapter,
+  /** @deprecated The wrapper/split-result pattern is being removed. Use `splitContentIntoSections` instead. */
+  DocumentSplitResult,
 } from "./types/sections";
 export {
-  splitDocument,
-  mergeDocument,
+  // New architecture helpers
+  splitContentIntoSections,
+  // Section CRUD utilities
   updateSectionTitle,
   createNewSection,
   createIntroduction,
@@ -38,9 +42,10 @@ export {
   stripSectionWrapper,
   rewrapSection,
   ensureSectionWrapper,
+  mergeTwoSections,
+  getSectionAttributes,
+  updateSectionMetadata,
   // LaTeX section utilities
-  splitLatexDocument,
-  mergeLatexDocument,
   stripLatexSectionWrapper,
   rewrapLatexSection,
   ensureLatexSectionWrapper,
@@ -48,13 +53,23 @@ export {
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,
+  // Deprecated: full-document split/merge (wrapper pattern)
+  /** @deprecated Use `splitContentIntoSections` instead. */
+  splitDocument,
+  /** @deprecated Rails now owns document reconstruction. */
+  mergeDocument,
+  /** @deprecated Use `splitContentIntoSections` instead. */
+  splitLatexDocument,
+  /** @deprecated Rails now owns document reconstruction. */
+  mergeLatexDocument,
+  /** @deprecated */
   wrapDocumentAsSection,
+  /** @deprecated */
   wrapLatexDocumentAsSection,
-  mergeTwoSections,
+  /** @deprecated */
   wrapSectionAsDocument,
+  /** @deprecated */
   wrapLatexSectionAsDocument,
-  getSectionAttributes,
-  updateSectionMetadata,
 } from "./sectionUtils";
 
 // Export components
