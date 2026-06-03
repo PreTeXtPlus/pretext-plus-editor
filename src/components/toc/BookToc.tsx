@@ -49,7 +49,8 @@ export interface BookTocProps {
   onReorderSections: (sections: DocumentSection[]) => void;
   onAddFirstSection?: () => void;
   editMode: "document" | "sectioned";
-  onToggleEditMode: () => void;
+  /** When omitted, the chapter-click "return to document mode" gesture is disabled. */
+  onToggleEditMode?: () => void;
   readonly: boolean;
   chapters: DocumentChapter[];
   currentChapterId: string | null | undefined;
@@ -57,7 +58,11 @@ export interface BookTocProps {
   onChaptersReorder?: (chapters: DocumentChapter[]) => void;
   expandedChapterIds: Set<string>;
   onToggleChapterExpanded: (chapterId: string) => void;
-  getChapterParse: (chapterId: string) => ChapterParseResult | null;
+  /**
+   * Returns the parsed `{sections, wrapper}` for a chapter.  When omitted (new
+   * sections-as-DB-records mode), `chapter.sections` is used directly.
+   */
+  getChapterParse?: (chapterId: string) => ChapterParseResult | null;
   onChapterRequestLoad?: (chapterId: string) => void;
   onChapterAdd?: (afterChapterId: string | null) => void;
   onChapterRemove?: (chapterId: string) => void;
@@ -158,15 +163,20 @@ const BookToc = ({
 
   // ── Per-chapter section views ───────────────────────────────────────────
   // For each expanded chapter, the sections currently displayed.  For the
-  // active chapter, these come from props (i.e. useSectionedEditing).  For
-  // non-active chapters, they come from the parsed map.
+  // active chapter, these come from props.  For non-active chapters, sections
+  // come from `chapter.sections` (new DB-records mode) or from the legacy
+  // `getChapterParse` XML-parsing map.
   const chapterSectionsById = useMemo(() => {
     const map = new Map<string, DocumentSection[]>();
     for (const ch of chapters) {
       if (!expandedChapterIds.has(ch.id)) continue;
       if (ch.id === currentChapterId) {
         map.set(ch.id, sections);
-      } else {
+      } else if (ch.sections !== undefined) {
+        // New model: sections are first-class records on the chapter object.
+        map.set(ch.id, ch.sections);
+      } else if (getChapterParse) {
+        // Legacy model: derive sections by parsing the chapter's XML blob.
         const parsed = getChapterParse(ch.id);
         if (parsed) map.set(ch.id, parsed.sections);
       }
@@ -205,7 +215,10 @@ const BookToc = ({
   const toggleExpanded = (ch: DocumentChapter) => {
     const willExpand = !expandedChapterIds.has(ch.id);
     onToggleChapterExpanded(ch.id);
-    if (willExpand && ch.content === undefined) {
+    // Request load only for legacy-model chapters that haven't had their
+    // content fetched yet.  Chapters with `sections` (new model) are
+    // already fully loaded.
+    if (willExpand && ch.content === undefined && ch.sections === undefined) {
       onChapterRequestLoad?.(ch.id);
     }
   };
@@ -378,7 +391,11 @@ const BookToc = ({
       onReorderSections(nextSections);
       return;
     }
-    if (!onChapterContentChange) return;
+    // Non-active chapter: legacy mode reconstructs XML via mergeDocument.
+    // New mode (getChapterParse absent) relies on the host's onChapterContentChange
+    // or a future onSectionsReorder-per-chapter callback; for now cross-chapter
+    // drops on new-mode chapters are rejected (onChapterContentChange is undefined).
+    if (!onChapterContentChange || !getChapterParse) return;
     const parsed = getChapterParse(chapterId);
     if (!parsed) return;
     const merged = mergeDocument(parsed.wrapper, nextSections);
@@ -422,7 +439,7 @@ const BookToc = ({
                 }
                 onSelect={() => {
                   if (ch.id === currentChapterId) {
-                    if (editMode === "sectioned") onToggleEditMode();
+                    if (editMode === "sectioned") onToggleEditMode?.();
                     return;
                   }
                   if (!expandedChapterIds.has(ch.id)) {
@@ -573,14 +590,43 @@ function renderChapterChildren(opts: ChildrenOpts) {
   } = opts;
 
   if (sectionsForChapter === undefined) {
+    // New model: chapter has sections array (possibly empty) but isn't the
+    // active chapter — sections are pre-loaded, nothing to fetch.
+    if (chapter.sections !== undefined) {
+      return (
+        <div className="pretext-plus-editor__toc-chapter-loading">
+          (No sections)
+        </div>
+      );
+    }
+    // Legacy model: content not yet fetched from server.
     if (chapter.content === undefined) {
       return (
         <div className="pretext-plus-editor__toc-chapter-loading">Loading…</div>
       );
     }
+    // Legacy model: content loaded but produced no parseable sections.
     return (
       <div className="pretext-plus-editor__toc-chapter-loading">
         (No sections)
+      </div>
+    );
+  }
+
+  // Zero sections in the active chapter (new model or legacy).
+  if (sectionsForChapter.length === 0 && isActive) {
+    return (
+      <div className="pretext-plus-editor__toc-chapter-loading">
+        No sections yet.{" "}
+        {onAddFirstSection && (
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-assets-add-link"
+            onClick={onAddFirstSection}
+          >
+            Add one
+          </button>
+        )}
       </div>
     );
   }

@@ -38,7 +38,13 @@ export interface ArticleTocProps {
   onMergeSections?: (sourceId: string, targetId: string) => void;
   onAddFirstSection?: () => void;
   editMode: "document" | "sectioned";
-  onToggleEditMode: () => void;
+  /**
+   * When provided, a "← Edit full document" back-link is shown in sectioned
+   * mode so the user can return to full-document editing.  Omit (or pass
+   * `undefined`) to hide the link — appropriate in the new sections-as-DB-records
+   * mode where there is no document mode to return to.
+   */
+  onToggleEditMode?: () => void;
   readonly: boolean;
 }
 
@@ -94,7 +100,7 @@ const ArticleToc = ({
 
   return (
     <>
-      {editMode === "sectioned" && (
+      {editMode === "sectioned" && onToggleEditMode && (
         <button
           type="button"
           className="pretext-plus-editor__toc-fulldoc-link"

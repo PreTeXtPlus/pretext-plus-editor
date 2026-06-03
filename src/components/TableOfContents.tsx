@@ -50,8 +50,12 @@ export interface TableOfContentsProps {
   onRefresh?: () => void;
   /** Current editing mode */
   editMode: "document" | "sectioned";
-  /** Called when the user clicks the "Edit full document" link */
-  onToggleEditMode: () => void;
+  /**
+   * Called when the user clicks the "Edit full document" link.
+   * When omitted, the link is hidden (appropriate in the new
+   * sections-as-DB-records mode where there is no document mode).
+   */
+  onToggleEditMode?: () => void;
   /** When true (document mode), hide all edit controls */
   readonly?: boolean;
   /**
