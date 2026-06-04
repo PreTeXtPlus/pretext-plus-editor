@@ -13,7 +13,7 @@ export interface Asset {
    * resolves it to the necessary core PreTeXt markup based upon the kind of
    * asset it is.
    */
-  ref: string;
+  ref?: string;
   /** Kind of asset format */
   kind: "file" | "doenet";
   /** Source content for generated assets. Undefined for "file" assets. */
