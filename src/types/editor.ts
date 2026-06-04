@@ -2,19 +2,24 @@
 export type SourceFormat = "pretext" | "latex" | "markdown";
 
 /** An asset (image or other media file) stored in the asset library. */
-export interface ProjectAsset {
+export interface Asset {
   /** Stable server-assigned identifier. */
   id: string;
   /** Human-readable display name shown in the library UI. */
   name: string;
   /**
-   * Short filename used when authoring references, e.g. `"euler.png"`.
-   * Authors write `<image source="euler.png"/>` and the build system resolves
-   * it to the full URL.  Assigned and managed by the Rails back-end.
+   * Short reference used when authoring references, e.g. `"euler-painting"`.
+   * Authors write e.g. `<plus:image ref="euler-painting"/>` and the build system
+   * resolves it to the necessary core PreTeXt markup based upon the kind of
+   * asset it is.
    */
-  filename: string;
-  /** Publicly accessible URL used to display thumbnails in the editor UI. */
-  url: string;
+  ref: string;
+  /** Kind of asset format */
+  kind: "file" | "doenet";
+  /** Source content for generated assets. Undefined for "file" assets. */
+  source?: string;
+  /** Publicly accessible URL that serves the "file" asset for viewing. */
+  url?: string;
   /** MIME type, e.g. `"image/png"`. Optional — used for display hints only. */
   contentType?: string;
 }
