@@ -3,8 +3,8 @@ import Editors from "./components/Editors";
 import { defaultContent } from "./defaultContent";
 import { useState } from "react";
 import type {
+  Asset,
   FeedbackSubmission,
-  ProjectAsset,
   SourceFormat,
 } from "./types/editor";
 import type { DocumentChapter, DocumentSection } from "./types/sections";
@@ -148,31 +148,34 @@ function App() {
   // libraryAssets = all assets across all projects for this user
   // projectAssetIds = which library assets are associated with the current project
   // ---------------------------------------------------------------------------
-  const [libraryAssets, setLibraryAssets] = useState<ProjectAsset[]>([
+  const [libraryAssets, setLibraryAssets] = useState<Asset[]>([
     {
       id: "asset-1",
       name: "Euler Formula",
-      filename: "euler-formula.png",
-      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/35/Euler%27s_formula.svg/320px-Euler%27s_formula.svg.png",
-      contentType: "image/png",
+      ref: "euler-formula.png",
+      kind: "image",
     },
     {
       id: "asset-2",
       name: "Markdown Logo",
-      filename: "markdown-logo.svg",
-      url: "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Markdown-mark.svg/208px-Markdown-mark.svg.png",
-      contentType: "image/svg+xml",
+      ref: "markdown-logo.svg",
+      kind: "image",
     },
     {
       id: "asset-3",
       name: "PreTeXt Logo",
-      filename: "pretext-logo.png",
-      url: "https://pretextbook.org/images/ptx-logo.png",
-      contentType: "image/png",
+      ref: "pretext-logo.png",
+      kind: "image",
+    },
+    {
+      id: "asset-4",
+      name: "Sample Activity",
+      ref: "sample-activity",
+      kind: "doenet",
     },
   ]);
   // Only asset-1 is associated with the current project initially
-  const [projectAssetIds, setProjectAssetIds] = useState<Set<string>>(
+  const [projectAssetIds, setAssetIds] = useState<Set<string>>(
     new Set(["asset-1"]),
   );
   const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
@@ -347,58 +350,57 @@ function App() {
     console.log("Feedback submitted:", feedback);
   };
 
-  const handleAssetInsert = (asset: ProjectAsset) => {
-    // The editor inserts the format-specific snippet automatically.
-    // This callback is a notification hook for host-side side-effects.
-    console.log("Asset inserted:", asset.filename);
+  const handleAssetInsert = (asset: Asset) => {
+    console.log("Asset inserted:", asset.ref);
   };
 
-  const handleAssetUpload = async (file: File): Promise<ProjectAsset> => {
-    console.log("Asset upload started:", file.name, file.type, file.size);
-    // Simulate Rails: upload file, create library asset record, associate with project
+  const handleAssetAddFromLibrary = async (asset: Asset) => {
+    console.log("Adding library asset to project:", asset.id, asset.name);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    setAssetIds((prev) => new Set([...prev, asset.id]));
+  };
+
+  const handleAssetUpload = async (file: File): Promise<Asset> => {
+    console.log("Asset upload:", file.name);
     await new Promise((resolve) => setTimeout(resolve, 800));
-    const objectUrl = URL.createObjectURL(file);
-    const baseName = file.name.replace(/\.[^.]+$/, "");
-    const ext = file.name.includes(".") ? file.name.split(".").pop() : "";
-    const newAsset: ProjectAsset = {
+    const newAsset: Asset = {
       id: `asset-${Date.now()}`,
-      name: baseName,
-      filename: file.name,
-      url: objectUrl,
-      contentType: file.type || (ext ? `image/${ext}` : undefined),
+      name: file.name.replace(/\.[^.]+$/, ""),
+      ref: file.name,
+      kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
-    console.log("Asset upload complete:", newAsset);
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleAssetAddUrl = async (
-    url: string,
-    name: string,
-  ): Promise<ProjectAsset> => {
-    console.log("Asset URL add started:", url, name);
-    // Simulate Rails: download the image, store it, create library + project record
+  const handleAssetAddUrl = async (url: string, name: string): Promise<Asset> => {
+    console.log("Asset URL add:", url);
     await new Promise((resolve) => setTimeout(resolve, 600));
     const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
-    const newAsset: ProjectAsset = {
+    const newAsset: Asset = {
       id: `asset-${Date.now()}`,
       name: name || filename.replace(/\.[^.]+$/, ""),
-      filename,
-      url,
+      ref: filename,
+      kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
-    console.log("Asset URL add complete:", newAsset);
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleAssetAddFromLibrary = async (asset: ProjectAsset) => {
-    console.log("Adding library asset to project:", asset.id, asset.name);
-    // Simulate Rails: create the project–asset join record
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    setProjectAssetIds((prev) => new Set([...prev, asset.id]));
-    console.log("Asset added to project:", asset.filename);
+  const handleCreateDoenet = async (name: string, ref: string): Promise<Asset> => {
+    console.log("Create Doenet:", name, ref);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const newAsset: Asset = { id: `asset-${Date.now()}`, name, ref, kind: "doenet" };
+    setLibraryAssets((prev) => [...prev, newAsset]);
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
+    return newAsset;
+  };
+
+  const handleAssetRemove = (asset: Asset) => {
+    console.log("Remove asset from project:", asset.id);
+    setAssetIds((prev) => { const next = new Set(prev); next.delete(asset.id); return next; });
   };
 
   return (
@@ -471,9 +473,11 @@ function App() {
         projectAssets={projectAssets}
         libraryAssets={libraryAssets}
         onAssetInsert={handleAssetInsert}
+        onAssetAddFromLibrary={handleAssetAddFromLibrary}
         onAssetUpload={handleAssetUpload}
         onAssetAddUrl={handleAssetAddUrl}
-        onAssetAddFromLibrary={handleAssetAddFromLibrary}
+        onCreateDoenet={handleCreateDoenet}
+        onAssetRemove={handleAssetRemove}
       />
     </>
   );

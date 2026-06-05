@@ -29,6 +29,8 @@ interface CodeEditorProps {
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
+  /** If provided, an "Assets" button is shown in the toolbar (PreTeXt mode only). */
+  onOpenAssets?: () => void;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -72,6 +74,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
   canConvertToPretext,
+  onOpenAssets,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -235,6 +238,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         canRedo={canRedo}
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
+        onOpenAssets={onOpenAssets}
       />
       <div style={{ flex: 1 }}>
         <Editor

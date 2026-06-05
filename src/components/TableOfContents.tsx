@@ -1,10 +1,8 @@
-import { useState } from "react";
 import type {
   DocumentChapter,
   DocumentSection,
   DocumentSectionType,
 } from "../types/sections";
-import type { ProjectAsset } from "../types/editor";
 import ArticleToc from "./toc/ArticleToc";
 import BookToc from "./toc/BookToc";
 import type { ChapterParseResult } from "./toc/useBookChapters";
@@ -149,20 +147,6 @@ export interface TableOfContentsProps {
    * don't support sectioned editing (e.g. Markdown).
    */
   hideSectionList?: boolean;
-  /**
-   * Project assets shown in the bottom Assets panel.
-   * When omitted, the panel is hidden.
-   */
-  assets?: ProjectAsset[];
-  /**
-   * Called when the user clicks "Insert" on an asset in the Assets panel.
-   */
-  onAssetInsert?: (asset: ProjectAsset) => void;
-  /**
-   * Called when the user clicks the "+" button in the Assets panel header
-   * to open the asset picker dialog.
-   */
-  onOpenAssetPicker?: () => void;
 }
 
 /**
@@ -205,12 +189,7 @@ const TableOfContents = (props: TableOfContentsProps) => {
     onUpdateChapter,
     parseError,
     hideSectionList = false,
-    assets,
-    onAssetInsert,
-    onOpenAssetPicker,
   } = props;
-
-  const [assetsExpanded, setAssetsExpanded] = useState(true);
 
   if (isCollapsed) {
     return (
@@ -324,106 +303,6 @@ const TableOfContents = (props: TableOfContentsProps) => {
         />
       )}
 
-      {assets !== undefined && (
-        <div className="pretext-plus-editor__toc-assets">
-          <div className="pretext-plus-editor__toc-assets-header">
-            <button
-              type="button"
-              className="pretext-plus-editor__toc-assets-toggle"
-              onClick={() => setAssetsExpanded((v) => !v)}
-              aria-expanded={assetsExpanded}
-              aria-label={assetsExpanded ? "Collapse assets" : "Expand assets"}
-            >
-              <span className="pretext-plus-editor__toc-assets-chevron">
-                {assetsExpanded ? "▾" : "▸"}
-              </span>
-              <span className="pretext-plus-editor__toc-heading">Assets</span>
-              {assets.length > 0 && (
-                <span className="pretext-plus-editor__toc-assets-count">
-                  {assets.length}
-                </span>
-              )}
-            </button>
-            {onOpenAssetPicker && (
-              <button
-                type="button"
-                className="pretext-plus-editor__toc-toggle"
-                onClick={onOpenAssetPicker}
-                aria-label="Add or insert asset"
-                title="Add or insert asset"
-              >
-                +
-              </button>
-            )}
-          </div>
-
-          {assetsExpanded && (
-            <div className="pretext-plus-editor__toc-assets-body">
-              {assets.length === 0 ? (
-                <p className="pretext-plus-editor__toc-assets-empty">
-                  No assets yet.
-                  {onOpenAssetPicker && (
-                    <>
-                      {" "}
-                      <button
-                        type="button"
-                        className="pretext-plus-editor__toc-assets-add-link"
-                        onClick={onOpenAssetPicker}
-                      >
-                        Add one
-                      </button>
-                    </>
-                  )}
-                </p>
-              ) : (
-                <ul className="pretext-plus-editor__toc-assets-list">
-                  {assets.map((asset) => (
-                    <li
-                      key={asset.id}
-                      className="pretext-plus-editor__toc-asset-item"
-                    >
-                      <div className="pretext-plus-editor__toc-asset-thumb">
-                        <img
-                          src={asset.url}
-                          alt=""
-                          className="pretext-plus-editor__toc-asset-thumb-img"
-                          onError={(e) => {
-                            (
-                              e.currentTarget as HTMLImageElement
-                            ).style.display = "none";
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="pretext-plus-editor__toc-asset-name"
-                        title={`${asset.name} (${asset.filename})`}
-                      >
-                        <span className="pretext-plus-editor__toc-asset-label">
-                          {asset.name}
-                        </span>
-                        <span className="pretext-plus-editor__toc-asset-filename">
-                          {asset.filename}
-                        </span>
-                      </span>
-                      {onAssetInsert && (
-                        <button
-                          type="button"
-                          className="pretext-plus-editor__toc-action-btn"
-                          onClick={() => onAssetInsert(asset)}
-                          title={`Insert <image source="${asset.filename}"/>`}
-                          aria-label={`Insert ${asset.filename}`}
-                        >
-                          ↩
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

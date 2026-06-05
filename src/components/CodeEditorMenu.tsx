@@ -32,6 +32,8 @@ interface CodeEditorMenuProps {
    * Should be `false` when conversion has failed.
    */
   canConvertToPretext?: boolean;
+  /** If provided, an "Assets" button is shown (PreTeXt mode only). */
+  onOpenAssets?: () => void;
 }
 
 const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
@@ -42,6 +44,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onOpenDocinfoEditor,
   onConvertToPretext,
   canConvertToPretext,
+  onOpenAssets,
 }) => {
   const handleFormat = () => {
     try {
@@ -117,6 +120,15 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
           >
             Edit Macros
           </button>
+          {onOpenAssets && (
+            <button
+              className="pretext-plus-editor__menu-button"
+              onClick={onOpenAssets}
+              title="Manage assets"
+            >
+              Assets
+            </button>
+          )}
         </>
       )}
       <span className="pretext-plus-editor__code-editor-source-badge pretext-plus-editor__code-editor-source-badge--right">
