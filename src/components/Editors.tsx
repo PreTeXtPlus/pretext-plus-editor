@@ -7,7 +7,7 @@ import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
-import AssetPickerDialog from "./AssetPickerDialog";
+import AssetManagerModal from "./AssetManagerModal";
 import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
@@ -212,60 +212,31 @@ export interface editorProps {
     changes: { title?: string; xmlId?: string | null; label?: string | null },
   ) => void;
   /**
-   * Assets already associated with this project.  Shown in the TOC Assets
-   * panel and highlighted in the picker Library tab.  When omitted, the
-   * Assets panel and picker are hidden entirely.
+   * Assets already associated with this project.  When omitted, the Assets
+   * button and modal are hidden entirely.
    */
   projectAssets?: ProjectAsset[];
   /**
    * All assets available in the user's library (across all projects).
-   * Shown in the picker Library tab; assets not in `projectAssets` display
-   * an "Add to project" affordance.  Defaults to `projectAssets` when omitted.
+   * Assets not in `projectAssets` show an "Add to project" affordance.
+   * Defaults to `projectAssets` when omitted.
    */
   libraryAssets?: ProjectAsset[];
-  /**
-   * Optional notification called after the editor inserts the asset snippet at
-   * the cursor.  The component handles insertion automatically (format-specific
-   * snippet: `<image source="…"/>` for PreTeXt, `\includegraphics{…}` for
-   * LaTeX, `![name](…)` for Markdown).  Use this hook for analytics, saving,
-   * or any additional host-side side-effects.
-   */
+  /** Called after an asset tag is inserted at the cursor. */
   onAssetInsert?: (asset: ProjectAsset) => void;
-  /**
-   * Called when the user uploads a file from the asset picker Upload tab.
-   * The host uploads to the server and returns the created {@link ProjectAsset}
-   * (with a server-assigned `filename`).  The asset is also added to the
-   * project automatically by the host.
-   */
-  onAssetUpload?: (file: File) => Promise<ProjectAsset>;
-  /**
-   * Called when the user submits an external URL in the asset picker URL tab.
-   * The host downloads the image, stores it in the library, associates it with
-   * this project, and returns the created {@link ProjectAsset} with a stable
-   * `filename`.  When omitted, the URL is inserted directly without a
-   * server-side record.
-   */
-  onAssetAddUrl?: (url: string, name: string) => Promise<ProjectAsset>;
-  /**
-   * Called when the user picks a library asset not yet in this project.
-   * The host should create the project–asset association (e.g. a Rails join
-   * record).  Called before `onAssetInsert`.
-   */
+  /** Called when the user picks a library asset not yet in this project. */
   onAssetAddFromLibrary?: (asset: ProjectAsset) => Promise<void> | void;
-  /**
-   * Called when the asset picker opens (and when the user clicks Refresh) to
-   * fetch the current project assets from the host back-end.  When provided,
-   * the returned list is used instead of the static `projectAssets` prop
-   * inside the dialog, so the list stays up-to-date even if another tab
-   * modified it.
-   */
+  /** Called when the user uploads an image file. */
+  onAssetUpload?: (file: File) => Promise<ProjectAsset>;
+  /** Called when the user adds an image by URL. */
+  onAssetAddUrl?: (url: string, name: string) => Promise<ProjectAsset>;
+  /** Called when the user creates a new Doenet activity. */
+  onCreateDoenet?: (name: string, ref: string) => Promise<ProjectAsset>;
+  /** Called when the user removes an asset from the project. */
+  onAssetRemove?: (asset: ProjectAsset) => void;
+  /** Called when the asset modal opens to fetch the latest project assets. */
   onLoadProjectAssets?: () => Promise<ProjectAsset[]>;
-  /**
-   * Called when the asset picker opens (and when the user clicks Refresh) to
-   * fetch the full library asset list from the host back-end.  When provided,
-   * the returned list is used instead of the static `libraryAssets` prop
-   * inside the dialog.
-   */
+  /** Called when the asset modal opens to fetch the full library asset list. */
   onLoadLibraryAssets?: () => Promise<ProjectAsset[]>;
 }
 
@@ -471,22 +442,8 @@ const Editors = (props: editorProps) => {
   };
 
   // ── Asset insertion ────────────────────────────────────────────────────────
-  /**
-   * Build a source-format–appropriate snippet for inserting an asset reference.
-   * - PreTeXt: `<image source="filename"/>`
-   * - LaTeX:   `\includegraphics{filename}`
-   * - Markdown: `![name](filename)`
-   */
   const buildAssetSnippet = (asset: ProjectAsset): string => {
-    switch (contentState.sourceFormat) {
-      case "latex":
-        return `\\includegraphics{${asset.filename}}`;
-      case "markdown":
-        return `![${asset.name}](${asset.filename})`;
-      case "pretext":
-      default:
-        return `<image source="${asset.filename}"/>`;
-    }
+    return `<plus:${asset.kind} ref="${asset.ref}"/>`;
   };
 
   /**
@@ -620,6 +577,11 @@ const Editors = (props: editorProps) => {
           : undefined
       }
       canConvertToPretext={contentState.pretextError === undefined}
+      onOpenAssets={
+        props.projectAssets !== undefined && contentState.sourceFormat === "pretext"
+          ? () => setIsAssetPickerOpen(true)
+          : undefined
+      }
     />
   );
 
@@ -721,13 +683,6 @@ const Editors = (props: editorProps) => {
       }
       parseError={parseError}
       hideSectionList={isMarkdownDoc}
-      assets={props.projectAssets}
-      onAssetInsert={handleAssetInsert}
-      onOpenAssetPicker={
-        props.projectAssets !== undefined
-          ? () => setIsAssetPickerOpen(true)
-          : undefined
-      }
     />
   );
 
@@ -904,20 +859,20 @@ const Editors = (props: editorProps) => {
           />
         ) : null}
         {isAssetPickerOpen && props.projectAssets !== undefined ? (
-          <AssetPickerDialog
+          <AssetManagerModal
             open={isAssetPickerOpen}
             onClose={() => setIsAssetPickerOpen(false)}
+            source={activeSourceContent}
             projectAssets={props.projectAssets}
             libraryAssets={props.libraryAssets}
             onLoadProjectAssets={props.onLoadProjectAssets}
             onLoadLibraryAssets={props.onLoadLibraryAssets}
+            onAddFromLibrary={props.onAssetAddFromLibrary}
             onUpload={props.onAssetUpload}
             onAddUrl={props.onAssetAddUrl}
-            onAddFromLibrary={props.onAssetAddFromLibrary}
-            onInsert={(asset) => {
-              handleAssetInsert(asset);
-              setIsAssetPickerOpen(false);
-            }}
+            onCreateDoenet={props.onCreateDoenet}
+            onRemoveAsset={props.onAssetRemove}
+            onInsert={handleAssetInsert}
           />
         ) : null}
       </div>

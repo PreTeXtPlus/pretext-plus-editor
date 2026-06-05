@@ -1,22 +1,19 @@
 /** The format of the source content being edited. */
 export type SourceFormat = "pretext" | "latex" | "markdown";
 
-/** An asset (image or other media file) stored in the asset library. */
+/** The kind of a project asset — determines the inserted PreTeXt tag. */
+export type AssetKind = "image" | "doenet";
+
+/** An asset stored in the project asset library. */
 export interface ProjectAsset {
-  /** Stable server-assigned identifier. */
+  /** Stable server-assigned identifier (hidden from users). */
   id: string;
   /** Human-readable display name shown in the library UI. */
   name: string;
-  /**
-   * Short filename used when authoring references, e.g. `"euler.png"`.
-   * Authors write `<image source="euler.png"/>` and the build system resolves
-   * it to the full URL.  Assigned and managed by the Rails back-end.
-   */
-  filename: string;
-  /** Publicly accessible URL used to display thumbnails in the editor UI. */
-  url: string;
-  /** MIME type, e.g. `"image/png"`. Optional — used for display hints only. */
-  contentType?: string;
+  /** Short reference string used in the authored tag, e.g. `"euler.png"`. */
+  ref: string;
+  /** The kind of asset — determines the tag inserted into the document. */
+  kind: AssetKind;
 }
 
 /** Payload emitted when a user submits feedback from the editor UI. */

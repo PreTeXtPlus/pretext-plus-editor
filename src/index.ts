@@ -14,6 +14,7 @@ export {
   detectSourceFormat,
 } from "./contentConversion";
 export type {
+  AssetKind,
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
