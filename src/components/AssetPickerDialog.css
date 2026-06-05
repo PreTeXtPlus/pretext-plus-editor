@@ -24,6 +24,42 @@
   text-align: center;
 }
 
+.pretext-plus-editor__asset-library-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem 0.25rem;
+}
+
+.pretext-plus-editor__asset-library-refresh {
+  font: inherit;
+  font-size: 0.78rem;
+  color: #475569;
+  background: none;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.pretext-plus-editor__asset-library-refresh:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.pretext-plus-editor__asset-library-refresh:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pretext-plus-editor__asset-load-error {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  flex: 1;
+}
+
 .pretext-plus-editor__asset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));

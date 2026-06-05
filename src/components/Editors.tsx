@@ -252,6 +252,21 @@ export interface editorProps {
    * record).  Called before `onAssetInsert`.
    */
   onAssetAddFromLibrary?: (asset: ProjectAsset) => Promise<void> | void;
+  /**
+   * Called when the asset picker opens (and when the user clicks Refresh) to
+   * fetch the current project assets from the host back-end.  When provided,
+   * the returned list is used instead of the static `projectAssets` prop
+   * inside the dialog, so the list stays up-to-date even if another tab
+   * modified it.
+   */
+  onLoadProjectAssets?: () => Promise<ProjectAsset[]>;
+  /**
+   * Called when the asset picker opens (and when the user clicks Refresh) to
+   * fetch the full library asset list from the host back-end.  When provided,
+   * the returned list is used instead of the static `libraryAssets` prop
+   * inside the dialog.
+   */
+  onLoadLibraryAssets?: () => Promise<ProjectAsset[]>;
 }
 
 /**
@@ -894,6 +909,8 @@ const Editors = (props: editorProps) => {
             onClose={() => setIsAssetPickerOpen(false)}
             projectAssets={props.projectAssets}
             libraryAssets={props.libraryAssets}
+            onLoadProjectAssets={props.onLoadProjectAssets}
+            onLoadLibraryAssets={props.onLoadLibraryAssets}
             onUpload={props.onAssetUpload}
             onAddUrl={props.onAssetAddUrl}
             onAddFromLibrary={props.onAssetAddFromLibrary}

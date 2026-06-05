@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ProjectAsset } from "../types/editor";
 import "./dialog.css";
 import "./AssetPickerDialog.css";
@@ -13,6 +13,18 @@ export interface AssetPickerDialogProps {
    * When omitted the library tab shows only projectAssets.
    */
   libraryAssets?: ProjectAsset[];
+  /**
+   * Called when the dialog opens (and when the user clicks Refresh) to fetch
+   * the latest project assets from the host. When provided, the returned list
+   * replaces the static `projectAssets` prop inside the dialog.
+   */
+  onLoadProjectAssets?: () => Promise<ProjectAsset[]>;
+  /**
+   * Called when the dialog opens (and when the user clicks Refresh) to fetch
+   * the latest library assets from the host. When provided, the returned list
+   * replaces the static `libraryAssets` prop inside the dialog.
+   */
+  onLoadLibraryAssets?: () => Promise<ProjectAsset[]>;
   /** Called when the user uploads a file. Host uploads to server and returns the asset record. */
   onUpload?: (file: File) => Promise<ProjectAsset>;
   /**
@@ -37,16 +49,31 @@ const AssetPickerDialog = ({
   onClose,
   projectAssets,
   libraryAssets,
+  onLoadProjectAssets,
+  onLoadLibraryAssets,
   onUpload,
   onAddUrl,
   onAddFromLibrary,
   onInsert,
 }: AssetPickerDialogProps) => {
-  const allLibraryAssets = libraryAssets ?? projectAssets;
-  const projectAssetIds = new Set(projectAssets.map((a) => a.id));
+  const hasLoaders = !!(onLoadProjectAssets || onLoadLibraryAssets);
+
+  // Dynamic assets fetched from the host; null = not yet loaded.
+  const [dynamicProjectAssets, setDynamicProjectAssets] = useState<ProjectAsset[] | null>(null);
+  const [dynamicLibraryAssets, setDynamicLibraryAssets] = useState<ProjectAsset[] | null>(null);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const resolvedProjectAssets = dynamicProjectAssets ?? projectAssets;
+  const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedProjectAssets;
+  const projectAssetIds = new Set(resolvedProjectAssets.map((a) => a.id));
 
   const initialTab: Tab =
-    allLibraryAssets.length > 0 ? "library" : onUpload ? "upload" : "url";
+    hasLoaders || resolvedLibraryAssets.length > 0
+      ? "library"
+      : onUpload
+        ? "upload"
+        : "url";
   const [tab, setTab] = useState<Tab>(initialTab);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -58,14 +85,33 @@ const AssetPickerDialog = ({
   const [urlError, setUrlError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const loadAssets = useCallback(() => {
+    if (!onLoadProjectAssets && !onLoadLibraryAssets) return;
+    setIsLoadingAssets(true);
+    setLoadError(null);
+    Promise.all([
+      onLoadProjectAssets?.() ?? Promise.resolve(null),
+      onLoadLibraryAssets?.() ?? Promise.resolve(null),
+    ])
+      .then(([proj, lib]) => {
+        if (proj !== null) setDynamicProjectAssets(proj);
+        if (lib !== null) setDynamicLibraryAssets(lib);
+      })
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : "Failed to load assets.");
+      })
+      .finally(() => setIsLoadingAssets(false));
+  }, [onLoadProjectAssets, onLoadLibraryAssets]);
+
   useEffect(() => {
     if (!open) return;
+    loadAssets();
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, loadAssets]);
 
   if (!open) return null;
 
@@ -169,11 +215,13 @@ const AssetPickerDialog = ({
             onClick={() => setTab("library")}
           >
             Library
-            {allLibraryAssets.length > 0 && (
+            {isLoadingAssets ? (
+              <span className="pretext-plus-editor__asset-tab-count">…</span>
+            ) : resolvedLibraryAssets.length > 0 ? (
               <span className="pretext-plus-editor__asset-tab-count">
-                {allLibraryAssets.length}
+                {resolvedLibraryAssets.length}
               </span>
-            )}
+            ) : null}
           </button>
           {onUpload && (
             <button
@@ -196,14 +244,35 @@ const AssetPickerDialog = ({
         <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__asset-picker-body">
           {tab === "library" && (
             <div className="pretext-plus-editor__asset-library">
-              {allLibraryAssets.length === 0 ? (
+              {hasLoaders && (
+                <div className="pretext-plus-editor__asset-library-toolbar">
+                  {loadError && (
+                    <span className="pretext-plus-editor__asset-load-error">
+                      {loadError}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="pretext-plus-editor__asset-library-refresh"
+                    onClick={loadAssets}
+                    disabled={isLoadingAssets}
+                  >
+                    {isLoadingAssets ? "Loading…" : "Refresh"}
+                  </button>
+                </div>
+              )}
+              {isLoadingAssets && resolvedLibraryAssets.length === 0 ? (
+                <p className="pretext-plus-editor__asset-library-empty">
+                  Loading assets…
+                </p>
+              ) : resolvedLibraryAssets.length === 0 ? (
                 <p className="pretext-plus-editor__asset-library-empty">
                   Your library is empty. Upload a file or add an external URL to
                   get started.
                 </p>
               ) : (
                 <div className="pretext-plus-editor__asset-grid">
-                  {allLibraryAssets.map((asset) => {
+                  {resolvedLibraryAssets.map((asset) => {
                     const inProject = projectAssetIds.has(asset.id);
                     const isAdding = addingAssetId === asset.id;
                     return (
