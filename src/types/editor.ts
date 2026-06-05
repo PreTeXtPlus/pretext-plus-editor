@@ -5,15 +5,25 @@ export type SourceFormat = "pretext" | "latex" | "markdown";
 export type AssetKind = "image" | "doenet";
 
 /** An asset stored in the project asset library. */
-export interface ProjectAsset {
+export interface Asset {
   /** Stable server-assigned identifier (hidden from users). */
   id: string;
   /** Human-readable display name shown in the library UI. */
   name: string;
-  /** Short reference string used in the authored tag, e.g. `"euler.png"`. */
-  ref: string;
+  /** Short reference used when authoring references, e.g. `"euler-painting"`.
+   * Authors write e.g. `<plus:image ref="euler-painting"/>` and the build system
+   * resolves it to the necessary core PreTeXt markup based upon the kind of
+   * asset it is.
+   */
+  ref?: string;
   /** The kind of asset — determines the tag inserted into the document. */
   kind: AssetKind;
+  /** Source content for an asset to be generated. */
+  source?: string;
+  /** Publicly accessible URL for the asset, if applicable. */
+  url?: string;
+  /** Mime type for the asset, if applicable.  Used for hints only. */
+  contentType?: string;
 }
 
 /** Payload emitted when a user submits feedback from the editor UI. */

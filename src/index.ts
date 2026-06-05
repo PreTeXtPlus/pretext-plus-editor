@@ -14,11 +14,11 @@ export {
   detectSourceFormat,
 } from "./contentConversion";
 export type {
+  Asset,
   AssetKind,
   EditorContentChange,
   EditorContentState,
   FeedbackSubmission,
-  ProjectAsset,
   PretextProjectCopyRequest,
   SourceFormat,
 } from "./types/editor";

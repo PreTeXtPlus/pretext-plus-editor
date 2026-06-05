@@ -21,9 +21,9 @@ import { defaultContent } from "../defaultContent";
 import type {
   EditorContentChange,
   EditorContentState,
+  Asset,
   FeedbackSubmission,
   PretextProjectCopyRequest,
-  ProjectAsset,
   SourceFormat,
 } from "../types/editor";
 import type { DocumentSection, DocumentChapter } from "../types/sections";
@@ -215,29 +215,29 @@ export interface editorProps {
    * Assets already associated with this project.  When omitted, the Assets
    * button and modal are hidden entirely.
    */
-  projectAssets?: ProjectAsset[];
+  projectAssets?: Asset[];
   /**
    * All assets available in the user's library (across all projects).
    * Assets not in `projectAssets` show an "Add to project" affordance.
    * Defaults to `projectAssets` when omitted.
    */
-  libraryAssets?: ProjectAsset[];
+  libraryAssets?: Asset[];
   /** Called after an asset tag is inserted at the cursor. */
-  onAssetInsert?: (asset: ProjectAsset) => void;
+  onAssetInsert?: (asset: Asset) => void;
   /** Called when the user picks a library asset not yet in this project. */
-  onAssetAddFromLibrary?: (asset: ProjectAsset) => Promise<void> | void;
+  onAssetAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /** Called when the user uploads an image file. */
-  onAssetUpload?: (file: File) => Promise<ProjectAsset>;
+  onAssetUpload?: (file: File) => Promise<Asset>;
   /** Called when the user adds an image by URL. */
-  onAssetAddUrl?: (url: string, name: string) => Promise<ProjectAsset>;
+  onAssetAddUrl?: (url: string, name: string) => Promise<Asset>;
   /** Called when the user creates a new Doenet activity. */
-  onCreateDoenet?: (name: string, ref: string) => Promise<ProjectAsset>;
+  onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Called when the user removes an asset from the project. */
-  onAssetRemove?: (asset: ProjectAsset) => void;
+  onAssetRemove?: (asset: Asset) => void;
   /** Called when the asset modal opens to fetch the latest project assets. */
-  onLoadProjectAssets?: () => Promise<ProjectAsset[]>;
+  onLoadAssets?: () => Promise<Asset[]>;
   /** Called when the asset modal opens to fetch the full library asset list. */
-  onLoadLibraryAssets?: () => Promise<ProjectAsset[]>;
+  onLoadLibraryAssets?: () => Promise<Asset[]>;
 }
 
 /**
@@ -442,7 +442,8 @@ const Editors = (props: editorProps) => {
   };
 
   // ── Asset insertion ────────────────────────────────────────────────────────
-  const buildAssetSnippet = (asset: ProjectAsset): string => {
+  const buildAssetSnippet = (asset: Asset): string => {
+    if (!asset.ref) return "";
     return `<plus:${asset.kind} ref="${asset.ref}"/>`;
   };
 
@@ -450,8 +451,9 @@ const Editors = (props: editorProps) => {
    * Insert the asset snippet at the Monaco cursor, then notify the host via
    * `onAssetInsert` (optional — useful for host-side analytics or side-effects).
    */
-  const handleAssetInsert = (asset: ProjectAsset) => {
-    codeEditorRef.current?.insertAtCursor(buildAssetSnippet(asset));
+  const handleAssetInsert = (asset: Asset) => {
+    const snippet = buildAssetSnippet(asset);
+    if (snippet) codeEditorRef.current?.insertAtCursor(snippet);
     props.onAssetInsert?.(asset);
   };
 
@@ -865,7 +867,7 @@ const Editors = (props: editorProps) => {
             source={activeSourceContent}
             projectAssets={props.projectAssets}
             libraryAssets={props.libraryAssets}
-            onLoadProjectAssets={props.onLoadProjectAssets}
+            onLoadAssets={props.onLoadAssets}
             onLoadLibraryAssets={props.onLoadLibraryAssets}
             onAddFromLibrary={props.onAssetAddFromLibrary}
             onUpload={props.onAssetUpload}

@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { AssetKind, ProjectAsset } from "../types/editor";
+import type { Asset, AssetKind } from "../types/editor";
 import "./dialog.css";
 import "./AssetManagerModal.css";
 import doenetLogo from "../assets/doenet.png";
@@ -9,22 +9,22 @@ export interface AssetManagerModalProps {
   onClose: () => void;
   /** Current editor source, used to parse which assets are referenced. */
   source: string;
-  projectAssets: ProjectAsset[];
-  libraryAssets?: ProjectAsset[];
-  onLoadProjectAssets?: () => Promise<ProjectAsset[]>;
-  onLoadLibraryAssets?: () => Promise<ProjectAsset[]>;
+  projectAssets: Asset[];
+  libraryAssets?: Asset[];
+  onLoadAssets?: () => Promise<Asset[]>;
+  onLoadLibraryAssets?: () => Promise<Asset[]>;
   /** Insert an asset tag at the cursor position. */
-  onInsert: (asset: ProjectAsset) => void;
+  onInsert: (asset: Asset) => void;
   /** Associate a library asset with the current project. */
-  onAddFromLibrary?: (asset: ProjectAsset) => Promise<void> | void;
+  onAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /** Upload an image file; host returns the created asset. */
-  onUpload?: (file: File) => Promise<ProjectAsset>;
+  onUpload?: (file: File) => Promise<Asset>;
   /** Add an image from a URL; host downloads and returns the created asset. */
-  onAddUrl?: (url: string, name: string) => Promise<ProjectAsset>;
+  onAddUrl?: (url: string, name: string) => Promise<Asset>;
   /** Create a new Doenet activity; host returns the created asset. */
-  onCreateDoenet?: (name: string, ref: string) => Promise<ProjectAsset>;
+  onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Remove an asset from the project. */
-  onRemoveAsset?: (asset: ProjectAsset) => void;
+  onRemoveAsset?: (asset: Asset) => void;
 }
 
 type MainTab = "in-document" | "add";
@@ -55,7 +55,7 @@ const AssetManagerModal = ({
   source,
   projectAssets,
   libraryAssets,
-  onLoadProjectAssets,
+  onLoadAssets,
   onLoadLibraryAssets,
   onInsert,
   onAddFromLibrary,
@@ -64,16 +64,16 @@ const AssetManagerModal = ({
   onCreateDoenet,
   onRemoveAsset,
 }: AssetManagerModalProps) => {
-  const hasLoaders = !!(onLoadProjectAssets || onLoadLibraryAssets);
+  const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
 
-  const [dynamicProjectAssets, setDynamicProjectAssets] = useState<ProjectAsset[] | null>(null);
-  const [dynamicLibraryAssets, setDynamicLibraryAssets] = useState<ProjectAsset[] | null>(null);
+  const [dynamicAssets, setDynamicAssets] = useState<Asset[] | null>(null);
+  const [dynamicLibraryAssets, setDynamicLibraryAssets] = useState<Asset[] | null>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const resolvedProjectAssets = dynamicProjectAssets ?? projectAssets;
-  const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedProjectAssets;
-  const projectAssetIds = new Set(resolvedProjectAssets.map((a) => a.id));
+  const resolvedAssets = dynamicAssets ?? projectAssets;
+  const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedAssets;
+  const projectAssetIds = new Set(resolvedAssets.map((a) => a.id));
 
   const [tab, setTab] = useState<MainTab>("in-document");
   const [addKind, setAddKind] = useState<AssetKind | null>(null);
@@ -103,22 +103,22 @@ const AssetManagerModal = ({
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const loadAssets = useCallback(() => {
-    if (!onLoadProjectAssets && !onLoadLibraryAssets) return;
+    if (!onLoadAssets && !onLoadLibraryAssets) return;
     setIsLoadingAssets(true);
     setLoadError(null);
     Promise.all([
-      onLoadProjectAssets?.() ?? Promise.resolve(null),
+      onLoadAssets?.() ?? Promise.resolve(null),
       onLoadLibraryAssets?.() ?? Promise.resolve(null),
     ])
       .then(([proj, lib]) => {
-        if (proj !== null) setDynamicProjectAssets(proj);
+        if (proj !== null) setDynamicAssets(proj);
         if (lib !== null) setDynamicLibraryAssets(lib);
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Failed to load assets.");
       })
       .finally(() => setIsLoadingAssets(false));
-  }, [onLoadProjectAssets, onLoadLibraryAssets]);
+  }, [onLoadAssets, onLoadLibraryAssets]);
 
   useEffect(() => {
     if (!open) return;
@@ -133,7 +133,7 @@ const AssetManagerModal = ({
 
   const documentAssets = parseDocumentAssets(source);
 
-  const handleInsertAndClose = (asset: ProjectAsset) => {
+  const handleInsertAndClose = (asset: Asset) => {
     onInsert(asset);
     onClose();
   };
@@ -145,7 +145,7 @@ const AssetManagerModal = ({
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
   };
 
-  const handleLibrarySelect = async (asset: ProjectAsset) => {
+  const handleLibrarySelect = async (asset: Asset) => {
     if (!projectAssetIds.has(asset.id) && onAddFromLibrary) {
       setAddingAssetId(asset.id);
       try {
@@ -246,8 +246,8 @@ const AssetManagerModal = ({
                       inProject ? "pretext-plus-editor__am-lib-row--in-project" : "",
                     ].filter(Boolean).join(" ")}
                     onClick={() => handleLibrarySelect(asset)}
-                    disabled={isAdding}
-                    title={inProject ? `Insert "${asset.ref}"` : `Add to project & insert "${asset.ref}"`}
+                    disabled={isAdding || !asset.ref}
+                    title={!asset.ref ? "Asset has no reference — cannot insert" : inProject ? `Insert "${asset.ref}"` : `Add to project & insert "${asset.ref}"`}
                   >
                     <div className="pretext-plus-editor__am-row-info">
                       <span className="pretext-plus-editor__am-row-name">{asset.name}</span>
@@ -281,11 +281,11 @@ const AssetManagerModal = ({
       );
     }
 
-    const byKind = KIND_ORDER.reduce<Record<AssetKind, Array<{ ref: string; asset?: ProjectAsset }>>>(
+    const byKind = KIND_ORDER.reduce<Record<AssetKind, Array<{ ref: string; asset?: Asset }>>>(
       (acc, kind) => {
         acc[kind] = documentAssets
           .filter((d) => d.kind === kind)
-          .map((d) => ({ ref: d.ref, asset: resolvedProjectAssets.find((a) => a.kind === d.kind && a.ref === d.ref) }));
+          .map((d) => ({ ref: d.ref, asset: resolvedAssets.find((a) => a.kind === d.kind && a.ref === d.ref) }));
         return acc;
       },
       { image: [], doenet: [] },

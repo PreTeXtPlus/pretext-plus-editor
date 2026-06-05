@@ -3,8 +3,8 @@ import Editors from "./components/Editors";
 import { defaultContent } from "./defaultContent";
 import { useState } from "react";
 import type {
+  Asset,
   FeedbackSubmission,
-  ProjectAsset,
   SourceFormat,
 } from "./types/editor";
 import type { DocumentChapter, DocumentSection } from "./types/sections";
@@ -148,7 +148,7 @@ function App() {
   // libraryAssets = all assets across all projects for this user
   // projectAssetIds = which library assets are associated with the current project
   // ---------------------------------------------------------------------------
-  const [libraryAssets, setLibraryAssets] = useState<ProjectAsset[]>([
+  const [libraryAssets, setLibraryAssets] = useState<Asset[]>([
     {
       id: "asset-1",
       name: "Euler Formula",
@@ -175,7 +175,7 @@ function App() {
     },
   ]);
   // Only asset-1 is associated with the current project initially
-  const [projectAssetIds, setProjectAssetIds] = useState<Set<string>>(
+  const [projectAssetIds, setAssetIds] = useState<Set<string>>(
     new Set(["asset-1"]),
   );
   const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
@@ -350,57 +350,57 @@ function App() {
     console.log("Feedback submitted:", feedback);
   };
 
-  const handleAssetInsert = (asset: ProjectAsset) => {
+  const handleAssetInsert = (asset: Asset) => {
     console.log("Asset inserted:", asset.ref);
   };
 
-  const handleAssetAddFromLibrary = async (asset: ProjectAsset) => {
+  const handleAssetAddFromLibrary = async (asset: Asset) => {
     console.log("Adding library asset to project:", asset.id, asset.name);
     await new Promise((resolve) => setTimeout(resolve, 200));
-    setProjectAssetIds((prev) => new Set([...prev, asset.id]));
+    setAssetIds((prev) => new Set([...prev, asset.id]));
   };
 
-  const handleAssetUpload = async (file: File): Promise<ProjectAsset> => {
+  const handleAssetUpload = async (file: File): Promise<Asset> => {
     console.log("Asset upload:", file.name);
     await new Promise((resolve) => setTimeout(resolve, 800));
-    const newAsset: ProjectAsset = {
+    const newAsset: Asset = {
       id: `asset-${Date.now()}`,
       name: file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
       kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleAssetAddUrl = async (url: string, name: string): Promise<ProjectAsset> => {
+  const handleAssetAddUrl = async (url: string, name: string): Promise<Asset> => {
     console.log("Asset URL add:", url);
     await new Promise((resolve) => setTimeout(resolve, 600));
     const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
-    const newAsset: ProjectAsset = {
+    const newAsset: Asset = {
       id: `asset-${Date.now()}`,
       name: name || filename.replace(/\.[^.]+$/, ""),
       ref: filename,
       kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleCreateDoenet = async (name: string, ref: string): Promise<ProjectAsset> => {
+  const handleCreateDoenet = async (name: string, ref: string): Promise<Asset> => {
     console.log("Create Doenet:", name, ref);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    const newAsset: ProjectAsset = { id: `asset-${Date.now()}`, name, ref, kind: "doenet" };
+    const newAsset: Asset = { id: `asset-${Date.now()}`, name, ref, kind: "doenet" };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleAssetRemove = (asset: ProjectAsset) => {
+  const handleAssetRemove = (asset: Asset) => {
     console.log("Remove asset from project:", asset.id);
-    setProjectAssetIds((prev) => { const next = new Set(prev); next.delete(asset.id); return next; });
+    setAssetIds((prev) => { const next = new Set(prev); next.delete(asset.id); return next; });
   };
 
   return (
