@@ -7,68 +7,7 @@ import type {
   FeedbackSubmission,
   SourceFormat,
 } from "./types/editor";
-import type { DocumentChapter, DocumentSection } from "./types/sections";
-
-// ---------------------------------------------------------------------------
-// Book demo content — simulates chapters fetched from the Rails back-end
-//
-// The "server-side" map holds the full source for every chapter, including
-// ones the editor has not yet asked for.  The client-facing `chapters` array
-// (state inside App) starts with metadata-only entries (no `content`); when
-// the editor calls `onChapterRequestLoad`, we simulate an async fetch from
-// this map and populate the chapter's `content` field.
-// ---------------------------------------------------------------------------
-const SERVER_CHAPTER_SOURCES: Record<string, string> = {
-  "ch-intro": `<chapter xml:id="ch-intro">
-  <title>Introduction</title>
-  <introduction>
-    <title>Welcome</title>
-    <p>This introductory chapter explains the premise of the book.</p>
-  </introduction>
-  <section xml:id="sec-motivation">
-    <title>Motivation</title>
-    <p>Here we motivate the study with some inline math: <m>e^{i\\pi} + 1 = 0</m>.</p>
-  </section>
-  <section xml:id="sec-overview">
-    <title>Overview</title>
-    <p>Here is an overview of what's to come.</p>
-  </section>
-</chapter>`,
-
-  "ch-background": `<chapter xml:id="ch-background">
-  <title>Background</title>
-  <section xml:id="sec-definitions">
-    <title>Definitions</title>
-    <p>Key definitions appear here.</p>
-    <definition xml:id="def-key">
-      <title>Key Term</title>
-      <p>A <term>key term</term> is something important.</p>
-    </definition>
-  </section>
-  <section xml:id="sec-prior-work">
-    <title>Prior Work</title>
-    <p>Here we survey related work.</p>
-  </section>
-</chapter>`,
-
-  "ch-methods": `<chapter xml:id="ch-methods">
-  <title>Methods</title>
-  <section xml:id="sec-approach">
-    <title>Approach</title>
-    <p>Our main approach is described here. We use <m>f(x) = x^2</m> as our primary tool.</p>
-  </section>
-  <conclusion>
-    <title>Chapter Summary</title>
-    <p>To summarize the methods covered in this chapter...</p>
-  </conclusion>
-</chapter>`,
-};
-
-const bookChapters: DocumentChapter[] = [
-  { id: "ch-intro", title: "Introduction", xmlId: "ch-intro" },
-  { id: "ch-background", title: "Background", xmlId: "ch-background" },
-  { id: "ch-methods", title: "Methods", xmlId: "ch-methods" },
-];
+import type { DocumentSection } from "./types/sections";
 
 const latexDemoContent = String.raw`
 
@@ -180,12 +119,7 @@ function App() {
   );
   const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
 
-  // Book-mode state
-  const [projectType, setProjectType] = useState<"article" | "book">(
-    "article",
-  );
-  const [currentChapterId, setCurrentChapterId] = useState<string | null>(null);
-  const [bookChapterList, setBookChapterList] = useState<DocumentChapter[]>(bookChapters);
+  const [projectType, setProjectType] = useState<"article" | "book">("article");
 
   const loadPretextDemo = () => {
     setSource(defaultContent);
@@ -194,7 +128,6 @@ function App() {
     setTitle("Document Title");
     setEditMode("document");
     setProjectType("article");
-    setCurrentChapterId(null);
   };
 
   const loadLatexDemo = () => {
@@ -204,7 +137,6 @@ function App() {
     setTitle("Testing LaTeX Source Mode");
     setEditMode("document");
     setProjectType("article");
-    setCurrentChapterId(null);
   };
 
   const loadMarkdownDemo = () => {
@@ -214,121 +146,6 @@ function App() {
     setTitle("Testing Markdown Source Mode");
     setEditMode("document");
     setProjectType("article");
-    setCurrentChapterId(null);
-  };
-
-  const loadBookDemo = () => {
-    // Start in book mode with no chapter loaded yet so the TOC empty-state is visible
-    setProjectType("book");
-    setCurrentChapterId(null);
-    setSource("");
-    setSourceFormat("pretext");
-    setPretextSource(undefined);
-    setTitle("Sample Book");
-    setEditMode("sectioned");
-  };
-
-  const handleChapterSelect = (chapterId: string) => {
-    const chapterSource =
-      bookChapterList.find((c) => c.id === chapterId)?.content ??
-      SERVER_CHAPTER_SOURCES[chapterId] ??
-      "";
-    // Flush any unsaved edits from the outgoing chapter into bookChapterList
-    // so that collapsing/re-expanding it later shows the edited sections.
-    // We snapshot `source` (the live editor content) rather than ch.content
-    // (which is only updated on saves/DnD) to avoid losing in-flight edits.
-    setBookChapterList((prev) =>
-      prev.map((ch) => {
-        if (ch.id === chapterId) return { ...ch, content: chapterSource };
-        if (ch.id === currentChapterId) return { ...ch, content: source };
-        return ch;
-      }),
-    );
-    // Update both source and currentChapterId together so React 18 batching
-    // delivers them in the same render (no stale-sections flash).
-    setCurrentChapterId(chapterId);
-    setSource(chapterSource);
-    setPretextSource(chapterSource);
-    setSourceFormat("pretext");
-  };
-
-  // -------------------------------------------------------------------------
-  // New chapter callbacks (Phase 1: declared and wired into the demo state,
-  // not yet driven by the editor UI — that lands in subsequent phases).
-  // -------------------------------------------------------------------------
-
-  /**
-   * Simulate the back-end fetch of a chapter's source.  In a real host this
-   * would be an authenticated HTTP request to Rails; here we just read from
-   * the in-memory SERVER_CHAPTER_SOURCES map after a short delay.
-   */
-  const handleChapterRequestLoad = (chapterId: string) => {
-    console.log("Chapter load requested:", chapterId);
-    setTimeout(() => {
-      setBookChapterList((prev) =>
-        prev.map((ch) =>
-          ch.id === chapterId
-            ? { ...ch, content: SERVER_CHAPTER_SOURCES[chapterId] ?? "" }
-            : ch,
-        ),
-      );
-    }, 150);
-  };
-
-  /**
-   * Persist an updated chapter content back to the "server" and reflect it
-   * in the in-memory chapter list so subsequent reads see the new value.
-   */
-  const handleChapterContentChange = (chapterId: string, content: string) => {
-    console.log("Chapter content changed:", chapterId, `(${content.length} chars)`);
-    SERVER_CHAPTER_SOURCES[chapterId] = content;
-    setBookChapterList((prev) =>
-      prev.map((ch) => (ch.id === chapterId ? { ...ch, content } : ch)),
-    );
-  };
-
-  const handleChapterAdd = (afterChapterId: string | null) => {
-    const newId = `ch-${Math.random().toString(36).slice(2, 8)}`;
-    const newChapter: DocumentChapter = {
-      id: newId,
-      title: "New Chapter",
-      xmlId: newId,
-      content: `<chapter xml:id="${newId}">\n  <title>New Chapter</title>\n</chapter>`,
-    };
-    SERVER_CHAPTER_SOURCES[newId] = newChapter.content!;
-    setBookChapterList((prev) => {
-      if (afterChapterId === null) return [...prev, newChapter];
-      const idx = prev.findIndex((c) => c.id === afterChapterId);
-      if (idx === -1) return [...prev, newChapter];
-      return [...prev.slice(0, idx + 1), newChapter, ...prev.slice(idx + 1)];
-    });
-    console.log("Chapter added:", newId);
-  };
-
-  const handleChapterRemove = (chapterId: string) => {
-    console.log("Chapter removed:", chapterId);
-    delete SERVER_CHAPTER_SOURCES[chapterId];
-    setBookChapterList((prev) => prev.filter((c) => c.id !== chapterId));
-    if (currentChapterId === chapterId) setCurrentChapterId(null);
-  };
-
-  const handleChapterUpdate = (
-    chapterId: string,
-    changes: { title?: string; xmlId?: string | null; label?: string | null },
-  ) => {
-    console.log("Chapter updated:", chapterId, changes);
-    setBookChapterList((prev) =>
-      prev.map((ch) =>
-        ch.id === chapterId
-          ? {
-              ...ch,
-              title: changes.title ?? ch.title,
-              xmlId: changes.xmlId === null ? undefined : changes.xmlId ?? ch.xmlId,
-              label: changes.label === null ? undefined : changes.label ?? ch.label,
-            }
-          : ch,
-      ),
-    );
   };
 
   const handleSectionsChange = (sections: DocumentSection[]) => {
@@ -407,9 +224,7 @@ function App() {
     <>
       <div className="app-demo-toolbar">
         <span className="app-demo-toolbar__label">
-          {projectType === "book"
-            ? `Book demo | chapter: ${currentChapterId ?? "none"}`
-            : `Demo source: ${sourceFormat === "latex" ? "LaTeX" : sourceFormat === "markdown" ? "Markdown" : "PreTeXt"} | Mode: ${editMode}`}
+          {`Demo source: ${sourceFormat === "latex" ? "LaTeX" : sourceFormat === "markdown" ? "Markdown" : "PreTeXt"} | Mode: ${editMode}`}
         </span>
         <button className="app-demo-toolbar__button" onClick={loadPretextDemo}>
           Load PreTeXt Demo
@@ -419,9 +234,6 @@ function App() {
         </button>
         <button className="app-demo-toolbar__button" onClick={loadMarkdownDemo}>
           Load Markdown Demo
-        </button>
-        <button className="app-demo-toolbar__button" onClick={loadBookDemo}>
-          Load Book Demo
         </button>
       </div>
       <Editors
@@ -451,25 +263,6 @@ function App() {
         onSectionsChange={handleSectionsChange}
         onSectionChange={handleSectionChange}
         projectType={projectType}
-        chapters={projectType === "book" ? bookChapterList : undefined}
-        currentChapterId={projectType === "book" ? currentChapterId : undefined}
-        onChapterSelect={
-          projectType === "book" ? handleChapterSelect : undefined
-        }
-        onChaptersReorder={
-          projectType === "book"
-            ? (reordered) => setBookChapterList(reordered)
-            : undefined
-        }
-        onChapterRequestLoad={
-          projectType === "book" ? handleChapterRequestLoad : undefined
-        }
-        onChapterContentChange={
-          projectType === "book" ? handleChapterContentChange : undefined
-        }
-        onChapterAdd={projectType === "book" ? handleChapterAdd : undefined}
-        onChapterRemove={projectType === "book" ? handleChapterRemove : undefined}
-        onChapterUpdate={projectType === "book" ? handleChapterUpdate : undefined}
         projectAssets={projectAssets}
         libraryAssets={libraryAssets}
         onAssetInsert={handleAssetInsert}

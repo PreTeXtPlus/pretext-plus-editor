@@ -5,7 +5,7 @@ import type {
   DragStartEvent,
 } from "@dnd-kit/core";
 import type { DocumentSection } from "../../types/sections";
-import { isRegularDivision, validateSectionOrder } from "./types";
+import { isRegularDivision, validateDivisionOrder } from "./types";
 
 export interface SectionDndState {
   activeId: string | null;
@@ -163,7 +163,7 @@ export function useSectionDnd({
       ...without.slice(insertAt),
     ];
 
-    if (validateSectionOrder(next)) onReorderSections(next);
+    if (validateDivisionOrder(next)) onReorderSections(next);
   };
 
   return {
