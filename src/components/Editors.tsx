@@ -11,6 +11,7 @@ import AssetManagerModal from "./AssetManagerModal";
 import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
+import ErrorBoundary from "./ErrorBoundary";
 import { useSectionedEditing } from "./useSectionedEditing";
 import "./Editors.css";
 
@@ -31,6 +32,7 @@ import {
   rewrapLatexSection,
   stripSectionWrapper,
   stripLatexSectionWrapper,
+  normalizeSelfClosingRefs,
 } from "../sectionUtils";
 
 const startingContent = defaultContent;
@@ -477,7 +479,10 @@ const Editors = (props: editorProps) => {
             activeDivision.title,
             activeDivision.content,
           )
-        : rewrapSection(inner, activeDivision.type);
+        : // Collapse any `<plus:* ...></plus:*>` the XML round-trip expanded
+          // back to canonical self-closing form so the source stays tidy and
+          // the TOC's ref parser keeps matching.
+          normalizeSelfClosingRefs(rewrapSection(inner, activeDivision.type));
     if (wrapped === activeDivision.content) return;
     props.onDivisionContentChange?.(activeDivision.xmlId, wrapped);
     props.onContentChange(wrapped, {
@@ -495,7 +500,7 @@ const Editors = (props: editorProps) => {
   };
 
   // Handler for adding a new division via the TOC.
-  const handleDivisionAdd = (_afterXmlId: string | null) => {
+  const handleDivisionAdd = () => {
     const newDiv = createNewSection();
     props.onDivisionAdd?.(newDiv);
     setInternalActiveDivisionId(newDiv.xmlId);
@@ -872,7 +877,14 @@ const Editors = (props: editorProps) => {
         showPreviewModeToggle={props.onPreviewRebuild !== undefined}
       />
       <div className="pretext-plus-editor__editor-displays">
-        {editorDisplays}
+        <ErrorBoundary
+          resetKeys={[
+            isDivisionsMode ? divisionActiveSource : activeSourceContent,
+            activeDivisionId,
+          ]}
+        >
+          {editorDisplays}
+        </ErrorBoundary>
         {isLatexDialogOpen ? (
           <LatexImportDialog
             onClose={() => setIsLatexDialogOpen(false)}

@@ -33,13 +33,18 @@ export type {
   /** @deprecated Chapters are now plain `Division` records with type `"chapter"`. */
   DocumentChapter,
 } from "./types/sections";
+export type { DivisionTreeNode } from "./sectionUtils";
 export {
   // Division ref utilities (new architecture)
   parseDivisionRefs,
   insertDivisionRef,
   removeDivisionRef,
   moveDivisionRef,
+  reorderDivisionRefs,
+  normalizeSelfClosingRefs,
   getOrphanedDivisions,
+  getOrphanRoots,
+  buildDivisionTree,
   // Division content utilities
   updateSectionTitle,
   createNewSection,
