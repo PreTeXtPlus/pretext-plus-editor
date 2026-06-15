@@ -1,6 +1,6 @@
 import { Editor } from "@monaco-editor/react";
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
-import { registerCodeEditorCompletions } from "./codeEditorCompletions";
+import { editorConfigs } from "./editorConfigs";
 import CodeEditorMenu from "./CodeEditorMenu";
 import type { SourceFormat } from "../types/editor";
 
@@ -111,9 +111,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
 
   useEffect(() => {
     completionProviderRef.current?.dispose?.();
+    const config = editorConfigs[sourceFormat];
     completionProviderRef.current =
-      sourceFormat === "pretext" && monacoRef.current
-        ? registerCodeEditorCompletions(monacoRef.current)
+      monacoRef.current
+        ? (config.registerMonacoExtensions?.(monacoRef.current) ?? null)
         : null;
   }, [sourceFormat]);
 
@@ -180,8 +181,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
 
     completionProviderRef.current?.dispose?.();
-    completionProviderRef.current =
-      sourceFormat === "pretext" ? registerCodeEditorCompletions(monaco) : null;
+    const config = editorConfigs[sourceFormat];
+    completionProviderRef.current = config.registerMonacoExtensions?.(monaco) ?? null;
   };
 
   /**
@@ -244,13 +245,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         <Editor
           options={options}
           height="100%"
-          language={
-            sourceFormat === "latex"
-              ? "latex"
-              : sourceFormat === "markdown"
-              ? "markdown"
-              : "xml"
-          }
+          language={editorConfigs[sourceFormat].language}
           defaultValue={content}
           onMount={handleEditorMount}
           onChange={(value, event) => {
