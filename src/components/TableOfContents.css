@@ -834,3 +834,64 @@
   pointer-events: auto;
 }
 
+/* ── Unplaced (orphaned) divisions ───────────────────── */
+.pretext-plus-editor__toc-orphans {
+  flex-shrink: 0;
+  border-top: 2px dashed #e2c97e;
+  background: #fffbeb;
+}
+
+.pretext-plus-editor__toc-orphans-heading {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #92400e;
+  padding: 5px 10px 2px;
+}
+
+.pretext-plus-editor__toc-orphans .pretext-plus-editor__toc-list {
+  flex: initial;
+  overflow-y: initial;
+}
+
+.pretext-plus-editor__toc-item--orphan {
+  border-left-color: #d97706;
+}
+
+.pretext-plus-editor__toc-item--orphan:hover > .pretext-plus-editor__toc-section-btn {
+  background: #fef3c7;
+}
+
+.pretext-plus-editor__toc-section-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px 5px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #555;
+  min-height: 32px;
+}
+
+.pretext-plus-editor__toc-section-btn:hover {
+  background: #fef3c7;
+  color: #111;
+}
+
+.pretext-plus-editor__toc-section-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.83rem;
+}
+
+.pretext-plus-editor__toc-item--orphan .pretext-plus-editor__toc-type-badge {
+  background: #d97706;
+}
+

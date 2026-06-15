@@ -23,18 +23,24 @@ export type {
   SourceFormat,
 } from "./types/editor";
 export type {
-  DocumentSection,
+  Division,
+  DivisionType,
+  // Deprecated aliases kept for migration compatibility
+  /** @deprecated Use `DivisionType` instead. */
   DocumentSectionType,
-  /** @deprecated Use `DocumentChapter` directly. */
-  DocumentChapter as ChapterSummary,
+  /** @deprecated Use `Division` instead. */
+  DocumentSection,
+  /** @deprecated Chapters are now plain `Division` records with type `"chapter"`. */
   DocumentChapter,
-  /** @deprecated The wrapper/split-result pattern is being removed. Use `splitContentIntoSections` instead. */
-  DocumentSplitResult,
 } from "./types/sections";
 export {
-  // New architecture helpers
-  splitContentIntoSections,
-  // Section CRUD utilities
+  // Division ref utilities (new architecture)
+  parseDivisionRefs,
+  insertDivisionRef,
+  removeDivisionRef,
+  moveDivisionRef,
+  getOrphanedDivisions,
+  // Division content utilities
   updateSectionTitle,
   createNewSection,
   createIntroduction,
@@ -45,7 +51,7 @@ export {
   mergeTwoSections,
   getSectionAttributes,
   updateSectionMetadata,
-  // LaTeX section utilities
+  // LaTeX division utilities
   stripLatexSectionWrapper,
   rewrapLatexSection,
   ensureLatexSectionWrapper,
@@ -53,23 +59,6 @@ export {
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,
-  // Deprecated: full-document split/merge (wrapper pattern)
-  /** @deprecated Use `splitContentIntoSections` instead. */
-  splitDocument,
-  /** @deprecated Rails now owns document reconstruction. */
-  mergeDocument,
-  /** @deprecated Use `splitContentIntoSections` instead. */
-  splitLatexDocument,
-  /** @deprecated Rails now owns document reconstruction. */
-  mergeLatexDocument,
-  /** @deprecated */
-  wrapDocumentAsSection,
-  /** @deprecated */
-  wrapLatexDocumentAsSection,
-  /** @deprecated */
-  wrapSectionAsDocument,
-  /** @deprecated */
-  wrapLatexSectionAsDocument,
 } from "./sectionUtils";
 
 // Export components

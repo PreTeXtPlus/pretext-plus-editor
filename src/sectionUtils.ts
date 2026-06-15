@@ -10,9 +10,11 @@ import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, Root } from "xast";
 import type {
+  Division,
+  DivisionType,
   DocumentSection,
-  DocumentSplitResult,
   DocumentSectionType,
+  DocumentSplitResult,
 } from "./types/sections";
 
 // ---------------------------------------------------------------------------
@@ -39,7 +41,6 @@ function extractTitle(element: Element): string {
     .trim();
 }
 
-/** The XML tag names that are extracted as individual sections in sectioned mode. */
 const SECTION_TAGS: ReadonlySet<string> = new Set([
   "introduction",
   "section",
@@ -53,11 +54,33 @@ const SECTION_TAGS: ReadonlySet<string> = new Set([
   "conclusion",
 ]);
 
-/** Map a tag name to its `DocumentSectionType` (the two are identical for PreTeXt). */
 function tagToType(tag: string): DocumentSectionType {
-  // All recognised section-level tags map directly to their tag name as the type.
-  // Unknown tags fall back to "section" so legacy data is not broken.
   return SECTION_TAGS.has(tag) ? (tag as DocumentSectionType) : "section";
+}
+
+function untitledLabel(tag: string): string {
+  return tag.charAt(0).toUpperCase() + tag.slice(1);
+}
+
+const DOCUMENT_ROOT_TAGS: ReadonlySet<string> = new Set([
+  "article",
+  "book",
+  "chapter",
+  "letter",
+  "memo",
+  "slideshow",
+]);
+
+function trimTrailingWhitespaceNodes(
+  children: Root["children"],
+): Root["children"] {
+  let end = children.length;
+  while (end > 0) {
+    const node = children[end - 1];
+    if (node.type !== "text" || /\S/.test(node.value)) break;
+    end -= 1;
+  }
+  return children.slice(0, end);
 }
 
 function trimBoundaryWhitespaceNodes(
@@ -81,23 +104,6 @@ function trimBoundaryWhitespaceNodes(
   return children.slice(start, end);
 }
 
-/**
- * Drop whitespace-only text nodes from the END of a child list, leaving any
- * leading whitespace alone.  Used to keep round-trips of `splitDocument` →
- * `mergeDocument` stable: if we kept the trailing whitespace that originally
- * separated sections, every re-merge would prepend more, growing the gap.
- */
-function trimTrailingWhitespaceNodes(
-  children: Root["children"],
-): Root["children"] {
-  let end = children.length;
-  while (end > 0) {
-    const node = children[end - 1];
-    if (node.type !== "text" || /\S/.test(node.value)) break;
-    end -= 1;
-  }
-  return children.slice(0, end);
-}
 
 function trimBoundaryBlankLines(value: string): string {
   return value
@@ -109,183 +115,6 @@ function trimBoundaryBlankLines(value: string): string {
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * @deprecated Use `splitContentIntoSections` instead.  The `wrapper` /
- * `DocumentSplitResult` pattern is being removed as part of the
- * sections-as-DB-records refactor — the Rails app now owns the document
- * shell and reconstruction.  This function will be deleted once all internal
- * callers are migrated.
- *
- * Split a PreTeXt document into its top-level sections.
- *
- * The returned `wrapper` is an opaque XML string encoding the document shell
- * (article element, docinfo, and any non-section children).  Pass it back to
- * {@link mergeDocument} to reconstruct the full document.
- *
- * If the document contains no splittable children a single synthetic section
- * is created that wraps all body content.
- */
-/** PreTeXt document-level element names that can act as the XML root.
- *  Includes `"chapter"` so that individual chapters (stored as
- *  `<chapter>…</chapter>` in book-mode projects) are split at the
- *  `<section>` level just like articles are.
- */
-const DOCUMENT_ROOT_TAGS: ReadonlySet<string> = new Set([
-  "article",
-  "book",
-  "chapter",
-  "letter",
-  "memo",
-  "slideshow",
-]);
-
-export function splitDocument(xml: string): DocumentSplitResult {
-  let normalized = xml.trim();
-  // Strip XML declaration if present.
-  if (normalized.startsWith("<?xml")) {
-    const end = normalized.indexOf("?>");
-    if (end !== -1) normalized = normalized.slice(end + 2).trim();
-  }
-
-  // Always wrap in a synthetic root so that bare multi-section content
-  // (which is valid XML only as a fragment, not a document) parses without
-  // "extra content at end of document" errors.
-  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
-  const syntheticRoot = tree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-
-  if (!syntheticRoot) {
-    return { wrapper: "", sections: [] };
-  }
-
-  const elementChildren = syntheticRoot.children.filter(
-    (n) => n.type === "element",
-  ) as Element[];
-
-  // ── Case 1: content has a proper document wrapper (article, book, …) ──────
-  if (
-    elementChildren.length === 1 &&
-    DOCUMENT_ROOT_TAGS.has(elementChildren[0].name)
-  ) {
-    const docRoot = elementChildren[0];
-    const sectionElements = docRoot.children.filter(
-      (c) => c.type === "element" && SECTION_TAGS.has((c as Element).name),
-    ) as Element[];
-    const nonSectionChildren = trimTrailingWhitespaceNodes(
-      docRoot.children.filter(
-        (c) => !(c.type === "element" && SECTION_TAGS.has((c as Element).name)),
-      ),
-    );
-
-    const wrapperRoot: Root = {
-      type: "root",
-      children: [{ ...docRoot, children: nonSectionChildren } as Element],
-    };
-    const wrapper = toXml(wrapperRoot);
-
-    // Return empty sections — caller decides what to do when there are none.
-    if (sectionElements.length === 0) {
-      return { wrapper, sections: [] };
-    }
-
-    return {
-      wrapper,
-      sections: sectionElements.map((el) => ({
-        id: generateId(),
-        title: extractTitle(el) || untitledLabel(el.name),
-        content: toXml({ type: "root", children: [el] } as Root),
-        type: tagToType(el.name),
-      })),
-    };
-  }
-
-  // ── Case 2: bare sections (no document wrapper) ───────────────────────────
-  // Collect top-level section elements; any non-section content is discarded
-  // (it would be in preamble whitespace / comments which are not editable).
-  const sectionElements = elementChildren.filter((el) =>
-    SECTION_TAGS.has(el.name),
-  );
-
-  if (sectionElements.length === 0) {
-    // No sections — return empty list; caller handles unsectioned documents.
-    return { wrapper: "", sections: [] };
-  }
-
-  return {
-    wrapper: "", // empty = bare-sections format; mergeDocument concatenates
-    sections: sectionElements.map((el) => ({
-      id: generateId(),
-      title: extractTitle(el) || untitledLabel(el.name),
-      content: toXml({ type: "root", children: [el] } as Root),
-      type: tagToType(el.name),
-    })),
-  };
-}
-
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Reconstruct a complete PreTeXt document from a wrapper and an ordered
- * list of sections.
- *
- * The `wrapper` must be the value returned by a prior call to
- * {@link splitDocument}.
- */
-export function mergeDocument(
-  wrapper: string,
-  sections: DocumentSection[],
-): string {
-  if (!wrapper) {
-    // Fallback: just concatenate section contents with blank lines.
-    return sections.map((s) => s.content).join("\n\n");
-  }
-
-  const wrapperTree: Root = fromXml(wrapper);
-  const rootElement = wrapperTree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-
-  if (!rootElement) {
-    return sections.map((s) => s.content).join("\n\n");
-  }
-
-  // Parse each section back to an xast element.
-  // Skip sections with invalid XML (user may be mid-edit).
-  const sectionNodes: Element[] = sections.flatMap((sec) => {
-    try {
-      const secTree: Root = fromXml(sec.content);
-      return secTree.children.filter((n) => n.type === "element") as Element[];
-    } catch {
-      return [];
-    }
-  });
-
-  // Interleave blank-line text nodes between sections for readability.
-  const interleaved = sectionNodes.flatMap((node, i) =>
-    i === 0
-      ? [{ type: "text" as const, value: "\n\n" }, node]
-      : [{ type: "text" as const, value: "\n\n" }, node],
-  );
-
-  const merged: Root = {
-    type: "root",
-    children: [
-      {
-        ...rootElement,
-        children: [
-          ...rootElement.children,
-          ...interleaved,
-          { type: "text" as const, value: "\n" },
-        ],
-      } as Element,
-    ],
-  };
-
-  return toXml(merged);
-}
 
 /**
  * Replace (or insert) the `<title>` of a section XML string with `newTitle`.
@@ -321,36 +150,45 @@ export function updateSectionTitle(
   return toXml(tree);
 }
 
-/** Create a new blank `<section>` as a `DocumentSection`. */
+/** Create a new blank `<section>` as a `Division`. */
 export function createNewSection(title = "New Section"): DocumentSection {
-  const content = `<section>\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
+  const id = generateId();
+  const content = `<section xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title,
     content,
     type: "section",
+    sourceFormat: "pretext",
   };
 }
 
-/** Create a blank `<introduction>` section. */
+/** Create a blank `<introduction>` division. */
 export function createIntroduction(): DocumentSection {
-  const content = `<introduction>\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
+  const id = generateId();
+  const content = `<introduction xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title: "Introduction",
     content,
     type: "introduction",
+    sourceFormat: "pretext",
   };
 }
 
-/** Create a blank `<conclusion>` section. */
+/** Create a blank `<conclusion>` division. */
 export function createConclusion(): DocumentSection {
-  const content = `<conclusion>\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
+  const id = generateId();
+  const content = `<conclusion xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title: "Conclusion",
     content,
     type: "conclusion",
+    sourceFormat: "pretext",
   };
 }
 
@@ -401,6 +239,113 @@ export function ensureSectionWrapper(
   const trimmed = content.trimStart();
   if (trimmed.startsWith(`<${type}`)) return content;
   return rewrapSection(content, type);
+}
+
+export function splitDocument(xml: string): DocumentSplitResult {
+  let normalized = xml.trim();
+  if (normalized.startsWith("<?xml")) {
+    const end = normalized.indexOf("?>");
+    if (end !== -1) normalized = normalized.slice(end + 2).trim();
+  }
+  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
+  const syntheticRoot = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+  if (!syntheticRoot) return { wrapper: "", sections: [] };
+
+  const elementChildren = syntheticRoot.children.filter(
+    (n) => n.type === "element",
+  ) as Element[];
+
+  if (
+    elementChildren.length === 1 &&
+    DOCUMENT_ROOT_TAGS.has(elementChildren[0].name)
+  ) {
+    const docRoot = elementChildren[0];
+    const sectionElements = docRoot.children.filter(
+      (c) => c.type === "element" && SECTION_TAGS.has((c as Element).name),
+    ) as Element[];
+    const nonSectionChildren = trimTrailingWhitespaceNodes(
+      docRoot.children.filter(
+        (c) => !(c.type === "element" && SECTION_TAGS.has((c as Element).name)),
+      ),
+    );
+    const wrapperRoot: Root = {
+      type: "root",
+      children: [{ ...docRoot, children: nonSectionChildren } as Element],
+    };
+    const wrapper = toXml(wrapperRoot);
+    if (sectionElements.length === 0) return { wrapper, sections: [] };
+    return {
+      wrapper,
+      sections: sectionElements.map((el) => {
+        const id = generateId();
+        return {
+          id,
+          xmlId: (el.attributes?.["xml:id"] as string) || id,
+          title: extractTitle(el) || untitledLabel(el.name),
+          content: toXml({ type: "root", children: [el] } as Root),
+          type: tagToType(el.name),
+          sourceFormat: "pretext" as const,
+        };
+      }),
+    };
+  }
+
+  const sectionElements = elementChildren.filter((el) => SECTION_TAGS.has(el.name));
+  if (sectionElements.length === 0) return { wrapper: "", sections: [] };
+  return {
+    wrapper: "",
+    sections: sectionElements.map((el) => {
+      const id = generateId();
+      return {
+        id,
+        xmlId: (el.attributes?.["xml:id"] as string) || id,
+        title: extractTitle(el) || untitledLabel(el.name),
+        content: toXml({ type: "root", children: [el] } as Root),
+        type: tagToType(el.name),
+        sourceFormat: "pretext" as const,
+      };
+    }),
+  };
+}
+
+export function mergeDocument(
+  wrapper: string,
+  sections: DocumentSection[],
+): string {
+  if (!wrapper) return sections.map((s) => s.content).join("\n\n");
+  const wrapperTree: Root = fromXml(wrapper);
+  const rootElement = wrapperTree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+  if (!rootElement) return sections.map((s) => s.content).join("\n\n");
+  const sectionNodes: Element[] = sections.flatMap((sec) => {
+    try {
+      const secTree: Root = fromXml(sec.content);
+      return secTree.children.filter((n) => n.type === "element") as Element[];
+    } catch {
+      return [];
+    }
+  });
+  const interleaved = sectionNodes.flatMap((node) => [
+    { type: "text" as const, value: "\n\n" },
+    node,
+  ]);
+  const merged: Root = {
+    type: "root",
+    children: [
+      {
+        ...rootElement,
+        children: [
+          ...rootElement.children,
+          ...interleaved,
+          { type: "text" as const, value: "\n" },
+        ],
+      } as Element,
+    ],
+  };
+  return toXml(merged);
 }
 
 // ---------------------------------------------------------------------------
@@ -464,25 +409,14 @@ export function rewrapChapter(
   return `<${name}${attrStr}>\n${normalizedInner}\n</${name}>`;
 }
 
-// ---------------------------------------------------------------------------
-// Internal helpers (not exported)
-// ---------------------------------------------------------------------------
-
-function untitledLabel(tag: string): string {
-  return tag.charAt(0).toUpperCase() + tag.slice(1);
-}
 
 // ===========================================================================
 // LaTeX-specific section utilities
 // ===========================================================================
 
-/**
- * The opaque wrapper value stored for LaTeX documents.
- * Encoded as JSON in the `DocumentSplitResult.wrapper` string.
- */
 interface LatexWrapper {
-  preamble: string; // everything up to and including \begin{document}
-  closing: string; // \end{document} and anything after
+  preamble: string;
+  closing: string;
 }
 
 function encodeLatexWrapper(w: LatexWrapper): string {
@@ -497,26 +431,18 @@ function decodeLatexWrapper(s: string): LatexWrapper | null {
   }
 }
 
-/** Extract title from a `\section{…}` or `\section*{…}` command string. */
 function extractLatexSectionTitle(sectionCmd: string): string {
   const m = /\\section\*?\{([^}]*)\}/.exec(sectionCmd);
   return m?.[1]?.trim() ?? "Section";
 }
 
-/**
- * Split the preamble and body from a LaTeX string.
- * Returns `{ preamble, body, closing }` where `preamble` ends just after
- * `\begin{document}` and `closing` starts at `\end{document}`.
- */
 function splitLatexPreamble(latex: string): {
   preamble: string;
   body: string;
   closing: string;
 } {
   const beginIdx = latex.indexOf("\\begin{document}");
-  if (beginIdx === -1) {
-    return { preamble: "", body: latex, closing: "" };
-  }
+  if (beginIdx === -1) return { preamble: "", body: latex, closing: "" };
   const afterBegin = beginIdx + "\\begin{document}".length;
   const endIdx = latex.lastIndexOf("\\end{document}");
   if (endIdx !== -1 && endIdx > afterBegin) {
@@ -526,165 +452,71 @@ function splitLatexPreamble(latex: string): {
       closing: latex.slice(endIdx),
     };
   }
-  return {
-    preamble: latex.slice(0, afterBegin),
-    body: latex.slice(afterBegin),
-    closing: "",
-  };
+  return { preamble: latex.slice(0, afterBegin), body: latex.slice(afterBegin), closing: "" };
 }
 
-/**
- * Split a LaTeX document into sections using `\section{…}` / `\section*{…}`
- * command style.
- *
- * Content before the first `\section` (after the preamble) becomes an
- * `introduction` section when non-empty.
- */
 function splitLatexByCommands(latex: string): DocumentSplitResult {
   const { preamble, body, closing } = splitLatexPreamble(latex);
-
-  // Split body at every \section{...} or \section*{...} (capturing the command)
   const parts = body.split(/(\\section\*?\{[^}]*\})/);
-  // parts[0]               = intro content (before first \section)
-  // parts[1], parts[3], …  = \section{…} headers
-  // parts[2], parts[4], …  = section body text
-
   const sections: DocumentSection[] = [];
   const intro = parts[0].trim();
   if (intro) {
-    sections.push({
-      id: generateId(),
-      title: "Introduction",
-      content: intro,
-      type: "introduction",
-    });
+    const id = generateId();
+    sections.push({ id, xmlId: id, title: "Introduction", content: intro, type: "introduction", sourceFormat: "latex" });
   }
-
   for (let i = 1; i < parts.length; i += 2) {
-    const header = parts[i]; // e.g. \section{My Title}
+    const header = parts[i];
     const sectionBody = parts[i + 1] ?? "";
     const title = extractLatexSectionTitle(header);
-    sections.push({
-      id: generateId(),
-      title,
-      content: header + sectionBody,
-      type: "section",
-    });
+    const id = generateId();
+    sections.push({ id, xmlId: id, title, content: header + sectionBody, type: "section", sourceFormat: "latex" });
   }
-
-  if (sections.length === 0) {
-    // No sections found — return empty list; caller handles unsectioned docs.
-    const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
-    return { wrapper, sections: [] };
-  }
-
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   return { wrapper, sections };
 }
 
-/**
- * Split a LaTeX document by `\begin{section}...\end{section}` environments.
- * Content before the first `\begin{section}` becomes an `introduction`.
- */
 function splitLatexByEnvironments(latex: string): DocumentSplitResult {
   const { preamble, body, closing } = splitLatexPreamble(latex);
-
   const envRe = /\\begin\{section\}([\s\S]*?)\\end\{section\}/g;
   const sections: DocumentSection[] = [];
-
-  // Find the first environment to determine intro content
   const firstMatch = envRe.exec(body);
   if (firstMatch) {
     const before = body.slice(0, firstMatch.index).trim();
     if (before) {
-      sections.push({
-        id: generateId(),
-        title: "Introduction",
-        content: before,
-        type: "introduction",
-      });
+      const id = generateId();
+      sections.push({ id, xmlId: id, title: "Introduction", content: before, type: "introduction", sourceFormat: "latex" });
     }
-    // Process the first match
     const titleMatch = /\\title\{([^}]*)\}/.exec(firstMatch[1]);
     const title = titleMatch?.[1]?.trim() ?? "Section";
-    sections.push({
-      id: generateId(),
-      title,
-      content: firstMatch[0],
-      type: "section",
-    });
+    const id = generateId();
+    sections.push({ id, xmlId: id, title, content: firstMatch[0], type: "section", sourceFormat: "latex" });
   }
-
-  // Process remaining matches
   let match: RegExpExecArray | null;
   while ((match = envRe.exec(body)) !== null) {
     const titleMatch = /\\title\{([^}]*)\}/.exec(match[1]);
     const title = titleMatch?.[1]?.trim() ?? "Section";
-    sections.push({
-      id: generateId(),
-      title,
-      content: match[0],
-      type: "section",
-    });
+    const id = generateId();
+    sections.push({ id, xmlId: id, title, content: match[0], type: "section", sourceFormat: "latex" });
   }
-
-  if (sections.length === 0) {
-    // No sections found — return empty list.
-    const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
-    return { wrapper, sections: [] };
-  }
-
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   return { wrapper, sections };
 }
 
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Split a LaTeX document into its top-level sections.
- *
- * Supports two splitting styles:
- * - `\section{…}` / `\section*{…}` command style (default)
- * - `\begin{section}…\end{section}` environment style
- *
- * Content before the first section marker becomes an `introduction` section.
- * The document preamble (everything up to and including `\begin{document}`)
- * is stored in the returned `wrapper` and must be passed back to
- * {@link mergeLatexDocument} to reconstruct the full document.
- */
 export function splitLatexDocument(latex: string): DocumentSplitResult {
-  if (/\\begin\{section\}/.test(latex)) {
-    return splitLatexByEnvironments(latex);
-  }
+  if (/\\begin\{section\}/.test(latex)) return splitLatexByEnvironments(latex);
   return splitLatexByCommands(latex);
 }
 
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Reconstruct a complete LaTeX document from a wrapper and an ordered list
- * of sections.
- */
 export function mergeLatexDocument(
   wrapper: string,
   sections: DocumentSection[],
 ): string {
   const sectionTexts = sections.map((s) => s.content).join("\n\n");
-
-  if (!wrapper) {
-    return sectionTexts;
-  }
-
+  if (!wrapper) return sectionTexts;
   const w = decodeLatexWrapper(wrapper);
   if (!w) return sectionTexts;
-
   const parts = [w.preamble, sectionTexts];
-  if (w.closing) parts.push(w.closing);
-  else parts.push("\\end{document}");
+  parts.push(w.closing || "\\end{document}");
   return parts.join("\n\n");
 }
 
@@ -792,33 +624,42 @@ export function updateLatexSectionTitle(
   return content;
 }
 
-/** Create a new blank LaTeX section as a `DocumentSection`. */
+/** Create a new blank LaTeX section as a `Division`. */
 export function createNewLatexSection(title = "New Section"): DocumentSection {
+  const id = generateId();
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title,
     content: `\\section{${title}}\n\n`,
     type: "section",
+    sourceFormat: "latex",
   };
 }
 
-/** Create a blank LaTeX introduction (bare content before first `\section`). */
+/** Create a blank LaTeX introduction. */
 export function createLatexIntroduction(): DocumentSection {
+  const id = generateId();
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title: "Introduction",
     content: "% Introduction\n\n",
     type: "introduction",
+    sourceFormat: "latex",
   };
 }
 
-/** Create a blank LaTeX conclusion (bare content after last `\section`). */
+/** Create a blank LaTeX conclusion. */
 export function createLatexConclusion(): DocumentSection {
+  const id = generateId();
   return {
-    id: generateId(),
+    id,
+    xmlId: id,
     title: "Conclusion",
     content: "% Conclusion\n\n",
     type: "conclusion",
+    sourceFormat: "latex",
   };
 }
 
@@ -826,136 +667,6 @@ export function createLatexConclusion(): DocumentSection {
 // Wrap-as-section and merge utilities
 // ---------------------------------------------------------------------------
 
-/** Tags that stay in the document wrapper and should not be moved into a section. */
-const PRETEXT_HEADER_TAGS: ReadonlySet<string> = new Set(["title", "docinfo"]);
-
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Wrap all body content of a PreTeXt document (i.e. everything that is not
- * `<title>` or `<docinfo>`) into a single new `<section>`.
- *
- * Use this when a document has no sections and the user wants to start using
- * section-by-section editing mode.  The returned `wrapper` and `sections` can
- * be passed directly to {@link mergeDocument} to reconstruct the document.
- */
-export function wrapDocumentAsSection(
-  xml: string,
-  sectionTitle = "Section 1",
-): DocumentSplitResult {
-  let normalized = xml.trim();
-  if (normalized.startsWith("<?xml")) {
-    const end = normalized.indexOf("?>");
-    if (end !== -1) normalized = normalized.slice(end + 2).trim();
-  }
-
-  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
-  const syntheticRoot = tree.children.find((n) => n.type === "element") as
-    | Element
-    | undefined;
-
-  if (!syntheticRoot) {
-    return { wrapper: "", sections: [createNewSection(sectionTitle)] };
-  }
-
-  // Check if there's a document root element (article, book, …) that we can pull sections out of.  If not, we'll just wrap everything in a new section.
-  // The follow isn't used currently; we currently use the bare content fallback at the end of this function.
-  const elementChildren = syntheticRoot.children.filter(
-    (n) => n.type === "element",
-  ) as Element[];
-
-  if (
-    elementChildren.length === 1 &&
-    DOCUMENT_ROOT_TAGS.has(elementChildren[0].name)
-  ) {
-    const docRoot = elementChildren[0];
-    const wrapperChildren = docRoot.children.filter(
-      (c) =>
-        c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name),
-    );
-    const bodyChildren = docRoot.children.filter(
-      (c) =>
-        !(c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name)),
-    );
-
-    const titleEl: Element = {
-      type: "element",
-      name: "title",
-      attributes: {},
-      children: [{ type: "text", value: sectionTitle }],
-    };
-    const sectionEl: Element = {
-      type: "element",
-      name: "section",
-      attributes: {},
-      children: [titleEl, ...bodyChildren],
-    };
-
-    const newWrapper: Root = {
-      type: "root",
-      children: [{ ...docRoot, children: wrapperChildren } as Element],
-    };
-
-    return {
-      wrapper: toXml(newWrapper),
-      sections: [
-        {
-          id: generateId(),
-          title: sectionTitle,
-          content: toXml({ type: "root", children: [sectionEl] } as Root),
-          type: "section",
-        },
-      ],
-    };
-  }
-
-  // Bare content — wrap everything in a section.
-  return {
-    wrapper: "",
-    sections: [
-      {
-        id: generateId(),
-        title: sectionTitle,
-        content: `<section>\n\t<title>${sectionTitle}</title>\n\n${normalized}\n</section>`,
-        type: "section",
-      },
-    ],
-  };
-}
-
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Wrap all body content of a LaTeX document (everything between
- * `\begin{document}` and `\end{document}`, or the entire string if there is
- * no `\begin{document}`) into a single `\section{title}`.
- *
- * Use this when a document has no sections and the user wants to start using
- * section-by-section editing mode.
- */
-export function wrapLatexDocumentAsSection(
-  latex: string,
-  sectionTitle = "Section 1",
-): DocumentSplitResult {
-  const { preamble, body, closing } = splitLatexPreamble(latex);
-  const sectionContent = `\\section{${sectionTitle}}\n\n${body.trim()}\n\n`;
-  const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
-  return {
-    wrapper,
-    sections: [
-      {
-        id: generateId(),
-        title: sectionTitle,
-        content: sectionContent,
-        type: "section",
-      },
-    ],
-  };
-}
 
 /**
  * Merge two adjacent sections into one, keeping the title of the first.
@@ -1113,9 +824,18 @@ export function updateSectionMetadata(
     }
 
     const newContent = toXml({ type: "root", children: [newEl] } as Root);
-    return { ...section, title: newTitle, type: newType, content: newContent };
+    const newXmlId =
+      changes.xmlId !== undefined && changes.xmlId !== null && changes.xmlId !== ""
+        ? changes.xmlId
+        : section.xmlId;
+    return {
+      ...section,
+      title: newTitle,
+      type: newType,
+      xmlId: newXmlId,
+      content: newContent,
+    };
   } catch {
-    // If parsing fails just update the in-memory fields without touching content.
     return { ...section, title: newTitle, type: newType };
   }
 }
@@ -1188,185 +908,261 @@ export function updateChapterMetadata(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Section-as-document wrapping utilities (for section-scoped preview builds)
-// ---------------------------------------------------------------------------
+const PRETEXT_HEADER_TAGS: ReadonlySet<string> = new Set(["title", "docinfo"]);
 
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Wrap a single section into a complete, valid PreTeXt document suitable for
- * an isolated preview build.
- *
- * The result is a full `<pretext>` document containing:
- * - the supplied `<docinfo>` (if any)
- * - an `<article>` element with the optional `title` and the section content
- *
- * Passing this to `onPreviewRebuild` instead of the full merged document
- * dramatically reduces build times when only one section has changed.
- *
- * @param section - The section to preview.
- * @param docinfo - Optional raw `<docinfo>…</docinfo>` XML string.
- * @param title   - Optional document title shown in the build output.
- */
-export function wrapSectionAsDocument(
-  section: DocumentSection,
-  docinfo?: string,
-  title?: string,
-): string {
-  // Parse the section content back to an xast element.
-  // Guard against invalid XML while the user is mid-edit.
-  let sectionEl: Element | undefined;
-  try {
-    const sectionTree: Root = fromXml(section.content);
-    sectionEl = sectionTree.children.find((n) => n.type === "element") as
-      | Element
-      | undefined;
-  } catch {
-    sectionEl = undefined;
-  }
-
-  // Build <article> children: optional <title>, then the section element.
-  const articleChildren: Array<Element | { type: "text"; value: string }> = [];
-  if (title) {
-    articleChildren.push({
-      type: "element",
-      name: "title",
-      attributes: {},
-      children: [{ type: "text", value: title }],
-    } as Element);
-  }
-  if (sectionEl) {
-    articleChildren.push({ type: "text" as const, value: "\n" });
-    articleChildren.push(sectionEl);
-  }
-
-  const articleEl: Element = {
-    type: "element",
-    name: "article",
-    attributes: {},
-    children: articleChildren,
-  };
-
-  // Build <pretext> children: optional <docinfo>, then <article>.
-  const pretextChildren: Array<Element | { type: "text"; value: string }> = [];
-  if (docinfo?.trim()) {
-    try {
-      const docinfoTree: Root = fromXml(docinfo);
-      const docinfoEl = docinfoTree.children.find(
-        (n) => n.type === "element",
-      ) as Element | undefined;
-      if (docinfoEl) {
-        pretextChildren.push(docinfoEl);
-        pretextChildren.push({ type: "text" as const, value: "\n" });
-      }
-    } catch {
-      // Malformed docinfo — skip rather than breaking the preview.
-    }
-  }
-  pretextChildren.push(articleEl);
-
-  const pretextEl: Element = {
-    type: "element",
-    name: "pretext",
-    attributes: {},
-    children: pretextChildren,
-  };
-
-  return toXml({ type: "root", children: [pretextEl] } as Root);
-}
-
-/**
- * @deprecated Part of the `wrapper` / `DocumentSplitResult` pattern being
- * removed in the sections-as-DB-records refactor.  Will be deleted once
- * all internal callers are migrated.
- *
- * Wrap a single LaTeX section into a complete, buildable LaTeX document.
- *
- * Reconstructs `preamble + section.content + closing` using the opaque
- * `wrapper` string produced by {@link splitLatexDocument}.  Suitable for
- * passing to `onPreviewRebuild` when in sectioned LaTeX mode.
- *
- * @param section - The section to preview.
- * @param wrapper - The opaque wrapper returned by {@link splitLatexDocument}.
- */
-export function wrapLatexSectionAsDocument(
-  section: DocumentSection,
-  wrapper: string,
-): string {
-  if (!wrapper) {
-    return section.content;
-  }
-  const w = decodeLatexWrapper(wrapper);
-  if (!w) return section.content;
-
-  const parts = [w.preamble, section.content.trim()];
-  parts.push(w.closing || "\\end{document}");
-  return parts.join("\n\n");
-}
-
-// ---------------------------------------------------------------------------
-// New architecture: sections as first-class DB records
-// ---------------------------------------------------------------------------
-
-/**
- * Split a section-less PreTeXt article or chapter XML blob into an array of
- * `DocumentSection` objects, one per top-level section element.
- *
- * This is the **migration-path helper** for the sections-as-DB-records
- * architecture.  Unlike the deprecated `splitDocument`, this function returns
- * only the sections array — it discards the document shell (article/chapter
- * wrapper, docinfo), which is now owned exclusively by the Rails back-end.
- *
- * Usage:
- * 1. Call this with the chapter or article's content blob.
- * 2. Pass the resulting array to the host's `onSectionsCreate` callback so
- *    all records can be created in a single Rails transaction.
- * 3. The host clears the chapter/article `content` field once the sections
- *    are persisted.
- *
- * Returns an empty array when the source has no splittable section children
- * (e.g. bare paragraph content with no `<section>` elements).  In that case
- * the caller should offer an "Add section" affordance instead.
- */
-export function splitContentIntoSections(xml: string): DocumentSection[] {
+export function wrapDocumentAsSection(
+  xml: string,
+  sectionTitle = "Section 1",
+): DocumentSplitResult {
   let normalized = xml.trim();
   if (normalized.startsWith("<?xml")) {
     const end = normalized.indexOf("?>");
     if (end !== -1) normalized = normalized.slice(end + 2).trim();
   }
-
   const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
   const syntheticRoot = tree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
-
-  if (!syntheticRoot) return [];
-
+  if (!syntheticRoot) {
+    return { wrapper: "", sections: [createNewSection(sectionTitle)] };
+  }
   const elementChildren = syntheticRoot.children.filter(
     (n) => n.type === "element",
   ) as Element[];
-
-  // If wrapped in a document root (article, chapter, …), look inside it.
-  let candidates: Element[];
   if (
     elementChildren.length === 1 &&
     DOCUMENT_ROOT_TAGS.has(elementChildren[0].name)
   ) {
-    candidates = elementChildren[0].children.filter(
-      (c) => c.type === "element" && SECTION_TAGS.has((c as Element).name),
-    ) as Element[];
-  } else {
-    // Bare section elements or fragments.
-    candidates = elementChildren.filter((el) => SECTION_TAGS.has(el.name));
+    const docRoot = elementChildren[0];
+    const wrapperChildren = docRoot.children.filter(
+      (c) => c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name),
+    );
+    const bodyChildren = docRoot.children.filter(
+      (c) => !(c.type === "element" && PRETEXT_HEADER_TAGS.has((c as Element).name)),
+    );
+    const titleEl: Element = {
+      type: "element",
+      name: "title",
+      attributes: {},
+      children: [{ type: "text", value: sectionTitle }],
+    };
+    const sectionEl: Element = {
+      type: "element",
+      name: "section",
+      attributes: {},
+      children: [titleEl, ...bodyChildren],
+    };
+    const newWrapper: Root = {
+      type: "root",
+      children: [{ ...docRoot, children: wrapperChildren } as Element],
+    };
+    const id = generateId();
+    return {
+      wrapper: toXml(newWrapper),
+      sections: [{
+        id,
+        xmlId: id,
+        title: sectionTitle,
+        content: toXml({ type: "root", children: [sectionEl] } as Root),
+        type: "section",
+        sourceFormat: "pretext" as const,
+      }],
+    };
+  }
+  const id = generateId();
+  return {
+    wrapper: "",
+    sections: [{
+      id,
+      xmlId: id,
+      title: sectionTitle,
+      content: `<section xml:id="${id}">\n\t<title>${sectionTitle}</title>\n\n${normalized}\n</section>`,
+      type: "section",
+      sourceFormat: "pretext" as const,
+    }],
+  };
+}
+
+export function wrapLatexDocumentAsSection(
+  latex: string,
+  sectionTitle = "Section 1",
+): DocumentSplitResult {
+  const { preamble, body, closing } = splitLatexPreamble(latex);
+  const sectionContent = `\\section{${sectionTitle}}\n\n${body.trim()}\n\n`;
+  const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
+  const id = generateId();
+  return {
+    wrapper,
+    sections: [{ id, xmlId: id, title: sectionTitle, content: sectionContent, type: "section", sourceFormat: "latex" }],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Division ref utilities — `<plus:* ref="..."/>` placeholder manipulation
+// ---------------------------------------------------------------------------
+
+/**
+ * Regex that matches any `<plus:TAG ref="VALUE"/>` self-closing placeholder.
+ * Captures the ref value in group 1.
+ * Accepts optional whitespace and extra attributes after `ref="..."`.
+ */
+const DIVISION_REF_RE = /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*\/>/g;
+
+/** Escape a string for safe literal use inside a `RegExp` constructor. */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Return the ordered list of `xmlId` values referenced by
+ * `<plus:* ref="..."/>` placeholders found in `content`.
+ *
+ * Only direct children are returned — the function does not recurse.
+ * Call it for each division in the pool to build the full tree.
+ */
+export function parseDivisionRefs(content: string): string[] {
+  const refs: string[] = [];
+  const re = new RegExp(DIVISION_REF_RE.source, "g");
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    refs.push(m[1]);
+  }
+  return refs;
+}
+
+/**
+ * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`.
+ *
+ * - When `afterXmlId` is `null` the ref is appended just before the closing
+ *   tag of the outer element (or at the end of the string if none is found).
+ * - When `afterXmlId` is provided the new ref is inserted immediately after
+ *   that ref's placeholder.  If the named ref is not found, falls back to
+ *   appending.
+ */
+export function insertDivisionRef(
+  content: string,
+  xmlId: string,
+  type: DivisionType,
+  afterXmlId: string | null,
+): string {
+  const tag = `<plus:${type} ref="${xmlId}"/>`;
+
+  if (afterXmlId !== null) {
+    const afterRe = new RegExp(
+      `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(afterXmlId)}"[^>]*\\/>`,
+    );
+    const m = afterRe.exec(content);
+    if (m) {
+      const pos = m.index + m[0].length;
+      return content.slice(0, pos) + "\n" + tag + content.slice(pos);
+    }
   }
 
-  return candidates.map((el) => ({
-    id: generateId(),
-    title: extractTitle(el) || untitledLabel(el.name),
-    content: toXml({ type: "root", children: [el] } as Root),
-    type: tagToType(el.name),
-  }));
+  // Append before the last closing tag, otherwise at end.
+  const lastClose = content.lastIndexOf("</");
+  if (lastClose !== -1) {
+    return content.slice(0, lastClose) + tag + "\n" + content.slice(lastClose);
+  }
+  return content + "\n" + tag;
 }
+
+/**
+ * Remove the `<plus:* ref="xmlId"/>` placeholder for `xmlId` from `content`.
+ * The surrounding newline/whitespace is cleaned up so the result stays tidy.
+ */
+export function removeDivisionRef(content: string, xmlId: string): string {
+  const re = new RegExp(
+    `[ \t]*<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(xmlId)}"[^>]*\\/>[ \t]*\n?`,
+    "g",
+  );
+  return content.replace(re, "");
+}
+
+/**
+ * Move an existing `<plus:* ref="xmlId"/>` placeholder to a new position.
+ *
+ * Equivalent to `removeDivisionRef` followed by `insertDivisionRef`, but
+ * preserves the original tag's element name (e.g. `plus:section` stays
+ * `plus:section` rather than being normalised to `plus:division`).
+ *
+ * - `afterXmlId === null` moves the ref to the end (before the closing tag).
+ * - `afterXmlId` moves it immediately after that ref.
+ */
+export function moveDivisionRef(
+  content: string,
+  xmlId: string,
+  afterXmlId: string | null,
+): string {
+  // Capture the original tag so we preserve its element name.
+  const captureRe = new RegExp(
+    `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(xmlId)}"[^>]*\\/>`,
+  );
+  const m = captureRe.exec(content);
+  const originalTag = m ? m[0] : `<plus:division ref="${xmlId}"/>`;
+
+  const withoutRef = removeDivisionRef(content, xmlId);
+
+  if (afterXmlId !== null) {
+    const afterRe = new RegExp(
+      `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(afterXmlId)}"[^>]*\\/>`,
+    );
+    const after = afterRe.exec(withoutRef);
+    if (after) {
+      const pos = after.index + after[0].length;
+      return (
+        withoutRef.slice(0, pos) + "\n" + originalTag + withoutRef.slice(pos)
+      );
+    }
+  }
+
+  const lastClose = withoutRef.lastIndexOf("</");
+  if (lastClose !== -1) {
+    return (
+      withoutRef.slice(0, lastClose) +
+      originalTag +
+      "\n" +
+      withoutRef.slice(lastClose)
+    );
+  }
+  return withoutRef + "\n" + originalTag;
+}
+
+/**
+ * Build a reachability set starting from `rootXmlId` by following
+ * `<plus:* ref="..."/>` placeholders recursively through the `divisions` pool.
+ *
+ * Returns a `Set<string>` of all `xmlId` values reachable from the root,
+ * including the root itself.  Used to identify orphaned divisions.
+ */
+function collectReachable(divisions: Division[], rootXmlId: string): Set<string> {
+  const seen = new Set<string>();
+  const queue = [rootXmlId];
+  while (queue.length > 0) {
+    const id = queue.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const div = divisions.find((d) => d.xmlId === id);
+    if (div) {
+      for (const ref of parseDivisionRefs(div.content)) {
+        queue.push(ref);
+      }
+    }
+  }
+  return seen;
+}
+
+/**
+ * Return all divisions in `divisions` that are not reachable from
+ * `rootXmlId` (and are not the root itself).
+ *
+ * Orphaned divisions are shown separately in the TOC so they can be placed
+ * inside a parent division.
+ */
+export function getOrphanedDivisions(
+  divisions: Division[],
+  rootXmlId: string,
+): Division[] {
+  const reachable = collectReachable(divisions, rootXmlId);
+  return divisions.filter((d) => !reachable.has(d.xmlId));
+}
+
