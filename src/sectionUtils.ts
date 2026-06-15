@@ -111,6 +111,35 @@ function trimBoundaryBlankLines(value: string): string {
     .replace(/(?:\r?\n[ \t]*)+$/, "");
 }
 
+/**
+ * Parse XML defensively.  Returns `null` instead of throwing when the input is
+ * not well-formed.  Callers that run during render (e.g. `stripSectionWrapper`)
+ * MUST use this rather than `fromXml` directly: the user routinely passes
+ * temporarily-invalid XML while typing, and an uncaught parse error there
+ * crashes the whole editor.
+ */
+function safeFromXml(xml: string): Root | null {
+  try {
+    return fromXml(xml);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Strip the outer element from `xml` using string matching only — a fallback
+ * for when the content cannot be parsed as well-formed XML.  Removes the first
+ * opening tag and its matching trailing closing tag; returns the input
+ * unchanged when no wrapper is detected.
+ */
+function stripWrapperByRegex(xml: string): string {
+  const open = xml.match(/^\s*<([A-Za-z_][\w.:-]*)\b[^>]*?>/);
+  if (!open || open.index === undefined) return xml;
+  const afterOpen = xml.slice(open.index + open[0].length);
+  const closeRe = new RegExp(`\\s*</${escapeRegex(open[1])}\\s*>\\s*$`);
+  return afterOpen.replace(closeRe, "");
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -124,7 +153,8 @@ export function updateSectionTitle(
   sectionXml: string,
   newTitle: string,
 ): string {
-  const tree: Root = fromXml(sectionXml);
+  const tree = safeFromXml(sectionXml);
+  if (!tree) return sectionXml;
   const rootEl = tree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
@@ -199,7 +229,10 @@ export function createConclusion(): DocumentSection {
  * accidentally edit or delete the enclosing element.
  */
 export function stripSectionWrapper(sectionXml: string): string {
-  const tree: Root = fromXml(sectionXml);
+  const tree = safeFromXml(sectionXml);
+  // Malformed XML (common while the user is mid-edit): fall back to a
+  // string-based strip so we still show the body instead of crashing.
+  if (!tree) return stripWrapperByRegex(sectionXml);
   const rootEl = tree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
@@ -247,7 +280,10 @@ export function splitDocument(xml: string): DocumentSplitResult {
     const end = normalized.indexOf("?>");
     if (end !== -1) normalized = normalized.slice(end + 2).trim();
   }
-  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
+  const tree = safeFromXml(`<__root__>${normalized}</__root__>`);
+  // Malformed XML: treat the whole document as a single, unsplit blob rather
+  // than throwing (which would crash the editor during a render/keystroke).
+  if (!tree) return { wrapper: xml, sections: [] };
   const syntheticRoot = tree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
@@ -315,7 +351,8 @@ export function mergeDocument(
   sections: DocumentSection[],
 ): string {
   if (!wrapper) return sections.map((s) => s.content).join("\n\n");
-  const wrapperTree: Root = fromXml(wrapper);
+  const wrapperTree = safeFromXml(wrapper);
+  if (!wrapperTree) return sections.map((s) => s.content).join("\n\n");
   const rootElement = wrapperTree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
@@ -693,16 +730,17 @@ export function mergeTwoSections(
   }
 
   // PreTeXt: parse and combine xast children
-  const aTree = fromXml(a.content);
-  const bTree = fromXml(b.content);
-  const aEl = aTree.children.find((n) => n.type === "element") as
+  const aTree = safeFromXml(a.content);
+  const bTree = safeFromXml(b.content);
+  const aEl = aTree?.children.find((n) => n.type === "element") as
     | Element
     | undefined;
-  const bEl = bTree.children.find((n) => n.type === "element") as
+  const bEl = bTree?.children.find((n) => n.type === "element") as
     | Element
     | undefined;
 
   if (!aEl || !bEl) {
+    // Malformed XML in either section: fall back to plain concatenation.
     return { ...a, content: a.content + "\n\n" + b.content };
   }
 
@@ -919,8 +957,8 @@ export function wrapDocumentAsSection(
     const end = normalized.indexOf("?>");
     if (end !== -1) normalized = normalized.slice(end + 2).trim();
   }
-  const tree: Root = fromXml(`<__root__>${normalized}</__root__>`);
-  const syntheticRoot = tree.children.find((n) => n.type === "element") as
+  const tree = safeFromXml(`<__root__>${normalized}</__root__>`);
+  const syntheticRoot = tree?.children.find((n) => n.type === "element") as
     | Element
     | undefined;
   if (!syntheticRoot) {
@@ -1001,16 +1039,28 @@ export function wrapLatexDocumentAsSection(
 // Division ref utilities — `<plus:* ref="..."/>` placeholder manipulation
 // ---------------------------------------------------------------------------
 
-/**
- * Regex that matches any `<plus:TAG ref="VALUE"/>` self-closing placeholder.
- * Captures the ref value in group 1.
- * Accepts optional whitespace and extra attributes after `ref="..."`.
- */
-const DIVISION_REF_RE = /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*\/>/g;
-
 /** Escape a string for safe literal use inside a `RegExp` constructor. */
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Build a regex source that matches a `<plus:TAG ... ref="..." ...>` placeholder
+ * in EITHER form:
+ *   - self-closing:     `<plus:section ref="x"/>`
+ *   - expanded-empty:   `<plus:section ref="x"></plus:section>`
+ *
+ * The expanded form is what an XML round-trip (e.g. through xast in
+ * `stripSectionWrapper`/`rewrapSection`) produces, so every consumer must
+ * accept it as well as the canonical self-closing form a user might type.
+ *
+ * When `refValue` is `null` the ref value is captured in group 1; otherwise the
+ * pattern matches only that specific ref (nothing captured).
+ */
+function divisionRefSource(refValue: string | null): string {
+  const ref =
+    refValue === null ? `ref="([^"]+)"` : `ref="${escapeRegex(refValue)}"`;
+  return `<plus:[a-z-]+\\s[^>]*${ref}[^>]*?(?:/>|>\\s*</plus:[a-z-]+>)`;
 }
 
 /**
@@ -1022,7 +1072,7 @@ function escapeRegex(s: string): string {
  */
 export function parseDivisionRefs(content: string): string[] {
   const refs: string[] = [];
-  const re = new RegExp(DIVISION_REF_RE.source, "g");
+  const re = new RegExp(divisionRefSource(null), "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
     refs.push(m[1]);
@@ -1048,9 +1098,7 @@ export function insertDivisionRef(
   const tag = `<plus:${type} ref="${xmlId}"/>`;
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(
-      `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(afterXmlId)}"[^>]*\\/>`,
-    );
+    const afterRe = new RegExp(divisionRefSource(afterXmlId));
     const m = afterRe.exec(content);
     if (m) {
       const pos = m.index + m[0].length;
@@ -1072,7 +1120,7 @@ export function insertDivisionRef(
  */
 export function removeDivisionRef(content: string, xmlId: string): string {
   const re = new RegExp(
-    `[ \t]*<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(xmlId)}"[^>]*\\/>[ \t]*\n?`,
+    `[ \t]*${divisionRefSource(xmlId)}[ \t]*\n?`,
     "g",
   );
   return content.replace(re, "");
@@ -1094,18 +1142,18 @@ export function moveDivisionRef(
   afterXmlId: string | null,
 ): string {
   // Capture the original tag so we preserve its element name.
-  const captureRe = new RegExp(
-    `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(xmlId)}"[^>]*\\/>`,
-  );
+  const captureRe = new RegExp(divisionRefSource(xmlId));
   const m = captureRe.exec(content);
-  const originalTag = m ? m[0] : `<plus:division ref="${xmlId}"/>`;
+  // Normalise to self-closing form so a round-tripped expanded-empty tag
+  // (`<plus:x ref="y"></plus:x>`) is re-emitted tidily when moved.
+  const originalTag = m
+    ? normalizeSelfClosingRefs(m[0])
+    : `<plus:division ref="${xmlId}"/>`;
 
   const withoutRef = removeDivisionRef(content, xmlId);
 
   if (afterXmlId !== null) {
-    const afterRe = new RegExp(
-      `<plus:[a-z-]+\\s[^>]*ref="${escapeRegex(afterXmlId)}"[^>]*\\/>`,
-    );
+    const afterRe = new RegExp(divisionRefSource(afterXmlId));
     const after = afterRe.exec(withoutRef);
     if (after) {
       const pos = after.index + after[0].length;
@@ -1125,6 +1173,42 @@ export function moveDivisionRef(
     );
   }
   return withoutRef + "\n" + originalTag;
+}
+
+/**
+ * Rewrite `content` so its `<plus:* ref="..."/>` placeholders appear in the
+ * order given by `orderedXmlIds`.
+ *
+ * Implemented by repeatedly moving each ref to sit immediately after its
+ * predecessor in the desired order; because every referenced child is moved,
+ * the final relative order of the whole group matches `orderedXmlIds` exactly
+ * while non-ref content keeps its position.  Original tag element names are
+ * preserved (via `moveDivisionRef`).
+ */
+export function reorderDivisionRefs(
+  content: string,
+  orderedXmlIds: string[],
+): string {
+  let result = content;
+  let prev: string | null = null;
+  for (const xmlId of orderedXmlIds) {
+    result = moveDivisionRef(result, xmlId, prev);
+    prev = xmlId;
+  }
+  return result;
+}
+
+/**
+ * Collapse expanded-empty `<plus:TAG ...></plus:TAG>` placeholders back to the
+ * canonical self-closing `<plus:TAG .../>` form.  An XML round-trip through
+ * xast expands self-closing elements, so this is applied after editing a
+ * division's content to keep the stored source tidy.
+ */
+export function normalizeSelfClosingRefs(content: string): string {
+  return content.replace(
+    /<plus:([a-z-]+)((?:\s[^>]*?)?)>\s*<\/plus:\1>/g,
+    (_m, tag, attrs) => `<plus:${tag}${attrs}/>`,
+  );
 }
 
 /**
@@ -1164,5 +1248,67 @@ export function getOrphanedDivisions(
 ): Division[] {
   const reachable = collectReachable(divisions, rootXmlId);
   return divisions.filter((d) => !reachable.has(d.xmlId));
+}
+
+/** A division flattened into a depth-first list, annotated for tree rendering. */
+export interface DivisionTreeNode {
+  division: Division;
+  /** Nesting depth: direct children of the start division are depth 0. */
+  depth: number;
+  /** `xmlId` of the division that references this one. */
+  parentXmlId: string;
+}
+
+/**
+ * Walk the division hierarchy starting from `startXmlId` (exclusive) and return
+ * a depth-first–ordered flat list of descendant nodes, each annotated with its
+ * `depth` and `parentXmlId`.
+ *
+ * The start division itself is not included.  Cycles and missing refs are
+ * skipped defensively.  Rendering the result as a single list with
+ * depth-based indentation reproduces the tree visually while keeping a flat
+ * structure that a single dnd `SortableContext` can operate over.
+ */
+export function buildDivisionTree(
+  divisions: Division[],
+  startXmlId: string,
+): DivisionTreeNode[] {
+  const out: DivisionTreeNode[] = [];
+  const visited = new Set<string>([startXmlId]);
+  const walk = (parentXmlId: string, depth: number) => {
+    const parent = divisions.find((d) => d.xmlId === parentXmlId);
+    if (!parent) return;
+    for (const ref of parseDivisionRefs(parent.content)) {
+      if (visited.has(ref)) continue;
+      const div = divisions.find((d) => d.xmlId === ref);
+      if (!div) continue;
+      visited.add(ref);
+      out.push({ division: div, depth, parentXmlId });
+      walk(ref, depth + 1);
+    }
+  };
+  walk(startXmlId, 0);
+  return out;
+}
+
+/**
+ * Return the "roots" of the orphaned (unreachable) divisions: orphans that are
+ * not referenced by any other orphan.  Each orphan root heads its own dangling
+ * subtree, so the TOC can render unplaced material as trees rather than a flat
+ * jumble of every disconnected descendant.
+ */
+export function getOrphanRoots(
+  divisions: Division[],
+  rootXmlId: string,
+): Division[] {
+  const orphans = getOrphanedDivisions(divisions, rootXmlId);
+  const orphanIds = new Set(orphans.map((d) => d.xmlId));
+  const referenced = new Set<string>();
+  for (const o of orphans) {
+    for (const ref of parseDivisionRefs(o.content)) {
+      if (orphanIds.has(ref)) referenced.add(ref);
+    }
+  }
+  return orphans.filter((d) => !referenced.has(d.xmlId));
 }
 

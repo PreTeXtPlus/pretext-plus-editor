@@ -895,3 +895,63 @@
   background: #d97706;
 }
 
+/* ── Root division entry (divisions mode) ────────────── */
+.pretext-plus-editor__toc-root-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px 6px 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #dde0e6;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: #444;
+  font-size: 0.83rem;
+  font-weight: 600;
+}
+.pretext-plus-editor__toc-root-btn:hover {
+  background: #eef2fb;
+  color: #111;
+}
+.pretext-plus-editor__toc-root-btn--active {
+  background: #e8edfa;
+  color: #1a3a9c;
+}
+.pretext-plus-editor__toc-root-btn--active .pretext-plus-editor__toc-type-badge {
+  background: #3b5fc0;
+}
+
+/* ── Orphan "place in document" button ───────────────── */
+.pretext-plus-editor__toc-item--orphan {
+  flex-direction: row;
+  align-items: center;
+}
+.pretext-plus-editor__toc-item--orphan .pretext-plus-editor__toc-section-btn {
+  flex: 1;
+  min-width: 0;
+}
+.pretext-plus-editor__toc-orphan-place-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  background: none;
+  border: 1px solid #d97706;
+  border-radius: 4px;
+  color: #d97706;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.pretext-plus-editor__toc-orphan-place-btn:hover {
+  background: #d97706;
+  color: #fff;
+}
+

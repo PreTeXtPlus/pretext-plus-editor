@@ -90,8 +90,9 @@ export function useSectionDnd({
 
     // Determine where the dragged item's center sits relative to the target.
     // Middle 30% of the target → merge zone; outer 70% → reorder zone.
+    const overSection = sections.find((s) => s.id === overId);
     let inMergeZone = false;
-    if (activeRect && isRegularDivision(overId)) {
+    if (activeRect && overSection && isRegularDivision(overSection.type)) {
       const activeCenter = activeRect.top + activeRect.height / 2;
       const overTop = over.rect.top;
       const overHeight = over.rect.height;

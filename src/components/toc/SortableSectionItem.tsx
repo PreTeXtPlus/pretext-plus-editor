@@ -30,6 +30,14 @@ interface SortableSectionItemProps {
    * When undefined, drag follows `!readonly` (the original behavior).
    */
   dragEnabled?: boolean;
+  /** Nesting depth (divisions mode) — drives left indentation. */
+  depth?: number;
+  /**
+   * Divisions mode: remove this division's `<plus:* ref/>` from its parent
+   * (unplace it into the "Unplaced divisions" group) without deleting the
+   * division record.  When provided, an "unplace" action button is shown.
+   */
+  onUnplace?: () => void;
 }
 
 const SortableSectionItem = ({
@@ -50,6 +58,8 @@ const SortableSectionItem = ({
   readonly,
   isLatex,
   dragEnabled,
+  depth,
+  onUnplace,
 }: SortableSectionItemProps) => {
   const dragAllowed = dragEnabled ?? !readonly;
   const isDraggable = dragAllowed && isRegularDivision(section.type);
@@ -62,6 +72,9 @@ const SortableSectionItem = ({
   const style: React.CSSProperties = isBeingDragged
     ? { opacity: 0, pointerEvents: "none" }
     : {};
+  if (depth && depth > 0) {
+    style.paddingLeft = `${depth * 14}px`;
+  }
 
   return (
     <li
@@ -124,13 +137,24 @@ const SortableSectionItem = ({
                 ✎
               </button>
             )}
+            {onUnplace && !isEditing && (
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-action-btn"
+                onClick={onUnplace}
+                title="Remove from contents (move to unplaced)"
+                aria-label={`Remove "${section.title}" from the table of contents`}
+              >
+                ⤓
+              </button>
+            )}
             <button
               type="button"
               className="pretext-plus-editor__toc-action-btn pretext-plus-editor__toc-action-btn--danger"
               onClick={onRemove}
               disabled={!canRemove}
-              title="Remove"
-              aria-label={`Remove "${section.title}"`}
+              title="Delete division permanently"
+              aria-label={`Delete "${section.title}"`}
             >
               ✕
             </button>
