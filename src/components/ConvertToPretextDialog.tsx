@@ -1,13 +1,16 @@
 import { useEffect } from "react";
 import { Editor } from "@monaco-editor/react";
+import type { SourceFormat } from "../types/editor";
 import "./dialog.css";
 
 interface ConvertToPretextDialogProps {
-  /** The current LaTeX source to display (read-only) on the left. */
-  latexSource: string;
+  /** The current source to display (read-only) on the left. */
+  sourceContent: string;
+  /** The format of `sourceContent` — used for the left-panel label and Monaco language. */
+  sourceFormat: SourceFormat;
   /** The already-converted PreTeXt to display (read-only) on the right. */
   pretextSource: string;
-  /** Called when the user confirms creating a converted project copy. */
+  /** Called when the user confirms creating a converted PreTeXt division. */
   onConfirm: () => void;
   /** Called when the dialog should close without converting. */
   onClose: () => void;
@@ -24,13 +27,25 @@ const editorOptions = {
   padding: { top: 10, bottom: 10 },
 };
 
+const FORMAT_LABELS: Record<SourceFormat, string> = {
+  latex: "LaTeX",
+  markdown: "Markdown",
+  pretext: "PreTeXt",
+};
+
+const FORMAT_LANGUAGES: Record<SourceFormat, string> = {
+  latex: "latex",
+  markdown: "markdown",
+  pretext: "xml",
+};
+
 /**
- * Confirmation dialog shown before creating a new project copy in PreTeXt
- * format from the current LaTeX source. Displays both sources side-by-side
- * so the user can review before continuing.
+ * Confirmation dialog shown before converting a non-PreTeXt division into a
+ * new PreTeXt division. Displays both sources side-by-side for review.
  */
 const ConvertToPretextDialog = ({
-  latexSource,
+  sourceContent,
+  sourceFormat,
   pretextSource,
   onConfirm,
   onClose,
@@ -48,6 +63,8 @@ const ConvertToPretextDialog = ({
     onClose();
   };
 
+  const sourceLabel = FORMAT_LABELS[sourceFormat] ?? sourceFormat;
+
   return (
     <div className="pretext-plus-editor__dialog-overlay" onClick={onClose}>
       <div
@@ -63,11 +80,11 @@ const ConvertToPretextDialog = ({
               id="pretext-plus-editor-convert-dialog-title"
               className="pretext-plus-editor__dialog-title"
             >
-              Create PreTeXt Project Copy
+              Convert Division to PreTeXt
             </h2>
             <p className="pretext-plus-editor__dialog-copy">
-              Create a new project using the converted PreTeXt shown below. Your
-              current LaTeX project will remain unchanged.
+              Add a new PreTeXt division using the converted source below. Your
+              current {sourceLabel} division will remain unchanged.
             </p>
           </div>
           <button
@@ -84,15 +101,15 @@ const ConvertToPretextDialog = ({
           <div className="pretext-plus-editor__dialog-section">
             <div className="pretext-plus-editor__dialog-label-row">
               <label className="pretext-plus-editor__dialog-label">
-                Current LaTeX Source
+                Current {sourceLabel} Source
               </label>
             </div>
             <div className="pretext-plus-editor__dialog-editor">
               <Editor
                 options={editorOptions}
                 height="100%"
-                language="latex"
-                value={latexSource}
+                language={FORMAT_LANGUAGES[sourceFormat] ?? "plaintext"}
+                value={sourceContent}
               />
             </div>
           </div>
@@ -127,7 +144,7 @@ const ConvertToPretextDialog = ({
             className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--danger"
             onClick={handleConfirm}
           >
-            Yes, Create Copy
+            Create PreTeXt Division
           </button>
         </div>
       </div>
