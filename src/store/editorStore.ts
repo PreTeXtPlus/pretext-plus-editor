@@ -14,14 +14,14 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, SourceFormat } from "../types/editor";
+import type { Asset, FeedbackSubmission, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { getSectionAttributes } from "../sectionUtils";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type SectionChanges = {
+export type DivisionChanges = {
   title?: string;
   type?: DivisionType;
   xmlId?: string | null;
@@ -42,35 +42,21 @@ type ModalKey =
  * the callbacks close over changing state.
  */
 export interface EditorCallbacks {
-  // TOC section / division actions (pre-routed for current mode)
-  selectSection: (id: string) => void;
-  addSection: (afterId: string | null) => void;
-  removeSection: (id: string) => void;
-  updateSection: (id: string, changes: SectionChanges) => void;
-  reorderSections: (sections: Division[]) => void;
-  mergeSections?: (sourceId: string, targetId: string) => void;
-  addFirstSection?: () => void;
-  refresh?: () => void;
-  addIntroduction: () => void;
-  addConclusion: () => void;
-  toggleEditMode?: () => void;
+  selectDivision: (id: string) => void;
+  addDivision: (afterId: string | null) => void;
+  removeDivision: (id: string) => void;
+  updateDivision: (id: string, changes: DivisionChanges) => void;
   divisionContentChange?: (xmlId: string, content: string) => void;
-
-  // Content updates
   updateContent: (content: string | undefined) => void;
-  updateSectionContent: (content: string | undefined) => void;
-  updateChapterBodyContent: (content: string | undefined) => void;
   handleDivisionContentChange: (content: string | undefined) => void;
-
-  // Asset insertion into Monaco cursor
   assetInsert: (asset: Asset) => void;
-
-  // Title
   updateTitle: (title: string) => void;
+  feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
+  insertContentAtCursor?: (content: string) => void;
 }
 
 export interface EditorStoreState {
-  // ── Data synced from host props + useSectionedEditing ─────────────────────
+  // ── Data synced from host props ───────────────────────────────────────────
 
   source: string;
   sourceFormat: SourceFormat;
@@ -90,27 +76,23 @@ export interface EditorStoreState {
   rootDivisionId: string | undefined;
   activeDivisionId: string | null;
 
-  // Sections — legacy sectioned-editing mode (from useSectionedEditing)
-  sections: Division[];
-  currentSectionId: string | null;
-  editMode: "document" | "sectioned";
-  parseError: string | null;
-  activeSourceContent: string;
-  isBookChapterBody: boolean;
-
   // Computed flags (re-derived each sync)
   isDivisionsMode: boolean;
-  tocReadonly: boolean;
-  hideSectionList: boolean;
   isMarkdownDoc: boolean;
   isLatexDoc: boolean;
   isNonPretextDoc: boolean;
   canConvertToPretext: boolean;
 
+  /** The source string currently open in the code editor. */
+  activeEditorSource: string;
+
+  /** True when the host passed `onFeedbackSubmit`. Controls whether feedback UI is shown. */
+  hasFeedback: boolean;
+
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
-  showFull: boolean;
+  showFullPreview: boolean;
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
   isLatexDialogOpen: boolean;
@@ -132,7 +114,7 @@ export interface EditorStoreState {
   syncState: (partial: Partial<EditorSyncableState>) => void;
 
   // UI
-  setShowFull: (show: boolean) => void;
+  setShowFullPreview: (show: boolean) => void;
   setActiveTab: (tab: "editor" | "preview") => void;
   setIsNarrowScreen: (narrow: boolean) => void;
   setIsTocCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -140,25 +122,13 @@ export interface EditorStoreState {
   closeModal: (modal: ModalKey) => void;
   setInternalTitle: (title: string) => void;
 
-  // TOC section actions (stable — delegate to callbacksRef)
+  // TOC section / division actions (stable — delegate to bag.cbs)
   selectSection: (id: string) => void;
   addSection: (afterId: string | null) => void;
   removeSection: (id: string) => void;
-  updateSection: (id: string, changes: SectionChanges) => void;
-  reorderSections: (sections: Division[]) => void;
-  addIntroduction: () => void;
-  addConclusion: () => void;
-  /** Merge two sections (legacy mode only — no-ops in divisions mode). */
-  mergeSections: (sourceId: string, targetId: string) => void;
-  /** Wrap document content into a first section (legacy mode only). */
-  addFirstSection: () => void;
-  /** Toggle between document / sectioned edit mode (legacy mode only). */
-  toggleEditMode: () => void;
+  updateSection: (id: string, changes: DivisionChanges) => void;
   /** Update a parent division's content after a structural DnD change. */
   divisionContentChange: (xmlId: string, content: string) => void;
-  /** Refresh sections (only active in legacy sectioned mode, no-ops otherwise). */
-  refreshSections: () => void;
-  setCurrentSectionId: (id: string | null) => void;
 
   // TOC inline edit form
   startSectionEdit: (section: Division) => void;
@@ -168,7 +138,9 @@ export interface EditorStoreState {
 
   // Assets / content
   insertAsset: (asset: Asset) => void;
+  insertAtCursor: (content: string) => void;
   updateTitle: (title: string) => void;
+  feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
 
 /** The subset of EditorStoreState that Editors.tsx syncs on each render. */
@@ -189,19 +161,13 @@ export type EditorSyncableState = Pick<
   | "divisions"
   | "rootDivisionId"
   | "activeDivisionId"
-  | "sections"
-  | "currentSectionId"
-  | "editMode"
-  | "parseError"
-  | "activeSourceContent"
-  | "isBookChapterBody"
   | "isDivisionsMode"
-  | "tocReadonly"
-  | "hideSectionList"
   | "isMarkdownDoc"
   | "isLatexDoc"
   | "isNonPretextDoc"
   | "canConvertToPretext"
+  | "activeEditorSource"
+  | "hasFeedback"
   // Internal fallback state that can be updated by Editors on docinfo save
   | "internalDocinfo"
   | "internalCommonDocinfo"
@@ -242,16 +208,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
   const noop = () => {};
   const bag: { cbs: EditorCallbacks } = {
     cbs: {
-      selectSection: noop,
-      addSection: noop,
-      removeSection: noop,
-      updateSection: noop,
-      reorderSections: noop,
-      addIntroduction: noop,
-      addConclusion: noop,
+      selectDivision: noop,
+      addDivision: noop,
+      removeDivision: noop,
+      updateDivision: noop,
       updateContent: noop,
-      updateSectionContent: noop,
-      updateChapterBodyContent: noop,
       handleDivisionContentChange: noop,
       assetInsert: noop,
       updateTitle: noop,
@@ -275,23 +236,17 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     divisions: init.divisions,
     rootDivisionId: undefined,
     activeDivisionId: init.activeDivisionId,
-    sections: [],
-    currentSectionId: null,
-    editMode: "document",
-    parseError: null,
-    activeSourceContent: init.source,
-    isBookChapterBody: false,
     isDivisionsMode: init.divisions !== undefined,
-    tocReadonly: false,
-    hideSectionList: false,
     isMarkdownDoc: init.sourceFormat === "markdown",
     isLatexDoc: init.sourceFormat === "latex",
     isNonPretextDoc: init.sourceFormat !== "pretext",
     canConvertToPretext: true,
+    activeEditorSource: init.source,
+    hasFeedback: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: false,
-    showFull: true,
+    showFullPreview: true,
     isNarrowScreen:
       typeof window !== "undefined" ? window.innerWidth < 800 : false,
     activeTab: "editor",
@@ -309,7 +264,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
 
-    setShowFull: (showFull) => set({ showFull }),
+    setShowFullPreview: (showFullPreview) => set({ showFullPreview: showFullPreview }),
     setActiveTab: (activeTab) => set({ activeTab }),
     setIsNarrowScreen: (isNarrowScreen) => set({ isNarrowScreen }),
     setIsTocCollapsed: (value) =>
@@ -321,22 +276,13 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     closeModal: (modal) => set({ [modal]: false } as Pick<EditorStoreState, ModalKey>),
     setInternalTitle: (internalTitle) => set({ internalTitle }),
 
-    // TOC section actions — stable closures that read through bag.cbs
-    selectSection: (id) => bag.cbs.selectSection(id),
-    addSection: (afterId) => bag.cbs.addSection(afterId),
-    removeSection: (id) => bag.cbs.removeSection(id),
-    updateSection: (id, changes) => bag.cbs.updateSection(id, changes),
-    reorderSections: (sections) => bag.cbs.reorderSections(sections),
-    addIntroduction: () => bag.cbs.addIntroduction(),
-    addConclusion: () => bag.cbs.addConclusion(),
-    mergeSections: (sourceId, targetId) =>
-      bag.cbs.mergeSections?.(sourceId, targetId),
-    addFirstSection: () => bag.cbs.addFirstSection?.(),
-    toggleEditMode: () => bag.cbs.toggleEditMode?.(),
+    // TOC section / division actions — stable closures that read through bag.cbs
+    selectSection: (id) => bag.cbs.selectDivision(id),
+    addSection: (afterId) => bag.cbs.addDivision(afterId),
+    removeSection: (id) => bag.cbs.removeDivision(id),
+    updateSection: (id, changes) => bag.cbs.updateDivision(id, changes),
     divisionContentChange: (xmlId, content) =>
       bag.cbs.divisionContentChange?.(xmlId, content),
-    refreshSections: () => bag.cbs.refresh?.(),
-    setCurrentSectionId: (id) => set({ currentSectionId: id }),
 
     // TOC inline edit form
     startSectionEdit: (section) => {
@@ -355,7 +301,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     commitSectionEdit: () => {
       const { editingId, editDraft } = get();
       if (editingId && editDraft) {
-        bag.cbs.updateSection(editingId, {
+        bag.cbs.updateDivision(editingId, {
           title: editDraft.title.trim() || undefined,
           type: editDraft.type,
           xmlId: editDraft.xmlId.trim() || null,
@@ -367,7 +313,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     cancelSectionEdit: () => set({ editingId: null, editDraft: null }),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
+    insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
     updateTitle: (title) => bag.cbs.updateTitle(title),
+    feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));
 
   return { store, bindCallbacks: (cbs) => { bag.cbs = cbs; } };

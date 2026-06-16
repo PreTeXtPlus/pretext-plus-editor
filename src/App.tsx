@@ -242,10 +242,6 @@ function App() {
     defaultContent,
   );
   const [title, setTitle] = useState("Document Title");
-  const [editMode, setEditMode] = useState<"document" | "sectioned">(
-    "document",
-  );
-
   // ---------------------------------------------------------------------------
   // Divisions mode state
   // ---------------------------------------------------------------------------
@@ -300,7 +296,6 @@ function App() {
     setSourceFormat("pretext");
     setPretextSource(defaultContent);
     setTitle("Document Title");
-    setEditMode("document");
     setProjectType("article");
   };
 
@@ -310,7 +305,6 @@ function App() {
     setSourceFormat("latex");
     setPretextSource(undefined);
     setTitle("Testing LaTeX Source Mode");
-    setEditMode("document");
     setProjectType("article");
   };
 
@@ -320,7 +314,6 @@ function App() {
     setSourceFormat("markdown");
     setPretextSource(undefined);
     setTitle("Testing Markdown Source Mode");
-    setEditMode("document");
     setProjectType("article");
   };
 
@@ -331,7 +324,6 @@ function App() {
     setSource("");
     setSourceFormat("pretext");
     setPretextSource(undefined);
-    setEditMode("document");
     setProjectType("article");
   };
 
@@ -342,7 +334,6 @@ function App() {
     setSource("");
     setSourceFormat("pretext");
     setPretextSource(undefined);
-    setEditMode("document");
     setProjectType("book");
   };
 
@@ -459,7 +450,7 @@ function App() {
           : sourceFormat === "markdown"
           ? "Markdown"
           : "PreTeXt"
-      } | Mode: ${editMode}`;
+      }`;
 
   return (
     <>
@@ -508,15 +499,6 @@ function App() {
         projectUrl="https://example.com/projects/demo"
         onSave={() => console.log("Save triggered via keyboard")}
         onPreviewRebuild={handlePreviewRebuild}
-        editMode={isDivisionsMode ? undefined : editMode}
-        onEditModeChange={
-          isDivisionsMode
-            ? undefined
-            : (mode) => {
-                console.log("Edit mode changed to:", mode);
-                setEditMode(mode);
-              }
-        }
         projectType={projectType}
         projectAssets={projectAssets}
         libraryAssets={libraryAssets}

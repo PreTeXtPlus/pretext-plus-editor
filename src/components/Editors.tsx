@@ -8,11 +8,9 @@ import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import AssetManagerModal from "./AssetManagerModal";
-import FeedbackLink from "./FeedbackLink";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import ErrorBoundary from "./ErrorBoundary";
-import { useSectionedEditing } from "./useSectionedEditing";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
@@ -32,6 +30,8 @@ import {
   stripSectionWrapper,
   stripLatexSectionWrapper,
   normalizeSelfClosingRefs,
+  parseDivisionRefsWithTypes,
+  createDivisionWithId,
 } from "../sectionUtils";
 import {
   createEditorStore,
@@ -43,7 +43,7 @@ import { useEditorStore } from "../store/hooks";
 
 const startingContent = defaultContent;
 
-// ── Public prop interface (unchanged) ─────────────────────────────────────────
+// ── Public prop interface ─────────────────────────────────────────
 
 export interface editorProps {
   /** The source content string (PreTeXt XML, LaTeX, or Markdown) of the current editor view. */
@@ -131,30 +131,6 @@ export interface editorProps {
     title: string,
     postToIframe: (url: string, data: unknown) => void,
   ) => void;
-  /**
-   * Controls the editing mode from the outside.  When provided, the
-   * component operates in controlled mode; omit to use internal state
-   * (uncontrolled).  "document" can also mean a single chapter in a book project.
-   */
-  editMode?: "document" | "sectioned";
-  /**
-   * Initial editing mode for uncontrolled usage.  Defaults to `"document"`.
-   */
-  defaultEditMode?: "document" | "sectioned";
-  /**
-   * Called when the user switches between `"document"` and `"sectioned"` mode.
-   */
-  onEditModeChange?: (mode: "document" | "sectioned") => void;
-  /**
-   * Called when the section list changes structurally (add, remove, reorder,
-   * or rename).  Only fired in `"sectioned"` mode.
-   */
-  onSectionsChange?: (sections: Division[]) => void;
-  /**
-   * Called when the content of a single section is edited.  Only fired in
-   * `"sectioned"` mode.
-   */
-  onSectionChange?: (section: Division) => void;
   /**
    * Whether this is an `"article"` (default) or `"book"` project.
    * When `"book"`, the TOC shows a chapter list that expands to show sections.
@@ -300,6 +276,7 @@ const Editors = (props: editorProps) => {
       projectType: props.projectType,
       divisions: props.divisions,
       activeDivisionId: props.activeDivisionId ?? initRootDivision?.xmlId ?? null,
+      // TODO: do we need assets here?  Anything else missing?
     });
   });
 
@@ -321,8 +298,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const { source, sourceFormat, pretextSource } = props;
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
-  const showFull = useEditorStore((s) => s.showFull);
-  const setShowFull = useEditorStore((s) => s.setShowFull);
+  const showFullPreview = useEditorStore((s) => s.showFullPreview);
   const isNarrowScreen = useEditorStore((s) => s.isNarrowScreen);
   const setIsNarrowScreen = useEditorStore((s) => s.setIsNarrowScreen);
   const activeTab = useEditorStore((s) => s.activeTab);
@@ -374,39 +350,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     };
     props.onContentChange(normalizedSourceContent, nextState);
   };
-
-  // ── Sectioned editing ────────────────────────────────────────────────────
-  const {
-    editMode,
-    sections,
-    currentSection,
-    currentSectionId,
-    setCurrentSectionId,
-    activeSourceContent,
-    updateSectionContent,
-    isBookChapterBody,
-    updateChapterBodyContent,
-    handleRefreshSections,
-    switchEditMode,
-    handleSelectSectionInDocMode,
-    handleAddFirstSection,
-    handleAddSection,
-    handleAddIntroduction,
-    handleAddConclusion,
-    handleRemoveSection,
-    handleUpdateSectionMetadata,
-    handleReorderSections,
-    handleMergeSection,
-    parseError,
-  } = useSectionedEditing({
-    contentState,
-    controlledEditMode: props.editMode,
-    defaultEditMode: props.defaultEditMode,
-    onEditModeChange: props.onEditModeChange,
-    onSectionsChange: props.onSectionsChange,
-    onSectionChange: props.onSectionChange,
-    onContentUpdate: updateContentState,
-  });
 
   // ── Divisions mode ───────────────────────────────────────────────────────
   const isDivisionsMode = props.divisions !== undefined;
@@ -475,6 +418,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
       pretextSource:
         activeDivisionFormat === "pretext" ? wrapped : undefined,
     });
+
+    // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
+    // that appeared in the edited content but don't yet have a matching division.
+    if (props.onDivisionAdd && props.divisions) {
+      const existingIds = new Set(props.divisions.map((d) => d.xmlId));
+      for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped)) {
+        if (!existingIds.has(xmlId)) {
+          props.onDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
+          existingIds.add(xmlId); // prevent duplicates within the same edit
+        }
+      }
+    }
   };
 
   const handleDivisionSelect = (xmlId: string) => {
@@ -518,40 +473,24 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // without requiring stable identities for any of the callback functions.
   useLayoutEffect(() => {
     bindCallbacks({
-      selectSection: isDivisionsMode
-        ? handleDivisionSelect
-        : editMode === "sectioned"
-        ? setCurrentSectionId
-        : handleSelectSectionInDocMode,
-      addSection: isDivisionsMode ? handleDivisionAdd : handleAddSection,
-      removeSection: isDivisionsMode
+      selectDivision: isDivisionsMode ? handleDivisionSelect : () => {},
+      addDivision: isDivisionsMode ? () => handleDivisionAdd() : () => {},
+      removeDivision: isDivisionsMode
         ? (xmlId) => props.onDivisionRemove?.(xmlId)
-        : handleRemoveSection,
-      updateSection: isDivisionsMode
+        : () => {},
+      updateDivision: isDivisionsMode
         ? (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes)
-        : handleUpdateSectionMetadata,
-      reorderSections: handleReorderSections,
-      mergeSections: isDivisionsMode ? undefined : handleMergeSection,
-      addFirstSection: isDivisionsMode ? undefined : handleAddFirstSection,
-      refresh:
-        isDivisionsMode || editMode !== "sectioned"
-          ? undefined
-          : handleRefreshSections,
-      addIntroduction: handleAddIntroduction,
-      addConclusion: handleAddConclusion,
-      toggleEditMode: isDivisionsMode
-        ? undefined
-        : () => switchEditMode(editMode === "document" ? "sectioned" : "document"),
+        : () => {},
       divisionContentChange: props.onDivisionContentChange,
       updateContent: updateContentState,
-      updateSectionContent,
-      updateChapterBodyContent,
       handleDivisionContentChange,
       assetInsert: handleAssetInsert,
+      insertContentAtCursor: (content) => codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
         setInternalTitle(value);
         props.onTitleChange?.(value);
       },
+      feedbackSubmit: props.onFeedbackSubmit,
     });
   });
 
@@ -575,21 +514,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
       divisions: props.divisions,
       rootDivisionId: rootDivision?.xmlId,
       activeDivisionId,
-      sections,
-      currentSectionId,
-      editMode,
-      parseError,
-      activeSourceContent: isDivisionsMode
-        ? divisionActiveSource
-        : activeSourceContent,
-      isBookChapterBody,
       isDivisionsMode,
-      tocReadonly: isDivisionsMode ? false : editMode === "document",
-      hideSectionList: isMarkdownDoc,
       isMarkdownDoc,
       isLatexDoc,
       isNonPretextDoc,
       canConvertToPretext: divisionConvertedPretext !== undefined,
+      activeEditorSource: isDivisionsMode ? divisionActiveSource : contentState.sourceContent,
+      hasFeedback: props.onFeedbackSubmit !== undefined,
     });
   });
 
@@ -598,13 +529,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (isDivisionsMode) {
       if (activeDivision && activeDivisionFormat === "pretext") {
         return activeDivision.content || undefined;
-      }
-      return contentState.pretextSource ?? undefined;
-    }
-    const effectiveEditMode = editMode;
-    if (effectiveEditMode === "sectioned" && currentSection) {
-      if (contentState.sourceFormat === "pretext") {
-        return currentSection.content || undefined;
       }
       return contentState.pretextSource ?? undefined;
     }
@@ -617,9 +541,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   })();
 
   const previewUnavailable =
-    !isDivisionsMode &&
-    editMode !== "sectioned" &&
-    contentState.pretextError !== undefined;
+    !isDivisionsMode && contentState.pretextError !== undefined;
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
@@ -660,18 +582,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
-      content={isDivisionsMode ? divisionActiveSource : activeSourceContent}
+      content={isDivisionsMode ? divisionActiveSource : contentState.sourceContent}
       sourceFormat={
         isDivisionsMode ? activeDivisionFormat : contentState.sourceFormat
       }
       onChange={
-        isDivisionsMode
-          ? handleDivisionContentChange
-          : editMode === "sectioned"
-          ? (c) => updateSectionContent(c)
-          : isBookChapterBody
-          ? (c) => updateChapterBodyContent(c)
-          : updateContentState
+        isDivisionsMode ? handleDivisionContentChange : updateContentState
       }
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
@@ -706,7 +622,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         </p>
       </div>
     );
-  } else if (showFull && props.onPreviewRebuild) {
+  } else if (showFullPreview && props.onPreviewRebuild) {
     preview = (
       <FullPreview
         ref={fullPreviewRef}
@@ -717,11 +633,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     );
   } else {
     const visualContent =
-      isDivisionsMode && activeDivision
-        ? divisionActiveSource
-        : editMode === "sectioned" && currentSection
-        ? activeSourceContent
-        : previewContent || "";
+      isDivisionsMode && activeDivision ? divisionActiveSource : previewContent || "";
     const effectiveFormat = isDivisionsMode
       ? activeDivisionFormat
       : contentState.sourceFormat;
@@ -740,8 +652,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
         onChange={(content) => {
           if (isDivisionsMode) {
             handleDivisionContentChange(content);
-          } else if (editMode === "sectioned") {
-            updateSectionContent(content);
           } else {
             updateContentState(content);
           }
@@ -754,7 +664,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // Now only needs the props TableOfContents still requires externally.
   // Deep data + callbacks come from the store.
   const tocSidebar =
-    isMarkdownDoc && props.projectAssets === undefined ? null : (
+    !isDivisionsMode && props.projectAssets === undefined ? null : (
       <TableOfContents
         isCollapsed={isTocCollapsed}
         onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
@@ -859,63 +769,26 @@ const EditorsInner = (props: EditorsInnerProps) => {
     );
   }
 
-  void activeSourceContent;
-
   return (
     <div className="pretext-plus-editor" onKeyDown={handleKeyDown}>
       <MenuBar
-        isChecked={showFull}
-        onChange={() => setShowFull(!showFull)}
-        title={title}
-        onTitleChange={(value) => {
-          setInternalTitle(value);
-          props.onTitleChange?.(value);
-        }}
         onSaveButton={props.onSaveButton}
         saveButtonLabel={props.saveButtonLabel}
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
-        feedbackControl={
-          props.onFeedbackSubmit ? (
-            <FeedbackLink
-              label="Give feedback"
-              context="main-editor"
-              projectUrl={props.projectUrl}
-              currentSource={contentState.sourceContent}
-              sourceFormat={contentState.sourceFormat}
-              title={title}
-              onSubmit={props.onFeedbackSubmit}
-            />
-          ) : undefined
-        }
         showPreviewModeToggle={props.onPreviewRebuild !== undefined}
       />
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary
           resetKeys={[
-            isDivisionsMode ? divisionActiveSource : activeSourceContent,
+            isDivisionsMode ? divisionActiveSource : contentState.sourceContent,
             activeDivisionId,
           ]}
         >
           {editorDisplays}
         </ErrorBoundary>
         {isLatexDialogOpen ? (
-          <LatexImportDialog
-            onClose={() => closeModal("isLatexDialogOpen")}
-            feedbackControl={
-              props.onFeedbackSubmit ? (
-                <FeedbackLink
-                  label="Give feedback on conversion"
-                  context="latex-conversion"
-                  projectUrl={props.projectUrl}
-                  currentSource={contentState.sourceContent}
-                  sourceFormat={contentState.sourceFormat}
-                  title={title}
-                  onSubmit={props.onFeedbackSubmit}
-                />
-              ) : undefined
-            }
-          />
+          <LatexImportDialog onClose={() => closeModal("isLatexDialogOpen")} />
         ) : null}
         {isConvertDialogOpen && activeDivision && divisionConvertedPretext ? (
           <ConvertToPretextDialog
@@ -958,9 +831,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
           <AssetManagerModal
             open={isAssetPickerOpen}
             onClose={() => closeModal("isAssetPickerOpen")}
-            source={activeSourceContent}
-            projectAssets={props.projectAssets}
-            libraryAssets={props.libraryAssets}
             onLoadAssets={props.onLoadAssets}
             onLoadLibraryAssets={props.onLoadLibraryAssets}
             onAddFromLibrary={props.onAssetAddFromLibrary}

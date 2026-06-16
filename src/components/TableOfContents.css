@@ -104,9 +104,29 @@
 .pretext-plus-editor__toc-item-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 6px 0 4px;
+  gap: 2px;
+  padding: 0 4px 0 4px;
   min-height: 32px;
+}
+
+/* ── Chevron expand/collapse toggle ──────────────────── */
+.pretext-plus-editor__toc-expand-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 0.7rem;
+  color: #aaa;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  border-radius: 3px;
+}
+
+.pretext-plus-editor__toc-expand-btn:hover {
+  color: #555;
+  background: #dde0e6;
 }
 
 /* ── Inline edit form ─────────────────────────────────── */
@@ -205,84 +225,6 @@
   background: #e0e8ff;
 }
 
-.pretext-plus-editor__toc-item--dragging {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* ── Drag handle ─────────────────────────────────────── */
-.pretext-plus-editor__toc-drag-handle {
-  font-size: 1rem;
-  color: #bbb;
-  cursor: grab;
-  flex-shrink: 0;
-  line-height: 1;
-  padding: 0 2px;
-  /* Prevent text cursor on drag */
-  -webkit-user-drag: element;
-}
-
-.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-drag-handle {  color: #888;
-}
-
-.pretext-plus-editor__toc-drag-handle:active {
-  cursor: grabbing;
-}
-
-/* No drag handle padding for non-draggable intro/conclusion */
-.pretext-plus-editor__toc-item--introduction .pretext-plus-editor__toc-drag-handle,
-.pretext-plus-editor__toc-item--conclusion .pretext-plus-editor__toc-drag-handle {
-  display: none;
-}
-
-/* Compensate missing drag handle with left padding for intro/conclusion */
-.pretext-plus-editor__toc-item--introduction .pretext-plus-editor__toc-item-row,
-.pretext-plus-editor__toc-item--conclusion .pretext-plus-editor__toc-item-row {
-  padding-left: 10px;
-}
-
-/* ── Type badge ──────────────────────────────────────── */
-.pretext-plus-editor__toc-type-badge {
-  font-size: 0.62rem;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  flex-shrink: 0;
-  color: #fff;
-  background: #6b7280;
-}
-
-.pretext-plus-editor__toc-item--introduction .pretext-plus-editor__toc-type-badge {
-  background: #059669;
-}
-
-.pretext-plus-editor__toc-item--conclusion .pretext-plus-editor__toc-type-badge {
-  background: #7c3aed;
-}
-
-/* ── "Edit full document" link at top of list ────────── */
-.pretext-plus-editor__toc-fulldoc-link {
-  display: block;
-  width: 100%;
-  background: none;
-  border: none;
-  border-bottom: 1px solid #dde0e6;
-  padding: 5px 10px 6px;
-  font: inherit;
-  font-size: 0.78rem;
-  color: #2563eb;
-  cursor: pointer;
-  text-align: left;
-  flex-shrink: 0;
-  box-sizing: border-box;
-}
-
-.pretext-plus-editor__toc-fulldoc-link:hover {
-  background: #eff6ff;
-  text-decoration: underline;
-}
 
 .pretext-plus-editor__toc-select {
   flex: 1;
@@ -309,11 +251,105 @@
   font-size: 0.83rem;
 }
 
-/* Hint that double-click opens rename — only on non-readonly rows */
-.pretext-plus-editor__toc-item:not(.pretext-plus-editor__toc-item--editing)
-  .pretext-plus-editor__toc-select:hover
-  .pretext-plus-editor__toc-title {
-  text-decoration: underline dotted #aaa;
+/* ── Action buttons wrapper (dots menu) ──────────────── */
+.pretext-plus-editor__toc-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}
+
+.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Dots menu ───────────────────────────────────────── */
+.pretext-plus-editor__toc-div-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-div-menu-trigger {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 1px 5px;
+  font-size: 0.9rem;
+  color: #666;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-div-menu-trigger:hover {
+  background: #dde0e6;
+  border-color: #b0b5c0;
+  color: #111;
+}
+
+.pretext-plus-editor__toc-div-menu-popup {
+  position: absolute;
+  right: 0;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.13);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 170px;
+}
+
+.pretext-plus-editor__toc-div-menu-popup--below {
+  top: calc(100% + 3px);
+}
+
+.pretext-plus-editor__toc-div-menu-popup--above {
+  bottom: calc(100% + 3px);
+}
+
+.pretext-plus-editor__toc-div-menu-item {
+  background: none;
+  border: none;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-align: left;
+  color: #333;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-div-menu-item:hover {
+  background: #e8edf8;
+  color: #1a3a9c;
+}
+
+.pretext-plus-editor__toc-div-menu-item--danger {
+  color: #b91c1c;
+}
+
+.pretext-plus-editor__toc-div-menu-item--danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ── No-sections placeholder ─────────────────────────── */
+.pretext-plus-editor__toc-no-sections {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  color: #888;
+  font-size: 0.82rem;
+  text-align: center;
 }
 
 /* ── Rename input ────────────────────────────────────── */
@@ -327,261 +363,6 @@
   outline: none;
   background: #fff;
 }
-
-/* ── Action buttons — shown inline at right on hover/active ── */
-.pretext-plus-editor__toc-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.1s;
-}
-
-.pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-actions,
-.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.pretext-plus-editor__toc-action-btn {
-  background: none;
-  border: 1px solid transparent;
-  border-radius: 3px;
-  cursor: pointer;
-  padding: 2px 5px;
-  font-size: 0.78rem;
-  color: #555;
-  line-height: 1.3;
-  flex-shrink: 0;
-}
-
-.pretext-plus-editor__toc-action-btn:hover:not(:disabled) {
-  background: #dde0e6;
-  border-color: #b0b5c0;
-  color: #111;
-}
-
-.pretext-plus-editor__toc-action-btn:disabled {
-  opacity: 0.25;
-  cursor: not-allowed;
-}
-
-.pretext-plus-editor__toc-action-btn--danger:hover:not(:disabled) {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #dc2626;
-}
-
-/* ── Merge-target highlight (drag-to-merge) ──────────── */
-.pretext-plus-editor__toc-item--merge-target > .pretext-plus-editor__toc-item-row {
-  background: #fef3c7;
-  outline: 2px dashed #d97706;
-  outline-offset: -2px;
-}
-
-.pretext-plus-editor__toc-item--merge-target > .pretext-plus-editor__toc-item-row::after {
-  content: "⊕ merge";
-  font-size: 0.7rem;
-  color: #d97706;
-  font-weight: 600;
-  margin-left: auto;
-  padding-right: 6px;
-  flex-shrink: 0;
-}
-
-/* ── Drop indicator lines ────────────────────────── */
-.pretext-plus-editor__toc-item--drop-before {
-  border-top: 2px solid #3b82f6;
-}
-
-.pretext-plus-editor__toc-item--drop-after {
-  border-bottom: 2px solid #3b82f6;
-}
-
-.pretext-plus-editor__toc-chapter-item--drop-before {
-  box-shadow: inset 0 2px 0 0 #3b82f6;
-}
-
-.pretext-plus-editor__toc-chapter-item--drop-after {
-  box-shadow: inset 0 -2px 0 0 #3b82f6;
-}
-
-/* ── Drag overlay (floating card) ────────────────── */
-.pretext-plus-editor__toc-drag-overlay {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: #fff;
-  border: 1px solid #c7d0de;
-  border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
-  font-size: 0.85rem;
-  pointer-events: none;
-  width: 230px;
-  cursor: grabbing;
-}
-
-.pretext-plus-editor__toc-drag-overlay-badge {
-  background: #e2e8f0;
-  color: #475569;
-  font-size: 0.7rem;
-  padding: 1px 5px;
-  border-radius: 3px;
-  flex-shrink: 0;
-  font-weight: 600;
-}
-
-.pretext-plus-editor__toc-drag-overlay-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #1e293b;
-}
-
-/* ── Chapter list (book mode) ────────────────────────── */
-
-/* Chapter items live in the main toc-list; no separate list needed */
-.pretext-plus-editor__toc-chapter-item {
-  display: flex;
-  flex-direction: column;
-  border-left: 3px solid transparent;
-}
-
-.pretext-plus-editor__toc-chapter-item--active {
-  border-left-color: #7c3aed;
-}
-
-.pretext-plus-editor__toc-chapter-row {
-  display: flex;
-  align-items: center;
-  min-height: 34px;
-  padding: 0 6px 0 2px;
-}
-
-/* Chapter drag handle — shares base styles with section drag handle */
-.pretext-plus-editor__toc-chapter-drag-handle {
-  font-size: 1rem;
-  color: #bbb;
-  cursor: grab;
-  flex-shrink: 0;
-  line-height: 1;
-  padding: 0 2px;
-  -webkit-user-drag: element;
-}
-
-.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-drag-handle {
-  color: #888;
-}
-
-.pretext-plus-editor__toc-chapter-drag-handle:active {
-  cursor: grabbing;
-}
-
-.pretext-plus-editor__toc-chapter-expand {
-  font-size: 0.72rem;
-  color: #999;
-  width: 14px;
-  flex-shrink: 0;
-  text-align: center;
-  line-height: 1;
-  background: none;
-  border: none;
-  padding: 2px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.pretext-plus-editor__toc-chapter-expand:disabled {
-  cursor: default;
-  opacity: 0.6;
-}
-
-.pretext-plus-editor__toc-chapter-expand:not(:disabled):hover {
-  color: #555;
-}
-
-.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-expand {
-  color: #7c3aed;
-}
-
-.pretext-plus-editor__toc-chapter-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: #333;
-  padding: 5px 4px 5px 0;
-}
-
-.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-btn {
-  color: #111;
-}
-
-.pretext-plus-editor__toc-chapter-item:hover .pretext-plus-editor__toc-chapter-row {
-  background: #e8eaf0;
-}
-
-.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-row {
-  background: #f3e8ff;
-}
-
-.pretext-plus-editor__toc-chapter-item--active .pretext-plus-editor__toc-chapter-btn {
-  font-weight: 600;
-}
-
-.pretext-plus-editor__toc-type-badge--chapter {
-  background: #7c3aed;
-}
-
-/* ── Nested sections under active chapter ───────────── */
-.pretext-plus-editor__toc-chapter-sections {
-  border-left: 2px solid #e0d4f7;
-  margin-left: 20px;
-}
-
-/* Slightly tighter section items when nested */
-.pretext-plus-editor__toc-chapter-sections .pretext-plus-editor__toc-item-row {
-  min-height: 28px;
-}
-
-/* Nested footer buttons */
-.pretext-plus-editor__toc-footer--nested {
-  margin-left: 20px;
-  border-left: 2px solid #e0d4f7;
-  border-top: 1px solid #dde0e6;
-}
-
-
-.pretext-plus-editor__toc-no-sections {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 8px;
-  color: #888;
-  font-size: 0.82rem;
-  text-align: center;
-}
-
-.pretext-plus-editor__toc-chapter-loading {
-  padding: 6px 12px 6px 22px;
-  color: #888;
-  font-size: 0.82rem;
-  font-style: italic;
-  background: #fafbfc;
-  border-left: 2px solid #e0d4f7;
-}
-
 
 /* ── Add section inline item ─────────────────────────── */
 .pretext-plus-editor__toc-add-item {
@@ -859,99 +640,46 @@
   border-left-color: #d97706;
 }
 
-.pretext-plus-editor__toc-item--orphan:hover > .pretext-plus-editor__toc-section-btn {
-  background: #fef3c7;
-}
-
-.pretext-plus-editor__toc-section-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 5px 8px 5px 6px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  text-align: left;
-  font: inherit;
-  color: #555;
-  min-height: 32px;
-}
-
-.pretext-plus-editor__toc-section-btn:hover {
-  background: #fef3c7;
-  color: #111;
-}
-
-.pretext-plus-editor__toc-section-title {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.83rem;
-}
-
 .pretext-plus-editor__toc-item--orphan .pretext-plus-editor__toc-type-badge {
   background: #d97706;
 }
 
-/* ── Root division entry (divisions mode) ────────────── */
-.pretext-plus-editor__toc-root-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+/* ── Assets button ───────────────────────────────────── */
+.pretext-plus-editor__toc-assets-btn {
+  display: block;
   width: 100%;
-  padding: 6px 8px 6px 10px;
   background: none;
   border: none;
-  border-bottom: 1px solid #dde0e6;
+  border-top: 1px solid #dde0e6;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.78rem;
+  color: #2563eb;
   cursor: pointer;
   text-align: left;
-  font: inherit;
-  color: #444;
-  font-size: 0.83rem;
-  font-weight: 600;
+  flex-shrink: 0;
 }
-.pretext-plus-editor__toc-root-btn:hover {
-  background: #eef2fb;
+
+.pretext-plus-editor__toc-assets-btn:hover {
+  background: #eff6ff;
+  text-decoration: underline;
+}
+
+/* ── Action button base (used by asset panel) ─────────── */
+.pretext-plus-editor__toc-action-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 2px 5px;
+  font-size: 0.78rem;
+  color: #555;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__toc-action-btn:hover:not(:disabled) {
+  background: #dde0e6;
+  border-color: #b0b5c0;
   color: #111;
 }
-.pretext-plus-editor__toc-root-btn--active {
-  background: #e8edfa;
-  color: #1a3a9c;
-}
-.pretext-plus-editor__toc-root-btn--active .pretext-plus-editor__toc-type-badge {
-  background: #3b5fc0;
-}
-
-/* ── Orphan "place in document" button ───────────────── */
-.pretext-plus-editor__toc-item--orphan {
-  flex-direction: row;
-  align-items: center;
-}
-.pretext-plus-editor__toc-item--orphan .pretext-plus-editor__toc-section-btn {
-  flex: 1;
-  min-width: 0;
-}
-.pretext-plus-editor__toc-orphan-place-btn {
-  flex-shrink: 0;
-  width: 24px;
-  height: 24px;
-  margin-right: 6px;
-  background: none;
-  border: 1px solid #d97706;
-  border-radius: 4px;
-  color: #d97706;
-  cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.pretext-plus-editor__toc-orphan-place-btn:hover {
-  background: #d97706;
-  color: #fff;
-}
-

@@ -1,18 +1,8 @@
-import type { ReactNode } from "react";
+import { useEditorStore } from "../store/hooks";
+import StoreFeedbackLink from "./StoreFeedbackLink";
 import "./MenuBar.css";
 
 export interface MenuBarProps {
-  /**
-   * Whether the "Full" preview mode is active.
-   * The toggle slider reflects `isChecked === true` → Full, `false` → Simple.
-   */
-  isChecked: boolean;
-  /** Called when the user clicks the Simple/Full preview mode toggle. */
-  onChange: () => void;
-  /** Current document title shown in the editable title field. */
-  title?: string;
-  /** Called when the user changes the title field value. */
-  onTitleChange?: (value: string) => void;
   /** If provided, a Save button is rendered. */
   onSaveButton?: () => void;
   /** Label for the Save button.  Defaults to `"Save"`. */
@@ -26,11 +16,14 @@ export interface MenuBarProps {
    * Defaults to showing the toggle.
    */
   showPreviewModeToggle?: boolean;
-  /** Optional feedback control rendered in the menu bar. */
-  feedbackControl?: ReactNode;
 }
 
 const MenuBar = (props: MenuBarProps) => {
+  const showFullPreview = useEditorStore((s) => s.showFullPreview);
+  const setShowFullPreview = useEditorStore((s) => s.setShowFullPreview);
+  const title = useEditorStore((s) => s.title);
+  const updateTitle = useEditorStore((s) => s.updateTitle);
+
   let previewModeToggle;
   if (props.showPreviewModeToggle === false) {
     previewModeToggle = null;
@@ -39,8 +32,8 @@ const MenuBar = (props: MenuBarProps) => {
       <label className="pretext-plus-editor__preview-toggle">
         <input
           type="checkbox"
-          checked={!props.isChecked}
-          onChange={props.onChange}
+          checked={!showFullPreview}
+          onChange={() => setShowFullPreview(!showFullPreview)}
           className="pretext-plus-editor__preview-toggle-input"
         />
         <div className="pretext-plus-editor__preview-toggle-container">
@@ -49,14 +42,14 @@ const MenuBar = (props: MenuBarProps) => {
           </span>
           <span
             className={`pretext-plus-editor__preview-toggle-slider ${
-              props.isChecked
+              showFullPreview
                 ? "pretext-plus-editor__preview-toggle-slider--active"
                 : ""
             }`}
           >
             <span
               className={`pretext-plus-editor__preview-toggle-dot ${
-                props.isChecked
+                showFullPreview
                   ? "pretext-plus-editor__preview-toggle-dot--active"
                   : ""
               }`}
@@ -71,8 +64,8 @@ const MenuBar = (props: MenuBarProps) => {
         </span>
         <input
           type="checkbox"
-          checked={props.isChecked}
-          onChange={props.onChange}
+          checked={showFullPreview}
+          onChange={() => setShowFullPreview(!showFullPreview)}
           className="pretext-plus-editor__preview-toggle-input"
         />
       </label>
@@ -82,17 +75,15 @@ const MenuBar = (props: MenuBarProps) => {
   return (
     <div className="pretext-plus-editor__menu-bar">
       <div className="pretext-plus-editor__menu-left">
-        {props.title !== undefined && props.onTitleChange && (
-          <label className="pretext-plus-editor__title-label">
-            Title{" "}
-            <input
-              className="pretext-plus-editor__title-input"
-              type="text"
-              value={props.title}
-              onChange={(e) => props.onTitleChange?.(e.target.value)}
-            />
-          </label>
-        )}
+        <label className="pretext-plus-editor__title-label">
+          Title{" "}
+          <input
+            className="pretext-plus-editor__title-input"
+            type="text"
+            value={title}
+            onChange={(e) => updateTitle(e.target.value)}
+          />
+        </label>
       </div>
       <div className="pretext-plus-editor__menu-right">
         {props.onSaveButton && (
@@ -111,7 +102,7 @@ const MenuBar = (props: MenuBarProps) => {
             {props.cancelButtonLabel || "Cancel"}
           </button>
         )}
-        {props.feedbackControl}
+        <StoreFeedbackLink label="Give feedback" context="main-editor" />
         {previewModeToggle}
       </div>
     </div>
