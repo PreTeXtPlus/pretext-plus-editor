@@ -22,7 +22,6 @@ import type {
   EditorContentState,
   Asset,
   FeedbackSubmission,
-  PretextProjectCopyRequest,
   SourceFormat,
 } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
@@ -47,7 +46,7 @@ const startingContent = defaultContent;
 // ── Public prop interface (unchanged) ─────────────────────────────────────────
 
 export interface editorProps {
-  /** The source content string (PreTeXt XML, LaTeX, or Markdown). */
+  /** The source content string (PreTeXt XML, LaTeX, or Markdown) of the current editor view. */
   source: string;
   /**
    * The format of `source`.  Defaults to `"pretext"` when omitted.
@@ -112,13 +111,6 @@ export interface editorProps {
   onFeedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   /** Optional URL for the current project, included in feedback submissions. */
   projectUrl?: string;
-  /**
-   * Called when user confirms creating a new project copy from LaTeX using
-   * converted PreTeXt source.
-   */
-  onCreatePretextProjectCopy?: (
-    request: PretextProjectCopyRequest,
-  ) => void | Promise<void>;
   /**
    * If provided, `onSave` is called on Ctrl+S in addition to `onSaveButton`.
    * Useful when the host wants a keyboard shortcut to trigger saving without
@@ -452,6 +444,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : stripSectionWrapper(activeDivision.content)
     : contentState.sourceContent;
 
+  // Lazily convert the active division's source to PreTeXt for the convert dialog.
+  // Only computed in divisions mode when the active division is non-PreTeXt.
+  const divisionConvertedPretext = useMemo(() => {
+    if (!isDivisionsMode || !activeDivision || activeDivisionFormat === "pretext") return undefined;
+    const result = derivePretextContent(divisionActiveSource, activeDivisionFormat);
+    return result.pretextError ? undefined : result.pretextSource;
+  }, [isDivisionsMode, activeDivision, activeDivisionFormat, divisionActiveSource]);
+
   const handleDivisionContentChange = (newContent: string | undefined) => {
     if (!activeDivision) {
       updateContentState(newContent);
@@ -589,7 +589,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       isMarkdownDoc,
       isLatexDoc,
       isNonPretextDoc,
-      canConvertToPretext: contentState.pretextError === undefined,
+      canConvertToPretext: divisionConvertedPretext !== undefined,
     });
   });
 
@@ -640,12 +640,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   const handleConvertToPretext = () => {
-    if (contentState.pretextError) return;
-    props.onCreatePretextProjectCopy?.({
-      pretextSource: contentState.pretextSource ?? "",
-      title,
-      projectUrl: props.projectUrl,
-    });
+    if (!activeDivision || !divisionConvertedPretext) return;
+    const base = createNewSection();
+    const wrappedContent = normalizeSelfClosingRefs(
+      rewrapSection(divisionConvertedPretext, activeDivision.type),
+    );
+    const newDiv: Division = {
+      id: base.xmlId,
+      xmlId: base.xmlId,
+      title: activeDivision.title,
+      type: activeDivision.type,
+      sourceFormat: "pretext",
+      content: wrappedContent,
+    };
+    props.onDivisionAdd?.(newDiv);
   };
 
   // ── Code editor ──────────────────────────────────────────────────────────
@@ -670,11 +678,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
-        isNonPretextDoc && props.onCreatePretextProjectCopy
+        isDivisionsMode && isNonPretextDoc && divisionConvertedPretext !== undefined
           ? () => openModal("isConvertDialogOpen")
           : undefined
       }
-      canConvertToPretext={contentState.pretextError === undefined}
+      canConvertToPretext={divisionConvertedPretext !== undefined}
       onOpenAssets={
         props.projectAssets !== undefined &&
         contentState.sourceFormat === "pretext"
@@ -909,10 +917,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }
           />
         ) : null}
-        {isConvertDialogOpen ? (
+        {isConvertDialogOpen && activeDivision && divisionConvertedPretext ? (
           <ConvertToPretextDialog
-            latexSource={contentState.sourceContent}
-            pretextSource={contentState.pretextSource ?? ""}
+            sourceContent={divisionActiveSource}
+            sourceFormat={activeDivisionFormat}
+            pretextSource={divisionConvertedPretext}
             onConfirm={handleConvertToPretext}
             onClose={() => closeModal("isConvertDialogOpen")}
           />
