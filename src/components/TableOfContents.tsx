@@ -1,97 +1,30 @@
-import { useState } from "react";
-import type { Division, DocumentSection, DocumentSectionType } from "../types/sections";
-import type { ProjectAsset } from "../types/editor";
 import ArticleToc from "./toc/ArticleToc";
+import { useEditorStore } from "../store/hooks";
 import "./TableOfContents.css";
 
 export interface TableOfContentsProps {
-  // ── Legacy (non-divisions) mode ────────────────────────────────────────────
-  sections: DocumentSection[];
-  currentSectionId: string | null;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
-  onSelectSection: (id: string) => void;
-  onAddSection: (afterId: string | null) => void;
-  onAddIntroduction: () => void;
-  onAddConclusion: () => void;
-  onRemoveSection: (id: string) => void;
-  onUpdateSection: (
-    id: string,
-    changes: {
-      title?: string;
-      type?: DocumentSectionType;
-      xmlId?: string | null;
-      label?: string | null;
-    },
-  ) => void;
-  onReorderSections: (sections: DocumentSection[]) => void;
-  onMergeSections?: (sourceId: string, targetId: string) => void;
-  onAddFirstSection?: () => void;
-  onRefresh?: () => void;
-  editMode: "document" | "sectioned";
-  onToggleEditMode?: () => void;
-  readonly?: boolean;
-  projectType?: "article" | "book";
-  parseError?: string | null;
-  hideSectionList?: boolean;
-
-  // ── Divisions mode ─────────────────────────────────────────────────────────
-  /**
-   * Flat pool of all project divisions.  When provided, the TOC switches to
-   * divisions mode: hierarchy is derived by parsing `<plus:* ref="..."/>`
-   * placeholders in each division's content.
-   */
-  divisions?: Division[];
-  /** The `xmlId` of the root division (book / article / slideshow). */
-  rootDivisionId?: string;
-  /** The `xmlId` of the currently active division. */
-  activeDivisionId?: string | null;
-  /**
-   * Called when a structural drag-and-drop reorder changes the ref-placeholder
-   * order inside a parent division's content.
-   */
-  onDivisionContentChange?: (xmlId: string, newContent: string) => void;
-
-  // ── Assets ─────────────────────────────────────────────────────────────────
-  assets?: ProjectAsset[];
-  onAssetInsert?: (asset: ProjectAsset) => void;
+  /** When provided, shows "Open asset picker" affordance in the TOC. */
   onOpenAssetPicker?: () => void;
 }
 
 /**
- * TOC sidebar.  Routes to ArticleToc (which handles both flat legacy lists and
- * the new divisions-mode tree) or shows a placeholder when the section list is
- * hidden.
+ * TOC sidebar.  Reads most of its data and action callbacks from the editor
+ * store so that Editors.tsx doesn't need to drill them down.
  */
-const TableOfContents = (props: TableOfContentsProps) => {
-  const {
-    sections,
-    currentSectionId,
-    isCollapsed,
-    onToggleCollapse,
-    onSelectSection,
-    onAddSection,
-    onAddIntroduction,
-    onAddConclusion,
-    onRemoveSection,
-    onUpdateSection,
-    onReorderSections,
-    onMergeSections,
-    onAddFirstSection,
-    onRefresh,
-    editMode,
-    onToggleEditMode,
-    readonly = false,
-    parseError,
-    hideSectionList = false,
-    divisions,
-    rootDivisionId,
-    activeDivisionId,
-    onDivisionContentChange,
-    assets,
-    onAssetInsert,
-    onOpenAssetPicker,
-  } = props;
+const TableOfContents = ({
+  isCollapsed,
+  onToggleCollapse,
+  onOpenAssetPicker,
+}: TableOfContentsProps) => {
+  const isDivisionsMode = useEditorStore((s) => s.isDivisionsMode);
+  const editMode = useEditorStore((s) => s.editMode);
+  const parseError = useEditorStore((s) => (isDivisionsMode ? null : s.parseError));
+  const hideSectionList = useEditorStore((s) => s.hideSectionList);
+  const refreshSections = useEditorStore((s) => s.refreshSections);
+
+  const showRefresh = !isDivisionsMode && editMode === "sectioned";
 
   if (isCollapsed) {
     return (
@@ -114,11 +47,11 @@ const TableOfContents = (props: TableOfContentsProps) => {
       <div className="pretext-plus-editor__toc-header">
         <span className="pretext-plus-editor__toc-heading">Contents</span>
         <div className="pretext-plus-editor__toc-header-actions">
-          {onRefresh && (
+          {showRefresh && (
             <button
               type="button"
               className="pretext-plus-editor__toc-toggle"
-              onClick={onRefresh}
+              onClick={refreshSections}
               aria-label="Refresh table of contents"
               title="Refresh table of contents (re-parse sections)"
             >
@@ -156,30 +89,8 @@ const TableOfContents = (props: TableOfContentsProps) => {
           Section navigation is not available for this source format.
         </div>
       ) : (
-        <ArticleToc
-          // Divisions mode
-          divisions={divisions}
-          rootDivisionId={rootDivisionId}
-          activeDivisionId={activeDivisionId ?? null}
-          onDivisionContentChange={onDivisionContentChange}
-          // Legacy mode
-          sections={sections}
-          currentSectionId={currentSectionId}
-          onSelectSection={onSelectSection}
-          onAddSection={onAddSection}
-          onAddIntroduction={onAddIntroduction}
-          onAddConclusion={onAddConclusion}
-          onRemoveSection={onRemoveSection}
-          onUpdateSection={onUpdateSection}
-          onReorderSections={onReorderSections}
-          onMergeSections={onMergeSections}
-          onAddFirstSection={onAddFirstSection}
-          editMode={editMode}
-          onToggleEditMode={onToggleEditMode}
-          readonly={readonly}
-        />
+        <ArticleToc onOpenAssetPicker={onOpenAssetPicker} />
       )}
-
     </div>
   );
 };

@@ -12,16 +12,11 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import type {
-  Division,
-  DocumentSection,
-  DocumentSectionType,
-} from "../../types/sections";
+import type { Division } from "../../types/sections";
 import SectionList from "./SectionList";
 import SortableSectionItem from "./SortableSectionItem";
 import { useSectionDnd } from "./useSectionDnd";
 import { useDivisionDnd } from "./useDivisionDnd";
-import { useSectionEdit } from "./useSectionEdit";
 import { TYPE_LABELS } from "./types";
 import {
   buildDivisionTree,
@@ -30,81 +25,59 @@ import {
   normalizeSelfClosingRefs,
   removeDivisionRef,
 } from "../../sectionUtils";
+import { useEditorStore } from "../../store/hooks";
 
 export interface ArticleTocProps {
-  // ── Divisions mode ─────────────────────────────────────────────────────────
-  /** Flat pool of all project divisions.  When provided, activates divisions mode. */
-  divisions?: Division[];
-  /** The `xmlId` of the root division. */
-  rootDivisionId?: string;
-  /** The `xmlId` of the currently active division. */
-  activeDivisionId: string | null;
-  /** Called when a reorder changes a parent division's ref-placeholder order. */
-  onDivisionContentChange?: (xmlId: string, newContent: string) => void;
-
-  // ── Legacy mode ────────────────────────────────────────────────────────────
-  sections: DocumentSection[];
-  currentSectionId: string | null;
-  onSelectSection: (id: string) => void;
-  onAddSection: (afterId: string | null) => void;
-  onAddIntroduction: () => void;
-  onAddConclusion: () => void;
-  onRemoveSection: (id: string) => void;
-  onUpdateSection: (
-    id: string,
-    changes: {
-      title?: string;
-      type?: DocumentSectionType;
-      xmlId?: string | null;
-      label?: string | null;
-    },
-  ) => void;
-  onReorderSections: (sections: DocumentSection[]) => void;
-  onMergeSections?: (sourceId: string, targetId: string) => void;
-  onAddFirstSection?: () => void;
-  editMode: "document" | "sectioned";
-  onToggleEditMode?: () => void;
-  readonly: boolean;
+  /** When provided, shows an "Open asset picker" button at the bottom of the TOC. */
+  onOpenAssetPicker?: () => void;
 }
 
 /** Adapt a `Division` to the `DocumentSection` shape the shared item components
  * expect, normalising `id` to `xmlId` so dnd / selection keys are stable. */
-const asSection = (d: Division): DocumentSection => ({ ...d, id: d.xmlId });
+const asSection = (d: Division): Division => ({ ...d, id: d.xmlId });
 
 /**
- * TOC body.  Handles two modes:
- *
- * **Divisions mode** (when `divisions` is provided): renders the full division
- * tree (depth-first, indented) read from `<plus:* ref="..."/>` placeholders;
- * supports drag-to-reorder and cross-parent moves, an "unplace" action that
- * detaches a division into the "Unplaced divisions" group, and a "+" action to
- * place orphaned divisions back into the root.
- *
- * **Legacy mode**: flat section list with drag-and-drop, merge gesture, and
- * "Edit full document" back-link.
+ * TOC body.  Reads all data and action callbacks from the editor store.
  */
-const ArticleToc = ({
-  divisions,
-  rootDivisionId,
-  activeDivisionId,
-  onDivisionContentChange,
-  sections,
-  currentSectionId,
-  onSelectSection,
-  onAddSection,
-  onAddIntroduction,
-  onAddConclusion,
-  onRemoveSection,
-  onUpdateSection,
-  onReorderSections,
-  onMergeSections,
-  onAddFirstSection,
-  editMode,
-  onToggleEditMode,
-  readonly,
-}: ArticleTocProps) => {
-  const isDivisionsMode = divisions !== undefined;
-  const edit = useSectionEdit();
+const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
+  const isDivisionsMode = useEditorStore((s) => s.isDivisionsMode);
+  const divisions = useEditorStore((s) => s.divisions);
+  const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
+  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const sections = useEditorStore((s) => s.sections);
+  const currentSectionId = useEditorStore((s) => s.currentSectionId);
+  const editMode = useEditorStore((s) => s.editMode);
+  const readonly = useEditorStore((s) => s.tocReadonly);
+  const isLatex = useEditorStore((s) => s.isLatexDoc);
+
+  // Store actions
+  const selectSection = useEditorStore((s) => s.selectSection);
+  const addSection = useEditorStore((s) => s.addSection);
+  const addIntroduction = useEditorStore((s) => s.addIntroduction);
+  const addConclusion = useEditorStore((s) => s.addConclusion);
+  const removeSection = useEditorStore((s) => s.removeSection);
+  const reorderSections = useEditorStore((s) => s.reorderSections);
+  const mergeSections = useEditorStore((s) => s.mergeSections);
+  const addFirstSection = useEditorStore((s) => s.addFirstSection);
+  const toggleEditMode = useEditorStore((s) => s.toggleEditMode);
+  const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
+
+  // In legacy mode these are always available; isDivisionsMode gates the UI.
+  const canAddFirstSection = !isDivisionsMode;
+  const canToggleEditMode = !isDivisionsMode;
+  const canMergeSections = !isDivisionsMode;
+
+  // Edit form
+  const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
+  const setEditDraft = useEditorStore((s) => s.setEditDraft);
+  const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
+  const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
+  const editingId = useEditorStore((s) => s.editingId);
+  const editDraft = useEditorStore((s) => s.editDraft);
+
+  // Store has stable action references but these optional callbacks
+  // (mergeSections, addFirstSection, toggleEditMode, divisionContentChange)
+  // may be undefined — read once here and pass down.
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -139,29 +112,27 @@ const ArticleToc = ({
   const divisionDnd = useDivisionDnd({
     nodes: treeNodes,
     divisions: divisions ?? [],
-    onDivisionContentChange,
+    onDivisionContentChange: divisionContentChange,
   });
 
   // ── Legacy mode dnd ────────────────────────────────────────────────────────
   const dnd = useSectionDnd({
     sections: isDivisionsMode ? [] : sections,
-    onReorderSections,
-    onMergeSections: isDivisionsMode ? undefined : onMergeSections,
+    onReorderSections: reorderSections,
+    onMergeSections: canMergeSections ? mergeSections : undefined,
   });
 
   // ── Divisions mode actions ─────────────────────────────────────────────────
-  /** Detach a division from its parent (keep the record → it becomes orphaned). */
   const handleUnplace = (xmlId: string, parentXmlId: string) => {
-    if (!divisions || !onDivisionContentChange) return;
+    if (!divisions || !divisionContentChange) return;
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    onDivisionContentChange(
+    divisionContentChange(
       parent.xmlId,
       normalizeSelfClosingRefs(removeDivisionRef(parent.content, xmlId)),
     );
   };
 
-  /** Permanently delete a division, first detaching it from its parent. */
   const handleDivisionDelete = (
     division: Division,
     parentXmlId: string | null,
@@ -173,10 +144,10 @@ const ArticleToc = ({
     ) {
       return;
     }
-    if (parentXmlId && divisions && onDivisionContentChange) {
+    if (parentXmlId && divisions && divisionContentChange) {
       const parent = divisions.find((d) => d.xmlId === parentXmlId);
       if (parent) {
-        onDivisionContentChange(
+        divisionContentChange(
           parent.xmlId,
           normalizeSelfClosingRefs(
             removeDivisionRef(parent.content, division.xmlId),
@@ -184,13 +155,12 @@ const ArticleToc = ({
         );
       }
     }
-    onRemoveSection(division.xmlId);
+    removeSection(division.xmlId);
   };
 
-  /** Place an orphaned division into the root (append a `<plus:* ref/>`). */
   const handlePlaceOrphan = (orphan: Division) => {
-    if (!rootDivision || !onDivisionContentChange) return;
-    onDivisionContentChange(
+    if (!rootDivision || !divisionContentChange) return;
+    divisionContentChange(
       rootDivision.xmlId,
       normalizeSelfClosingRefs(
         insertDivisionRef(
@@ -204,23 +174,23 @@ const ArticleToc = ({
   };
 
   // ── Legacy mode handlers ───────────────────────────────────────────────────
-  const handleRemove = (section: DocumentSection) => {
+  const handleRemoveLegacy = (section: Division) => {
     if (window.confirm(`Remove "${section.title}"? This cannot be undone.`)) {
-      onRemoveSection(section.id);
+      removeSection(section.id);
     }
   };
 
   const handleLegacyDragStart = (
     e: Parameters<typeof dnd.handleDragStart>[0],
   ) => {
-    edit.cancelEdit();
+    cancelSectionEdit();
     dnd.handleDragStart(e);
   };
 
   const handleDivisionDragStart = (
     e: Parameters<typeof divisionDnd.handleDragStart>[0],
   ) => {
-    edit.cancelEdit();
+    cancelSectionEdit();
     divisionDnd.handleDragStart(e);
   };
 
@@ -242,7 +212,7 @@ const ArticleToc = ({
                 ? " pretext-plus-editor__toc-root-btn--active"
                 : ""
             }`}
-            onClick={() => onSelectSection(rootDivision.xmlId)}
+            onClick={() => selectSection(rootDivision.xmlId)}
             title={`Edit root ${rootDivision.type} — contains the structural <plus:*> refs\nxml:id="${rootDivision.xmlId}"`}
           >
             <span className="pretext-plus-editor__toc-type-badge">
@@ -279,7 +249,7 @@ const ArticleToc = ({
                       key={node.division.xmlId}
                       section={section}
                       depth={node.depth}
-                      isActive={node.division.xmlId === activeDivisionId}
+                      isActive={activeDivisionId === node.division.xmlId}
                       isBeingDragged={
                         divisionDnd.activeId === node.division.xmlId
                       }
@@ -293,21 +263,19 @@ const ArticleToc = ({
                       }
                       isMergeTarget={false}
                       editDraft={
-                        edit.editingId === node.division.xmlId
-                          ? edit.editDraft
-                          : null
+                        editingId === node.division.xmlId ? editDraft : null
                       }
-                      onSelect={() => onSelectSection(node.division.xmlId)}
-                      onStartEdit={() => edit.startEdit(section)}
+                      onSelect={() => selectSection(node.division.xmlId)}
+                      onStartEdit={() => startSectionEdit(section)}
                       onRemove={() =>
                         handleDivisionDelete(node.division, node.parentXmlId)
                       }
                       onUnplace={() =>
                         handleUnplace(node.division.xmlId, node.parentXmlId)
                       }
-                      onDraftChange={edit.setEditDraft}
-                      onEditCommit={() => edit.commitEdit(onUpdateSection)}
-                      onEditCancel={edit.cancelEdit}
+                      onDraftChange={setEditDraft}
+                      onEditCommit={commitSectionEdit}
+                      onEditCancel={cancelSectionEdit}
                       canRemove={true}
                       readonly={false}
                       isLatex={node.division.sourceFormat === "latex"}
@@ -349,7 +317,7 @@ const ArticleToc = ({
                       <button
                         type="button"
                         className="pretext-plus-editor__toc-section-btn"
-                        onClick={() => onSelectSection(root.xmlId)}
+                        onClick={() => selectSection(root.xmlId)}
                         title={`xml:id="${root.xmlId}"`}
                       >
                         <span className="pretext-plus-editor__toc-type-badge">
@@ -377,7 +345,7 @@ const ArticleToc = ({
                           type="button"
                           className="pretext-plus-editor__toc-section-btn"
                           style={{ paddingLeft: `${(node.depth + 1) * 14 + 6}px` }}
-                          onClick={() => onSelectSection(node.division.xmlId)}
+                          onClick={() => selectSection(node.division.xmlId)}
                           title={`xml:id="${node.division.xmlId}"`}
                         >
                           <span className="pretext-plus-editor__toc-type-badge">
@@ -396,6 +364,16 @@ const ArticleToc = ({
             </ul>
           </div>
         )}
+
+        {onOpenAssetPicker && (
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-assets-btn"
+            onClick={onOpenAssetPicker}
+          >
+            Manage Assets
+          </button>
+        )}
       </>
     );
   }
@@ -403,16 +381,15 @@ const ArticleToc = ({
   // ─────────────────────────────────────────────────────────────────────────
   // Legacy mode render
   // ─────────────────────────────────────────────────────────────────────────
-  const isLatex = sections.some((s) => s.sourceFormat === "latex");
   const activeSection = sections.find((s) => s.id === dnd.activeId);
 
   return (
     <>
-      {editMode === "sectioned" && onToggleEditMode && (
+      {editMode === "sectioned" && canToggleEditMode && (
         <button
           type="button"
           className="pretext-plus-editor__toc-fulldoc-link"
-          onClick={onToggleEditMode}
+          onClick={toggleEditMode}
           title="Switch to full document editing"
         >
           ← Edit full document
@@ -433,22 +410,22 @@ const ArticleToc = ({
           activeDragId={dnd.activeId}
           dropTarget={dnd.dropTarget}
           mergeTargetId={dnd.mergeTargetId}
-          editingId={edit.editingId}
-          editDraft={edit.editDraft}
+          editingId={editingId}
+          editDraft={editDraft}
           isLatex={isLatex}
           readonly={readonly}
           listClassName="pretext-plus-editor__toc-list"
           role="list"
-          onSelectSection={onSelectSection}
-          onStartEdit={edit.startEdit}
-          onRemove={handleRemove}
-          onDraftChange={edit.setEditDraft}
-          onEditCommit={() => edit.commitEdit(onUpdateSection)}
-          onEditCancel={edit.cancelEdit}
-          onAddFirstSection={onAddFirstSection}
-          onAddSection={() => onAddSection(null)}
-          onAddIntroduction={onAddIntroduction}
-          onAddConclusion={onAddConclusion}
+          onSelectSection={selectSection}
+          onStartEdit={startSectionEdit}
+          onRemove={handleRemoveLegacy}
+          onDraftChange={setEditDraft}
+          onEditCommit={commitSectionEdit}
+          onEditCancel={cancelSectionEdit}
+          onAddFirstSection={canAddFirstSection ? addFirstSection : undefined}
+          onAddSection={() => addSection(null)}
+          onAddIntroduction={addIntroduction}
+          onAddConclusion={addConclusion}
         />
         <DragOverlay>
           {activeSection && (
@@ -463,6 +440,16 @@ const ArticleToc = ({
           )}
         </DragOverlay>
       </DndContext>
+
+      {onOpenAssetPicker && (
+        <button
+          type="button"
+          className="pretext-plus-editor__toc-assets-btn"
+          onClick={onOpenAssetPicker}
+        >
+          Manage Assets
+        </button>
+      )}
     </>
   );
 };
