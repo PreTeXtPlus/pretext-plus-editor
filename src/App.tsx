@@ -404,11 +404,11 @@ function App() {
     console.log("Feedback submitted:", feedback);
   };
 
-  const handleAssetInsert = (asset: ProjectAsset) => {
-    console.log("Asset inserted:", asset.filename);
+  const handleAssetInsert = (asset: Asset) => {
+    console.log("Asset inserted:", asset.ref);
   };
 
-  const handleAssetUpload = async (file: File): Promise<ProjectAsset> => {
+  const handleAssetUpload = async (file: File): Promise<Asset> => {
     console.log("Asset upload started:", file.name, file.type, file.size);
     await new Promise((resolve) => setTimeout(resolve, 800));
     const newAsset: Asset = {
@@ -418,14 +418,14 @@ function App() {
       kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
   const handleAssetAddUrl = async (
     url: string,
     name: string,
-  ): Promise<ProjectAsset> => {
+  ): Promise<Asset> => {
     console.log("Asset URL add started:", url, name);
     await new Promise((resolve) => setTimeout(resolve, 600));
     const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
@@ -436,15 +436,15 @@ function App() {
       kind: "image",
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
-    setAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;
   };
 
-  const handleAssetAddFromLibrary = async (asset: ProjectAsset) => {
+  const handleAssetAddFromLibrary = async (asset: Asset) => {
     console.log("Adding library asset to project:", asset.id, asset.name);
     await new Promise((resolve) => setTimeout(resolve, 200));
     setProjectAssetIds((prev) => new Set([...prev, asset.id]));
-    console.log("Asset added to project:", asset.filename);
+    console.log("Asset added to project:", asset.ref);
   };
 
   // ---------------------------------------------------------------------------
@@ -524,7 +524,6 @@ function App() {
         onAssetAddFromLibrary={handleAssetAddFromLibrary}
         onAssetUpload={handleAssetUpload}
         onAssetAddUrl={handleAssetAddUrl}
-        onAssetAddFromLibrary={handleAssetAddFromLibrary}
         divisions={divisions}
         activeDivisionId={isDivisionsMode ? activeDivisionId : undefined}
         onDivisionSelect={isDivisionsMode ? handleDivisionSelect : undefined}

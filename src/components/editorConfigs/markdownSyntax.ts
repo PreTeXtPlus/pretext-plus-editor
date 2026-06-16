@@ -112,10 +112,10 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
         [/\[.*?\]\(.*?\)/, "string.link"],
 
         // Escape sequences
-        [/\\[\\`*_{}\[\]()#+\-.!]/, "string.escape"],
+        [/\\[\\`*_{}[\]()#+\-.!]/, "string.escape"],
 
         // Bulk-consume plain text for performance (avoids one-char-at-a-time fallback)
-        [/[^$*`_\[\\!]+/, ""],
+        [/[^$*`_[\\!]+/, ""],
 
         // Single-character fallthrough
         [/./, ""],

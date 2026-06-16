@@ -1,5 +1,5 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 import { VisualEditor } from "@pretextbook/visual-editor";
@@ -34,8 +34,17 @@ import {
   stripLatexSectionWrapper,
   normalizeSelfClosingRefs,
 } from "../sectionUtils";
+import {
+  createEditorStore,
+  type EditorCallbacks,
+  type EditorStoreHandle,
+} from "../store/editorStore";
+import { EditorStoreProvider } from "../store/EditorStoreProvider";
+import { useEditorStore } from "../store/hooks";
 
 const startingContent = defaultContent;
+
+// ── Public prop interface (unchanged) ─────────────────────────────────────────
 
 export interface editorProps {
   /** The source content string (PreTeXt XML, LaTeX, or Markdown). */
@@ -128,7 +137,7 @@ export interface editorProps {
   onPreviewRebuild?: (
     source: string,
     title: string,
-    postToIframe: (url: string, data: any) => void,
+    postToIframe: (url: string, data: unknown) => void,
   ) => void;
   /**
    * Controls the editing mode from the outside.  When provided, the
@@ -160,23 +169,9 @@ export interface editorProps {
    */
   projectType?: "article" | "book";
   // ── Divisions API ────────────────────────────────────────────────────────────
-  // When `divisions` is provided the editor operates in "divisions mode":
-  // all structural and content state is owned by the host; the editor provides
-  // a UI for navigating, editing, and reorganising the flat division pool.
-  //
-  // Hierarchy is expressed by `<plus:division ref="xmlId"/>` placeholders
-  // embedded in parent division content — the editor never reconstructs a
-  // full merged document.  When `divisions` is omitted the editor falls back
-  // to the legacy `useSectionedEditing` behaviour.
-
   /**
    * Flat pool of all division records for this project.  Providing this
    * enables divisions mode and bypasses the legacy split/merge path.
-   *
-   * Hierarchy is implicit: root → parses refs → finds children → recurse.
-   * The editor identifies the root division as the one matching
-   * `rootDivisionId`, or the first division with type `"book"`, `"article"`,
-   * or `"slideshow"`.
    */
   divisions?: Division[];
 
@@ -201,38 +196,22 @@ export interface editorProps {
 
   /**
    * Called when the user edits the content of the active division.
-   * Receives the full rewrapped XML (including outer element tag) so the
-   * host can persist it without any further transformation.
-   *
-   * Also fires when structural edits (drag-reorder, insert orphan) change
-   * a *parent* division's content — the `xmlId` identifies which division
-   * changed, not necessarily the one being actively edited.
    */
   onDivisionContentChange?: (xmlId: string, content: string) => void;
 
   /**
    * Called when the user creates a new division via the TOC UI.
-   * The host should persist the new record and add it to `divisions`.
-   * After adding the division, the caller should also update the parent's
-   * content to include a `<plus:division ref="newXmlId"/>` placeholder, which
-   * is emitted via `onDivisionContentChange` for the parent.
    */
   onDivisionAdd?: (division: Division) => void;
 
   /**
    * Called when the user deletes a division via the TOC UI.
-   * The host should remove the record from `divisions` and remove any
-   * `<plus:* ref="xmlId"/>` placeholders that reference it from parent content.
-   * The editor fires `onDivisionContentChange` for the parent before this.
    */
   onDivisionRemove?: (xmlId: string) => void;
 
   /**
    * Called when the user renames, retypes, or changes the `xml:id` of a
    * division via the inline TOC edit form.
-   *
-   * When `xmlId` changes the editor also fires `onDivisionContentChange` for
-   * every parent division whose content contained a ref to the old id.
    */
   onDivisionUpdate?: (
     xmlId: string,
@@ -254,8 +233,6 @@ export interface editorProps {
   projectAssets?: Asset[];
   /**
    * All assets available in the user's library (across all projects).
-   * Assets not in `projectAssets` show an "Add to project" affordance.
-   * Defaults to `projectAssets` when omitted.
    */
   libraryAssets?: Asset[];
   /** Called after an asset tag is inserted at the cursor. */
@@ -276,15 +253,8 @@ export interface editorProps {
   onLoadLibraryAssets?: () => Promise<Asset[]>;
 }
 
-/**
- * Builds the initial {@link EditorContentState} from the props passed to
- * {@link Editors}.  Runs once per render cycle via `useMemo`.
- *
- * If the source is already PreTeXt, `pretextSource` mirrors `sourceContent`
- * with no conversion.  For other formats the function either uses the
- * caller-supplied `pretextSource` (avoiding redundant work) or runs the
- * conversion via {@link derivePretextContent}.
- */
+// ── Content state helper ────────────────────────────────────────────────────
+
 const createEditorContentState = ({
   source: source,
   sourceFormat,
@@ -308,62 +278,91 @@ const createEditorContentState = ({
   };
 };
 
+// ── Outer component: creates store + provides it ───────────────────────────
+
 /**
- * Top-level editor component that wires together the Monaco code editor and
- * the right-hand preview panel (either Tiptap visual editor or full iframe
- * preview).  Also owns the menu bar and responsive layout logic.
- *
- * Content state is derived from props on every render via `useMemo` so the
- * parent always controls the source of truth; the component itself holds no
- * long-lived content state.
- *
- * Sectioned-editing state (section list, current section, TOC handlers, etc.)
- * is delegated to {@link useSectionedEditing}.
+ * Top-level editor component.  Creates the per-instance Zustand store and
+ * wraps the inner component in the store's Context provider.
  */
 const Editors = (props: editorProps) => {
+  // Store + bindCallbacks are created once per mount via lazy useState.
+  // bindCallbacks is a plain function (not a React ref), so passing it during
+  // render does not trigger the react-hooks/refs lint rule.
+  const [handle] = useState<EditorStoreHandle>(() => {
+    const initRootDivision =
+      props.divisions?.find((d) =>
+        props.rootDivisionId
+          ? d.xmlId === props.rootDivisionId
+          : d.type === "book" || d.type === "article" || d.type === "slideshow",
+      ) ??
+      props.divisions?.[0] ??
+      null;
+
+    return createEditorStore({
+      source: props.source ?? startingContent,
+      sourceFormat: props.sourceFormat ?? "pretext",
+      title: props.title ?? "Document Title",
+      docinfo: props.docinfo ?? "",
+      commonDocinfo: props.commonDocinfo ?? "",
+      useCommonDocinfo: props.useCommonDocinfo ?? false,
+      projectType: props.projectType,
+      divisions: props.divisions,
+      activeDivisionId: props.activeDivisionId ?? initRootDivision?.xmlId ?? null,
+    });
+  });
+
+  return (
+    <EditorStoreProvider store={handle.store}>
+      <EditorsInner {...props} bindCallbacks={handle.bindCallbacks} />
+    </EditorStoreProvider>
+  );
+};
+
+// ── Inner component: all editing logic ────────────────────────────────────
+
+interface EditorsInnerProps extends editorProps {
+  bindCallbacks: (cbs: EditorCallbacks) => void;
+}
+
+const EditorsInner = (props: EditorsInnerProps) => {
+  const { bindCallbacks } = props;
   const { source, sourceFormat, pretextSource } = props;
+
+  // ── Store reads (UI state owned by the store) ───────────────────────────
+  const showFull = useEditorStore((s) => s.showFull);
+  const setShowFull = useEditorStore((s) => s.setShowFull);
+  const isNarrowScreen = useEditorStore((s) => s.isNarrowScreen);
+  const setIsNarrowScreen = useEditorStore((s) => s.setIsNarrowScreen);
+  const activeTab = useEditorStore((s) => s.activeTab);
+  const setActiveTab = useEditorStore((s) => s.setActiveTab);
+  const isTocCollapsed = useEditorStore((s) => s.isTocCollapsed);
+  const setIsTocCollapsed = useEditorStore((s) => s.setIsTocCollapsed);
+  const isLatexDialogOpen = useEditorStore((s) => s.isLatexDialogOpen);
+  const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
+  const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
+  const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
+  const openModal = useEditorStore((s) => s.openModal);
+  const closeModal = useEditorStore((s) => s.closeModal);
+  const internalTitle = useEditorStore((s) => s.internalTitle);
+  const setInternalTitle = useEditorStore((s) => s.setInternalTitle);
+  const internalDocinfo = useEditorStore((s) => s.internalDocinfo);
+  const internalCommonDocinfo = useEditorStore((s) => s.internalCommonDocinfo);
+  const internalUseCommonDocinfo = useEditorStore(
+    (s) => s.internalUseCommonDocinfo,
+  );
+  const syncState = useEditorStore((s) => s.syncState);
+
+  const title = props.title ?? internalTitle;
+
   const contentState: EditorContentState = useMemo(
-    () =>
-      createEditorContentState({
-        source,
-        sourceFormat,
-        pretextSource,
-      }),
+    () => createEditorContentState({ source, sourceFormat, pretextSource }),
     [source, sourceFormat, pretextSource],
   );
 
-  // ── UI state ───────────────────────────────────────────────────────────────
-  const [internalTitle, setInternalTitle] = useState(
-    props.title || "Document Title",
-  );
-  const title = props.title ?? internalTitle;
-  const [showFull, setShowFull] = useState(true);
-  const [isNarrowScreen, setIsNarrowScreen] = useState(window.innerWidth < 800);
-  const [activeTab, setActiveTab] = useState<"editor" | "preview">("editor");
-  const [isLatexDialogOpen, setIsLatexDialogOpen] = useState(false);
-  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
-  const [isDocinfoEditorOpen, setIsDocinfoEditorOpen] = useState(false);
-  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
-  const [internalDocinfo, setInternalDocinfo] = useState(props.docinfo ?? "");
-  const [internalCommonDocinfo, setInternalCommonDocinfo] = useState(
-    props.commonDocinfo ?? "",
-  );
-  const [internalUseCommonDocinfo, setInternalUseCommonDocinfo] = useState(
-    props.useCommonDocinfo ?? false,
-  );
-
-  const editorTabId = "pretext-plus-tab-editor";
-  const previewTabId = "pretext-plus-tab-preview";
-  const tabPanelId = "pretext-plus-tabpanel";
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
 
-  // ── Content update callback ────────────────────────────────────────────────
-  /**
-   * Called by either sub-editor when the user changes the source content.
-   * Re-derives the PreTeXt content (or records an error) then propagates the
-   * full state snapshot to the host via `onContentChange`.
-   */
+  // ── Content update callback ─────────────────────────────────────────────
   const updateContentState = (sourceContent: string | undefined) => {
     const normalizedSourceContent = sourceContent || "";
     const derivedPretext =
@@ -384,15 +383,13 @@ const Editors = (props: editorProps) => {
     props.onContentChange(normalizedSourceContent, nextState);
   };
 
-  // ── Sectioned editing ──────────────────────────────────────────────────────
+  // ── Sectioned editing ────────────────────────────────────────────────────
   const {
     editMode,
     sections,
     currentSection,
     currentSectionId,
     setCurrentSectionId,
-    isTocCollapsed,
-    setIsTocCollapsed,
     activeSourceContent,
     updateSectionContent,
     isBookChapterBody,
@@ -419,14 +416,9 @@ const Editors = (props: editorProps) => {
     onContentUpdate: updateContentState,
   });
 
-  // ── Divisions mode ────────────────────────────────────────────────────────
-  // When `props.divisions` is provided the editor is in divisions mode: the
-  // host owns all division state; we track which division is active and wire
-  // the CRUD callbacks.  When omitted, the legacy `useSectionedEditing` path
-  // remains active for backward compatibility.
+  // ── Divisions mode ───────────────────────────────────────────────────────
   const isDivisionsMode = props.divisions !== undefined;
 
-  // Locate the root division (book / article / slideshow).
   const rootDivision =
     props.divisions?.find((d) =>
       props.rootDivisionId
@@ -436,12 +428,10 @@ const Editors = (props: editorProps) => {
     props.divisions?.[0] ??
     null;
 
-  // Internal active-division xmlId for uncontrolled usage.
   const [internalActiveDivisionId, setInternalActiveDivisionId] = useState<
     string | null
   >(() => rootDivision?.xmlId ?? null);
 
-  // Controlled prop takes precedence over internal state.
   const activeDivisionId =
     props.activeDivisionId !== undefined
       ? props.activeDivisionId
@@ -453,18 +443,15 @@ const Editors = (props: editorProps) => {
        null)
     : null;
 
-  // In divisions mode the format comes from the active division, not the project.
   const activeDivisionFormat =
     activeDivision?.sourceFormat ?? contentState.sourceFormat;
 
-  // Inner body of the active division (outer tag stripped) shown in Monaco.
   const divisionActiveSource = activeDivision
     ? activeDivisionFormat === "latex"
       ? stripLatexSectionWrapper(activeDivision.content, activeDivision.type)
       : stripSectionWrapper(activeDivision.content)
     : contentState.sourceContent;
 
-  // Handler for Monaco changes in divisions mode: rewrap and call back.
   const handleDivisionContentChange = (newContent: string | undefined) => {
     if (!activeDivision) {
       updateContentState(newContent);
@@ -479,10 +466,7 @@ const Editors = (props: editorProps) => {
             activeDivision.title,
             activeDivision.content,
           )
-        : // Collapse any `<plus:* ...></plus:*>` the XML round-trip expanded
-          // back to canonical self-closing form so the source stays tidy and
-          // the TOC's ref parser keeps matching.
-          normalizeSelfClosingRefs(rewrapSection(inner, activeDivision.type));
+        : normalizeSelfClosingRefs(rewrapSection(inner, activeDivision.type));
     if (wrapped === activeDivision.content) return;
     props.onDivisionContentChange?.(activeDivision.xmlId, wrapped);
     props.onContentChange(wrapped, {
@@ -493,44 +477,123 @@ const Editors = (props: editorProps) => {
     });
   };
 
-  // Handler for division select in divisions mode.
   const handleDivisionSelect = (xmlId: string) => {
     setInternalActiveDivisionId(xmlId);
     props.onDivisionSelect?.(xmlId);
   };
 
-  // Handler for adding a new division via the TOC.
   const handleDivisionAdd = () => {
     const newDiv = createNewSection();
     props.onDivisionAdd?.(newDiv);
     setInternalActiveDivisionId(newDiv.xmlId);
   };
 
-  // ── Asset insertion ────────────────────────────────────────────────────────
+  // ── Asset insertion ─────────────────────────────────────────────────────
   const buildAssetSnippet = (asset: Asset): string => {
     if (!asset.ref) return "";
     return `<plus:${asset.kind} ref="${asset.ref}"/>`;
   };
 
-  /**
-   * Insert the asset snippet at the Monaco cursor, then notify the host via
-   * `onAssetInsert` (optional — useful for host-side analytics or side-effects).
-   */
   const handleAssetInsert = (asset: Asset) => {
     const snippet = buildAssetSnippet(asset);
     if (snippet) codeEditorRef.current?.insertAtCursor(snippet);
     props.onAssetInsert?.(asset);
   };
 
-  // ── Sync props → internal state ────────────────────────────────────────────
+  // ── Resize listener ──────────────────────────────────────────────────────
   useEffect(() => {
     const handleResize = () => setIsNarrowScreen(window.innerWidth < 800);
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [setIsNarrowScreen]);
 
-  // ── Derived preview content ────────────────────────────────────────────────
-  /** In sectioned / divisions mode, preview uses the active division/section. */
+  // ── Computed flags ───────────────────────────────────────────────────────
+  const isLatexDoc = contentState.sourceFormat === "latex";
+  const isMarkdownDoc = contentState.sourceFormat === "markdown";
+  const isNonPretextDoc = isLatexDoc || isMarkdownDoc;
+
+  // ── Bind callbacks after every render ────────────────────────────────────
+  // Store actions call through the internal bag so they always invoke the
+  // latest callbacks (which close over the current render's state/props)
+  // without requiring stable identities for any of the callback functions.
+  useLayoutEffect(() => {
+    bindCallbacks({
+      selectSection: isDivisionsMode
+        ? handleDivisionSelect
+        : editMode === "sectioned"
+        ? setCurrentSectionId
+        : handleSelectSectionInDocMode,
+      addSection: isDivisionsMode ? handleDivisionAdd : handleAddSection,
+      removeSection: isDivisionsMode
+        ? (xmlId) => props.onDivisionRemove?.(xmlId)
+        : handleRemoveSection,
+      updateSection: isDivisionsMode
+        ? (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes)
+        : handleUpdateSectionMetadata,
+      reorderSections: handleReorderSections,
+      mergeSections: isDivisionsMode ? undefined : handleMergeSection,
+      addFirstSection: isDivisionsMode ? undefined : handleAddFirstSection,
+      refresh:
+        isDivisionsMode || editMode !== "sectioned"
+          ? undefined
+          : handleRefreshSections,
+      addIntroduction: handleAddIntroduction,
+      addConclusion: handleAddConclusion,
+      toggleEditMode: isDivisionsMode
+        ? undefined
+        : () => switchEditMode(editMode === "document" ? "sectioned" : "document"),
+      divisionContentChange: props.onDivisionContentChange,
+      updateContent: updateContentState,
+      updateSectionContent,
+      updateChapterBodyContent,
+      handleDivisionContentChange,
+      assetInsert: handleAssetInsert,
+      updateTitle: (value) => {
+        setInternalTitle(value);
+        props.onTitleChange?.(value);
+      },
+    });
+  });
+
+  // ── Sync controlled/derived state into store ─────────────────────────────
+  // These effects ensure the store always mirrors the latest host data so
+  // deep components (which read from the store) stay in sync.
+  useEffect(() => {
+    syncState({
+      source: contentState.sourceContent,
+      sourceFormat: contentState.sourceFormat,
+      pretextSource: contentState.pretextSource,
+      pretextError: contentState.pretextError,
+      projectAssets: props.projectAssets,
+      libraryAssets: props.libraryAssets,
+      title,
+      docinfo: props.docinfo ?? internalDocinfo,
+      commonDocinfo: props.commonDocinfo ?? internalCommonDocinfo,
+      useCommonDocinfo: props.useCommonDocinfo ?? internalUseCommonDocinfo,
+      projectType: props.projectType,
+      projectUrl: props.projectUrl,
+      divisions: props.divisions,
+      rootDivisionId: rootDivision?.xmlId,
+      activeDivisionId,
+      sections,
+      currentSectionId,
+      editMode,
+      parseError,
+      activeSourceContent: isDivisionsMode
+        ? divisionActiveSource
+        : activeSourceContent,
+      isBookChapterBody,
+      isDivisionsMode,
+      tocReadonly: isDivisionsMode ? false : editMode === "document",
+      hideSectionList: isMarkdownDoc,
+      isMarkdownDoc,
+      isLatexDoc,
+      isNonPretextDoc,
+      canConvertToPretext: contentState.pretextError === undefined,
+    });
+  });
+
+  // ── Preview content ──────────────────────────────────────────────────────
   const previewContent = (() => {
     if (isDivisionsMode) {
       if (activeDivision && activeDivisionFormat === "pretext") {
@@ -558,21 +621,13 @@ const Editors = (props: editorProps) => {
     editMode !== "sectioned" &&
     contentState.pretextError !== undefined;
 
-  // ── Preview rebuild helpers ────────────────────────────────────────────────
-  /** Triggers a full-page preview rebuild without saving. */
+  // ── Preview rebuild helpers ──────────────────────────────────────────────
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
-
-  /** Calls the host's `onSave` callback then triggers a preview rebuild. */
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
     fullPreviewRef.current?.rebuild();
   };
 
-  /**
-   * Keyboard shortcuts captured at the root editor div:
-   * - Ctrl/Cmd+Enter → rebuild preview (when `onPreviewRebuild` is set).
-   * - Ctrl/Cmd+S     → save and rebuild.
-   */
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && e.key === "Enter" && props.onPreviewRebuild) {
@@ -584,11 +639,6 @@ const Editors = (props: editorProps) => {
     }
   };
 
-  // ── Convert to PreTeXt ─────────────────────────────────────────────────────
-  /**
-   * Sends converted PreTeXt content to the host so it can create a new
-   * PreTeXt project copy.
-   */
   const handleConvertToPretext = () => {
     if (contentState.pretextError) return;
     props.onCreatePretextProjectCopy?.({
@@ -598,17 +648,14 @@ const Editors = (props: editorProps) => {
     });
   };
 
-  // ── Format-specific flags ──────────────────────────────────────────────────
-  const isLatexDoc = contentState.sourceFormat === "latex";
-  const isMarkdownDoc = contentState.sourceFormat === "markdown";
-  const isNonPretextDoc = isLatexDoc || isMarkdownDoc;
-
-  // ── Build editor sub-components ────────────────────────────────────────────
+  // ── Code editor ──────────────────────────────────────────────────────────
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
       content={isDivisionsMode ? divisionActiveSource : activeSourceContent}
-      sourceFormat={isDivisionsMode ? activeDivisionFormat : contentState.sourceFormat}
+      sourceFormat={
+        isDivisionsMode ? activeDivisionFormat : contentState.sourceFormat
+      }
       onChange={
         isDivisionsMode
           ? handleDivisionContentChange
@@ -620,23 +667,24 @@ const Editors = (props: editorProps) => {
       }
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
-      onOpenLatexImport={() => setIsLatexDialogOpen(true)}
-      onOpenDocinfoEditor={() => setIsDocinfoEditorOpen(true)}
+      onOpenLatexImport={() => openModal("isLatexDialogOpen")}
+      onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
         isNonPretextDoc && props.onCreatePretextProjectCopy
-          ? () => setIsConvertDialogOpen(true)
+          ? () => openModal("isConvertDialogOpen")
           : undefined
       }
       canConvertToPretext={contentState.pretextError === undefined}
       onOpenAssets={
-        props.projectAssets !== undefined && contentState.sourceFormat === "pretext"
-          ? () => setIsAssetPickerOpen(true)
+        props.projectAssets !== undefined &&
+        contentState.sourceFormat === "pretext"
+          ? () => openModal("isAssetPickerOpen")
           : undefined
       }
     />
   );
 
-  // `preview` is either the visual editor or the full iframe preview
+  // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
   if (previewUnavailable) {
     preview = (
@@ -670,11 +718,12 @@ const Editors = (props: editorProps) => {
       ? activeDivisionFormat
       : contentState.sourceFormat;
     const canEditVisually = effectiveFormat === "pretext";
-    const editDisabledReason = effectiveFormat === "markdown"
-      ? "Visual editing is not available for Markdown documents."
-      : effectiveFormat === "latex"
-      ? "Visual editing is not available for LaTeX documents."
-      : "";
+    const editDisabledReason =
+      effectiveFormat === "markdown"
+        ? "Visual editing is not available for Markdown documents."
+        : effectiveFormat === "latex"
+        ? "Visual editing is not available for LaTeX documents."
+        : "";
     preview = (
       <VisualEditor
         content={visualContent}
@@ -693,87 +742,45 @@ const Editors = (props: editorProps) => {
     );
   }
 
-  // ── TOC sidebar ────────────────────────────────────────────────────────────
-  // Hide for markdown with no assets (nothing useful to show).
+  // ── TOC sidebar ──────────────────────────────────────────────────────────
+  // Now only needs the props TableOfContents still requires externally.
+  // Deep data + callbacks come from the store.
   const tocSidebar =
     isMarkdownDoc && props.projectAssets === undefined ? null : (
-    <TableOfContents
-      // ── Legacy (non-divisions) mode props ───────────────────────────────
-      sections={sections}
-      currentSectionId={currentSectionId ?? sections[0]?.id ?? null}
-      isCollapsed={isTocCollapsed}
-      onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
-      onSelectSection={
-        isDivisionsMode
-          ? handleDivisionSelect
-          : editMode === "sectioned"
-          ? setCurrentSectionId
-          : handleSelectSectionInDocMode
-      }
-      onAddSection={isDivisionsMode ? handleDivisionAdd : handleAddSection}
-      onAddIntroduction={handleAddIntroduction}
-      onAddConclusion={handleAddConclusion}
-      onRemoveSection={
-        isDivisionsMode
-          ? (xmlId) => props.onDivisionRemove?.(xmlId)
-          : handleRemoveSection
-      }
-      onUpdateSection={
-        isDivisionsMode
-          ? (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes)
-          : handleUpdateSectionMetadata
-      }
-      onReorderSections={handleReorderSections}
-      onMergeSections={isDivisionsMode ? undefined : handleMergeSection}
-      onAddFirstSection={isDivisionsMode ? undefined : handleAddFirstSection}
-      onRefresh={
-        isDivisionsMode || editMode !== "sectioned"
-          ? undefined
-          : handleRefreshSections
-      }
-      editMode={isDivisionsMode ? "sectioned" : editMode}
-      onToggleEditMode={
-        isDivisionsMode
-          ? undefined
-          : () =>
-              switchEditMode(editMode === "document" ? "sectioned" : "document")
-      }
-      readonly={isDivisionsMode ? false : editMode === "document"}
-      projectType={props.projectType}
-      parseError={isDivisionsMode ? null : parseError}
-      hideSectionList={isMarkdownDoc}
-      // ── Divisions mode props ─────────────────────────────────────────────
-      divisions={props.divisions}
-      rootDivisionId={rootDivision?.xmlId}
-      activeDivisionId={activeDivisionId}
-      onDivisionContentChange={props.onDivisionContentChange}
-      // ── Assets ──────────────────────────────────────────────────────────
-      assets={props.projectAssets}
-      onAssetInsert={handleAssetInsert}
-      onOpenAssetPicker={
-        props.projectAssets !== undefined
-          ? () => setIsAssetPickerOpen(true)
-          : undefined
-      }
-    />
-  );
+      <TableOfContents
+        isCollapsed={isTocCollapsed}
+        onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
+        onOpenAssetPicker={
+          props.projectAssets !== undefined
+            ? () => openModal("isAssetPickerOpen")
+            : undefined
+        }
+      />
+    );
 
-  // ── Layout ─────────────────────────────────────────────────────────────────
-  const narrowTocDrawer = isNarrowScreen && tocSidebar ? (
-    <div className="pretext-plus-editor__toc-drawer">
-      {isTocCollapsed ? (
-        <button
-          type="button"
-          className="pretext-plus-editor__toc-drawer-toggle"
-          onClick={() => setIsTocCollapsed(false)}
-        >
-          ☰ Contents
-        </button>
-      ) : (
-        <div className="pretext-plus-editor__toc-drawer-open">{tocSidebar}</div>
-      )}
-    </div>
-  ) : null;
+  // ── Layout ────────────────────────────────────────────────────────────────
+  const editorTabId = "pretext-plus-tab-editor";
+  const previewTabId = "pretext-plus-tab-preview";
+  const tabPanelId = "pretext-plus-tabpanel";
+
+  const narrowTocDrawer =
+    isNarrowScreen && tocSidebar ? (
+      <div className="pretext-plus-editor__toc-drawer">
+        {isTocCollapsed ? (
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-drawer-toggle"
+            onClick={() => setIsTocCollapsed(false)}
+          >
+            ☰ Contents
+          </button>
+        ) : (
+          <div className="pretext-plus-editor__toc-drawer-open">
+            {tocSidebar}
+          </div>
+        )}
+      </div>
+    ) : null;
 
   let editorDisplays: ReactNode;
   if (isNarrowScreen) {
@@ -844,7 +851,6 @@ const Editors = (props: editorProps) => {
     );
   }
 
-  // Suppress unused variable warnings for activeSourceContent in document mode.
   void activeSourceContent;
 
   return (
@@ -887,7 +893,7 @@ const Editors = (props: editorProps) => {
         </ErrorBoundary>
         {isLatexDialogOpen ? (
           <LatexImportDialog
-            onClose={() => setIsLatexDialogOpen(false)}
+            onClose={() => closeModal("isLatexDialogOpen")}
             feedbackControl={
               props.onFeedbackSubmit ? (
                 <FeedbackLink
@@ -908,7 +914,7 @@ const Editors = (props: editorProps) => {
             latexSource={contentState.sourceContent}
             pretextSource={contentState.pretextSource ?? ""}
             onConfirm={handleConvertToPretext}
-            onClose={() => setIsConvertDialogOpen(false)}
+            onClose={() => closeModal("isConvertDialogOpen")}
           />
         ) : null}
         {isDocinfoEditorOpen ? (
@@ -920,11 +926,13 @@ const Editors = (props: editorProps) => {
               props.useCommonDocinfo ?? internalUseCommonDocinfo
             }
             onClose={(value) => {
-              setIsDocinfoEditorOpen(false);
+              closeModal("isDocinfoEditorOpen");
               if (value !== undefined) {
-                setInternalDocinfo(value.docinfo);
-                setInternalCommonDocinfo(value.commonDocinfo);
-                setInternalUseCommonDocinfo(value.useCommonDocinfo);
+                syncState({
+                  internalDocinfo: value.docinfo,
+                  internalCommonDocinfo: value.commonDocinfo,
+                  internalUseCommonDocinfo: value.useCommonDocinfo,
+                });
                 props.onCommonDocinfoChange?.(value.commonDocinfo);
                 props.onUseCommonDocinfoChange?.(value.useCommonDocinfo);
                 props.onContentChange(contentState.sourceContent, {
@@ -940,7 +948,7 @@ const Editors = (props: editorProps) => {
         {isAssetPickerOpen && props.projectAssets !== undefined ? (
           <AssetManagerModal
             open={isAssetPickerOpen}
-            onClose={() => setIsAssetPickerOpen(false)}
+            onClose={() => closeModal("isAssetPickerOpen")}
             source={activeSourceContent}
             projectAssets={props.projectAssets}
             libraryAssets={props.libraryAssets}
