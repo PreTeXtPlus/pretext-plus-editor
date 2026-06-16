@@ -2,7 +2,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactNode,
   type ChangeEvent,
   type DragEvent,
 } from "react";
@@ -11,13 +10,12 @@ import {
   convertLatexToPretext,
   getConversionErrorMessage,
 } from "../contentConversion";
+import StoreFeedbackLink from "./StoreFeedbackLink";
 import "./dialog.css";
 
 interface LatexImportDialogProps {
   /** Called when the dialog should close (Cancel button, Escape key, or after "Copy and Close"). */
   onClose: () => void;
-  /** Optional feedback control shown in the dialog header. */
-  feedbackControl?: ReactNode;
 }
 
 /**
@@ -29,7 +27,6 @@ interface LatexImportDialogProps {
  */
 const LatexImportDialog = ({
   onClose,
-  feedbackControl,
 }: LatexImportDialogProps) => {
   const [latexInput, setLatexInput] = useState("");
   const [convertedOutput, setConvertedOutput] = useState("");
@@ -171,11 +168,12 @@ const LatexImportDialog = ({
             <p className="pretext-plus-editor__dialog-copy">
               Paste LaTeX, convert it to PreTeXt, then copy the result.
             </p>
-            {feedbackControl ? (
-              <div className="pretext-plus-editor__dialog-feedback-row">
-                {feedbackControl}
-              </div>
-            ) : null}
+            <div className="pretext-plus-editor__dialog-feedback-row">
+              <StoreFeedbackLink
+                label="Give feedback on conversion"
+                context="latex-conversion"
+              />
+            </div>
           </div>
           <button
             type="button"

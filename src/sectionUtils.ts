@@ -9,6 +9,7 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, Root } from "xast";
+import type { SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
@@ -137,7 +138,9 @@ function stripWrapperByRegex(xml: string): string {
   if (!open || open.index === undefined) return xml;
   const afterOpen = xml.slice(open.index + open[0].length);
   const closeRe = new RegExp(`\\s*</${escapeRegex(open[1])}\\s*>\\s*$`);
-  return afterOpen.replace(closeRe, "");
+  // Matches trimBoundaryWhitespaceNodes behavior in the valid-XML path so the
+  // leading "\n" from rewrapSection doesn't appear as a spurious blank line.
+  return trimBoundaryBlankLines(afterOpen.replace(closeRe, ""));
 }
 
 // ---------------------------------------------------------------------------
@@ -149,16 +152,16 @@ function stripWrapperByRegex(xml: string): string {
  * Replace (or insert) the `<title>` of a section XML string with `newTitle`.
  * Returns the updated XML string.
  */
-export function updateSectionTitle(
-  sectionXml: string,
+export function updateDivisionTitle(
+  divisionXml: string,
   newTitle: string,
 ): string {
-  const tree = safeFromXml(sectionXml);
-  if (!tree) return sectionXml;
+  const tree = safeFromXml(divisionXml);
+  if (!tree) return divisionXml;
   const rootEl = tree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
-  if (!rootEl) return sectionXml;
+  if (!rootEl) return divisionXml;
 
   const titleIndex = rootEl.children.findIndex(
     (n) => n.type === "element" && (n as Element).name === "title",
@@ -241,7 +244,9 @@ export function stripSectionWrapper(sectionXml: string): string {
     type: "root",
     children: trimBoundaryWhitespaceNodes(rootEl.children),
   };
-  return toXml(inner);
+  // toXml expands empty elements: <plus:section ref="x"/> → <plus:section ref="x"></plus:section>.
+  // Normalize back so the editor always shows the canonical self-closing form.
+  return normalizeSelfClosingRefs(toXml(inner));
 }
 
 /**
@@ -1078,6 +1083,42 @@ export function parseDivisionRefs(content: string): string[] {
     refs.push(m[1]);
   }
   return refs;
+}
+
+/**
+ * Like {@link parseDivisionRefs} but also returns the division type inferred
+ * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
+ * Used to auto-create Division records when new refs appear in edited content.
+ */
+export function parseDivisionRefsWithTypes(
+  content: string,
+): { xmlId: string; type: DivisionType }[] {
+  const refs: { xmlId: string; type: DivisionType }[] = [];
+  const re = /<plus:([a-z-]+)\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    refs.push({ type: m[1] as DivisionType, xmlId: m[2] });
+  }
+  return refs;
+}
+
+/**
+ * Create a minimal Division record for a given `xmlId` and `type`.
+ * Used when the user types a new `<plus:TYPE ref="id"/>` placeholder into a
+ * division's content and no matching Division exists in the pool yet.
+ */
+export function createDivisionWithId(
+  xmlId: string,
+  type: DivisionType,
+  sourceFormat: SourceFormat = "pretext",
+): Division {
+  const tag = type.charAt(0).toUpperCase() + type.slice(1);
+  const title = `New ${tag}`;
+  const content =
+    sourceFormat === "pretext"
+      ? `<${type} xml:id="${xmlId}">\n<title>${title}</title>\n\n<p></p>\n\n</${type}>`
+      : `\\section{${title}}\n\n`;
+  return { id: xmlId, xmlId, title, type, sourceFormat, content };
 }
 
 /**

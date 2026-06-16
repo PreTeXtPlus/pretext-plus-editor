@@ -45,7 +45,8 @@ export {
   getOrphanRoots,
   buildDivisionTree,
   // Division content utilities
-  updateSectionTitle,
+  // TODO: update these to work for generic divisions, not just sections
+  updateDivisionTitle,
   createNewSection,
   createIntroduction,
   createConclusion,
@@ -56,6 +57,7 @@ export {
   getSectionAttributes,
   updateSectionMetadata,
   // LaTeX division utilities
+  // TODO: update these to work for generic divisions, not just sections
   stripLatexSectionWrapper,
   rewrapLatexSection,
   ensureLatexSectionWrapper,

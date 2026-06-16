@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Asset, AssetKind } from "../types/editor";
+import { useEditorStore } from "../store/hooks";
 import "./dialog.css";
 import "./AssetManagerModal.css";
 import doenetLogo from "../assets/doenet.png";
@@ -7,10 +8,6 @@ import doenetLogo from "../assets/doenet.png";
 export interface AssetManagerModalProps {
   open: boolean;
   onClose: () => void;
-  /** Current editor source, used to parse which assets are referenced. */
-  source: string;
-  projectAssets: Asset[];
-  libraryAssets?: Asset[];
   onLoadAssets?: () => Promise<Asset[]>;
   onLoadLibraryAssets?: () => Promise<Asset[]>;
   /** Insert an asset tag at the cursor position. */
@@ -52,9 +49,6 @@ function parseDocumentAssets(source: string): Array<{ kind: AssetKind; ref: stri
 const AssetManagerModal = ({
   open,
   onClose,
-  source,
-  projectAssets,
-  libraryAssets,
   onLoadAssets,
   onLoadLibraryAssets,
   onInsert,
@@ -64,6 +58,9 @@ const AssetManagerModal = ({
   onCreateDoenet,
   onRemoveAsset,
 }: AssetManagerModalProps) => {
+  const source = useEditorStore((s) => s.activeEditorSource);
+  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const libraryAssets = useEditorStore((s) => s.libraryAssets);
   const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
 
   const [dynamicAssets, setDynamicAssets] = useState<Asset[] | null>(null);
