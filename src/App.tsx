@@ -1,67 +1,21 @@
 import "./App.css";
 import Editors from "./components/Editors";
-import { defaultContent } from "./defaultContent";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   Asset,
+  EditorContentChange,
   FeedbackSubmission,
   SourceFormat,
 } from "./types/editor";
 import type { Division, DivisionType } from "./types/sections";
-
-const latexDemoContent = String.raw`
-
-This paragraph appears before the first section, so it becomes the introduction
-when editing section-by-section.
-
-\section{Background}
-
-This is the first proper section. It contains inline math like $a^2 + b^2 = c^2$
-and displayed math:
-\[
-  E = mc^2
-\]
-
-\section{Methods}
-
-Here is the second section. You can add \textbf{bold} text, \emph{emphasis},
-and environments like \texttt{verbatim}.
-
-\section{Results}
-
-The third section can contain whatever you like.
-
-`;
-
-const markdownDemoContent = `# Markdown Demo
-
-This demo lets you test the new **markdown** source mode in the code editor.
-
-## Features To Try
-
-- Heading and paragraph editing
-- Lists and inline code like \`inline code\`
-- Fenced code blocks
-
-## Example Math-like Text
-
-Markdown mode currently treats this as plain text:
-
-\\[ E = mc^2 \\]
-
-## Blocks and environments.
-
-Theorem:
-  This is the theorem.
-
-  Proof:
-    This is the proof.
-
-More text.
-`;
+import {
+  stripLatexSectionWrapper,
+  stripSectionWrapper,
+} from "./sectionUtils";
+import { derivePretextContent } from "./contentConversion";
 
 // ---------------------------------------------------------------------------
-// Initial divisions for the divisions-mode demo
+// Initial divisions for the article demo
 // ---------------------------------------------------------------------------
 const DEMO_DIVISIONS: Division[] = [
   {
@@ -73,9 +27,12 @@ const DEMO_DIVISIONS: Division[] = [
     content: `<article xml:id="demo-article">
 <title>Divisions Mode Demo</title>
 <p>Each section is a separate <c>Division</c> record in a flat pool. The TOC reads their order from <c>plus:section</c> placeholder tags embedded in this root division's content.</p>
+<p>Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview.</p>
 <plus:section ref="sec-intro"/>
 <plus:section ref="sec-background"/>
 <plus:section ref="sec-results"/>
+<plus:section ref="sec-latex"/>
+<plus:section ref="sec-markdown"/>
 </article>`,
   },
   {
@@ -111,6 +68,55 @@ const DEMO_DIVISIONS: Division[] = [
     content: `<section xml:id="sec-results">
 <title>Results</title>
 <p>The TOC reads the ordered list of <c>plus:section ref="..."</c> tags from the root division's content and displays them in that order. Drag-to-reorder rewrites those placeholder tags in-place.</p>
+</section>`,
+  },
+  {
+    id: "demo-latex",
+    xmlId: "sec-latex",
+    title: "A LaTeX Section",
+    type: "section",
+    sourceFormat: "latex",
+    // LaTeX divisions are stored as raw LaTeX. The leading `\section{...}` line
+    // is the structural wrapper: the code editor strips it for editing and
+    // `rewrapLatexSection` restores it on save. Body content is converted to
+    // PreTeXt for the preview.
+    content: `\\section{A LaTeX Section}
+
+This section is authored in \\LaTeX{} rather than PreTeXt. The editor strips the
+leading \\verb|\\section{...}| line while you edit and restores it on save.
+
+Inline math like $E = mc^2$ and display math both convert to PreTeXt:
+\\[
+  \\int_0^1 x^2 \\, dx = \\frac{1}{3}.
+\\]
+
+\\begin{itemize}
+  \\item LaTeX lists become PreTeXt lists.
+  \\item \\textbf{Bold} and \\emph{emphasis} convert too.
+\\end{itemize}`,
+  },
+  {
+    id: "demo-markdown",
+    xmlId: "sec-markdown",
+    title: "A Markdown Section",
+    type: "section",
+    sourceFormat: "markdown",
+    // Markdown divisions reuse the PreTeXt strip/rewrap path, so the body is
+    // stored wrapped in <section>. stripSectionWrapper parses this XML and hands
+    // the raw Markdown to the converter. Keep the body free of < and & so it
+    // stays well-formed XML text.
+    content: `<section xml:id="sec-markdown">
+# A Markdown Section
+
+This section is authored in **Markdown**, which is auto-converted to PreTeXt.
+
+You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^2$.
+
+- Markdown bullet lists become PreTeXt lists.
+- A second item to show structure.
+
+1. Ordered lists work too.
+2. And convert on preview.
 </section>`,
   },
   {
@@ -225,6 +231,63 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Full-build payload assembly (demo-only)
+//
+// `onPreviewRebuild` only ever receives the *active division's* converted
+// content (see Editors.tsx's `previewContent`), so it can't show what a real
+// "full build" would send: the whole document with every `<plus:* ref="..."/>`
+// placeholder resolved and every LaTeX/Markdown division converted to PreTeXt.
+// This reproduces that assembly from the `divisions` pool so the payload
+// panel below can show it live, independent of the (broken, tokenless)
+// preview iframe.
+// ---------------------------------------------------------------------------
+function resolveDivisionXml(
+  xmlId: string,
+  divisions: Division[],
+  ancestors: Set<string>,
+): string {
+  const division = divisions.find((d) => d.xmlId === xmlId);
+  if (!division) return `<!-- missing division: ${xmlId} -->`;
+  if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
+
+  let xml: string;
+  if (division.sourceFormat === "pretext") {
+    xml = division.content;
+  } else {
+    // LaTeX/Markdown divisions store raw source without a PreTeXt wrapper, so
+    // strip their format-specific header, convert the body, then wrap it in
+    // the element the document tree expects.
+    const inner =
+      division.sourceFormat === "latex"
+        ? stripLatexSectionWrapper(division.content, division.type)
+        : stripSectionWrapper(division.content);
+    const { pretextSource, pretextError } = derivePretextContent(
+      inner,
+      division.sourceFormat,
+    );
+    const body = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+    xml = `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${body}\n</${division.type}>`;
+  }
+
+  // Per the Division model, only PreTeXt divisions can embed <plus:* ref=.../>
+  // placeholders -- LaTeX/Markdown divisions are always leaves.
+  if (division.sourceFormat !== "pretext") return xml;
+
+  const nextAncestors = new Set(ancestors).add(xmlId);
+  return xml.replace(
+    /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g,
+    (_match, ref: string) => resolveDivisionXml(ref, divisions, nextAncestors),
+  );
+}
+
+function assembleFullBuildSource(
+  divisions: Division[],
+  rootXmlId: string,
+): string {
+  return resolveDivisionXml(rootXmlId, divisions, new Set());
+}
+
 const handlePreviewRebuild = async (
   source: string,
   title: string,
@@ -236,19 +299,14 @@ const handlePreviewRebuild = async (
 };
 
 function App() {
-  const [source, setSource] = useState(defaultContent);
-  const [sourceFormat, setSourceFormat] = useState<SourceFormat>("pretext");
-  const [pretextSource, setPretextSource] = useState<string | undefined>(
-    defaultContent,
+  const [title, setTitle] = useState("Divisions Mode Demo");
+  // ---------------------------------------------------------------------------
+  // Divisions state — the host always provides a list of divisions.
+  // ---------------------------------------------------------------------------
+  const [divisions, setDivisions] = useState<Division[]>(DEMO_DIVISIONS);
+  const [activeDivisionId, setActiveDivisionId] = useState<string | null>(
+    "sec-intro",
   );
-  const [title, setTitle] = useState("Document Title");
-  // ---------------------------------------------------------------------------
-  // Divisions mode state
-  // ---------------------------------------------------------------------------
-  const [divisions, setDivisions] = useState<Division[] | undefined>(undefined);
-  const [activeDivisionId, setActiveDivisionId] = useState<string | null>(null);
-
-  const isDivisionsMode = divisions !== undefined;
 
   // ---------------------------------------------------------------------------
   // Asset demo state
@@ -287,43 +345,31 @@ function App() {
   const [projectType, setProjectType] = useState<"article" | "book">("article");
 
   // ---------------------------------------------------------------------------
+  // Full-build payload panel (demo-only debug tool)
+  // ---------------------------------------------------------------------------
+  const [showBuildPayload, setShowBuildPayload] = useState(false);
+
+  const rootDivision = divisions.find(
+    (d) => d.type === "book" || d.type === "article" || d.type === "slideshow",
+  ) ?? divisions[0];
+
+  const fullBuildPayload = useMemo(() => {
+    if (!rootDivision) return null;
+    return {
+      source: assembleFullBuildSource(divisions, rootDivision.xmlId),
+      title,
+      token: "demo",
+    };
+  }, [divisions, rootDivision, title]);
+
+  // ---------------------------------------------------------------------------
   // Demo loaders
   // ---------------------------------------------------------------------------
-
-  const loadPretextDemo = () => {
-    setDivisions(undefined);
-    setSource(defaultContent);
-    setSourceFormat("pretext");
-    setPretextSource(defaultContent);
-    setTitle("Document Title");
-    setProjectType("article");
-  };
-
-  const loadLatexDemo = () => {
-    setDivisions(undefined);
-    setSource(latexDemoContent);
-    setSourceFormat("latex");
-    setPretextSource(undefined);
-    setTitle("Testing LaTeX Source Mode");
-    setProjectType("article");
-  };
-
-  const loadMarkdownDemo = () => {
-    setDivisions(undefined);
-    setSource(markdownDemoContent);
-    setSourceFormat("markdown");
-    setPretextSource(undefined);
-    setTitle("Testing Markdown Source Mode");
-    setProjectType("article");
-  };
 
   const loadDivisionsDemo = () => {
     setDivisions(DEMO_DIVISIONS);
     setActiveDivisionId("sec-intro");
     setTitle("Divisions Mode Demo");
-    setSource("");
-    setSourceFormat("pretext");
-    setPretextSource(undefined);
     setProjectType("article");
   };
 
@@ -331,33 +377,36 @@ function App() {
     setDivisions(DEMO_BOOK_DIVISIONS);
     setActiveDivisionId("ch1-sec1");
     setTitle("A Demo Book");
-    setSource("");
-    setSourceFormat("pretext");
-    setPretextSource(undefined);
     setProjectType("book");
   };
 
   // ---------------------------------------------------------------------------
-  // Division handlers (used only when isDivisionsMode)
+  // Division handlers
   // ---------------------------------------------------------------------------
 
   const handleDivisionSelect = (xmlId: string) => {
     setActiveDivisionId(xmlId);
   };
 
-  const handleDivisionContentChange = (xmlId: string, content: string) => {
+  // Unified content-change handler: every change (division edit, structural
+  // reorder, or docinfo edit) arrives keyed by the affected division's xmlId.
+  const handleContentChange = (change: EditorContentChange) => {
     setDivisions((prev) =>
-      prev?.map((d) => (d.xmlId === xmlId ? { ...d, content } : d)),
+      prev.map((d) =>
+        d.xmlId === change.xmlId
+          ? { ...d, content: change.sourceContent }
+          : d,
+      ),
     );
   };
 
   const handleDivisionAdd = (division: Division) => {
-    setDivisions((prev) => (prev ? [...prev, division] : [division]));
+    setDivisions((prev) => [...prev, division]);
     setActiveDivisionId(division.xmlId);
   };
 
   const handleDivisionRemove = (xmlId: string) => {
-    setDivisions((prev) => prev?.filter((d) => d.xmlId !== xmlId));
+    setDivisions((prev) => prev.filter((d) => d.xmlId !== xmlId));
   };
 
   const handleDivisionUpdate = (
@@ -371,7 +420,7 @@ function App() {
     },
   ) => {
     setDivisions((prev) =>
-      prev?.map((d) =>
+      prev.map((d) =>
         d.xmlId === xmlId
           ? {
               ...d,
@@ -442,53 +491,59 @@ function App() {
   // Toolbar label
   // ---------------------------------------------------------------------------
 
-  const toolbarLabel = isDivisionsMode
-    ? "Demo: Divisions mode"
-    : `Demo source: ${
-        sourceFormat === "latex"
-          ? "LaTeX"
-          : sourceFormat === "markdown"
-          ? "Markdown"
-          : "PreTeXt"
-      }`;
+  const toolbarLabel =
+    projectType === "book" ? "Demo: Book" : "Demo: Article";
 
   return (
     <>
       <div className="app-demo-toolbar">
         <span className="app-demo-toolbar__label">{toolbarLabel}</span>
-        <button className="app-demo-toolbar__button" onClick={loadPretextDemo}>
-          Load PreTeXt Demo
-        </button>
-        <button className="app-demo-toolbar__button" onClick={loadLatexDemo}>
-          Load LaTeX Demo
-        </button>
-        <button
-          className="app-demo-toolbar__button"
-          onClick={loadMarkdownDemo}
-        >
-          Load Markdown Demo
-        </button>
         <button
           className="app-demo-toolbar__button"
           onClick={loadDivisionsDemo}
         >
-          Load Divisions Demo
+          Load Article Demo
         </button>
         <button className="app-demo-toolbar__button" onClick={loadBookDemo}>
           Load Book Demo
         </button>
+        <button
+          className="app-demo-toolbar__button"
+          onClick={() => setShowBuildPayload((v) => !v)}
+        >
+          {showBuildPayload ? "Hide Build Payload" : "Show Build Payload"}
+        </button>
       </div>
+      {showBuildPayload && fullBuildPayload && (
+        <div className="app-build-payload-overlay">
+          <div className="app-build-payload-overlay__header">
+            <span>Full Build Payload (live, updates as divisions change)</span>
+            <div className="app-build-payload-overlay__actions">
+              <button
+                className="app-demo-toolbar__button"
+                onClick={() =>
+                  navigator.clipboard.writeText(
+                    JSON.stringify(fullBuildPayload, null, 2),
+                  )
+                }
+              >
+                Copy JSON
+              </button>
+              <button
+                className="app-demo-toolbar__button"
+                onClick={() => setShowBuildPayload(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <pre className="app-build-payload-overlay__body">
+            {JSON.stringify(fullBuildPayload, null, 2)}
+          </pre>
+        </div>
+      )}
       <Editors
-        source={source}
-        sourceFormat={sourceFormat}
-        pretextSource={pretextSource}
-        onContentChange={(value, meta) => {
-          if (!isDivisionsMode) {
-            setSource(value || "");
-            setSourceFormat(meta?.sourceFormat || "pretext");
-            setPretextSource(meta?.pretextSource);
-          }
-        }}
+        onContentChange={handleContentChange}
         title={title}
         onTitleChange={(value) => setTitle(value || "Document Title")}
         onSaveButton={() => console.log("Save clicked")}
@@ -507,14 +562,11 @@ function App() {
         onAssetUpload={handleAssetUpload}
         onAssetAddUrl={handleAssetAddUrl}
         divisions={divisions}
-        activeDivisionId={isDivisionsMode ? activeDivisionId : undefined}
-        onDivisionSelect={isDivisionsMode ? handleDivisionSelect : undefined}
-        onDivisionContentChange={
-          isDivisionsMode ? handleDivisionContentChange : undefined
-        }
-        onDivisionAdd={isDivisionsMode ? handleDivisionAdd : undefined}
-        onDivisionRemove={isDivisionsMode ? handleDivisionRemove : undefined}
-        onDivisionUpdate={isDivisionsMode ? handleDivisionUpdate : undefined}
+        activeDivisionId={activeDivisionId}
+        onDivisionSelect={handleDivisionSelect}
+        onDivisionAdd={handleDivisionAdd}
+        onDivisionRemove={handleDivisionRemove}
+        onDivisionUpdate={handleDivisionUpdate}
       />
     </>
   );

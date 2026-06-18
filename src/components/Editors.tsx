@@ -14,10 +14,8 @@ import ErrorBoundary from "./ErrorBoundary";
 import "./Editors.css";
 
 import { derivePretextContent } from "../contentConversion";
-import { defaultContent } from "../defaultContent";
 import type {
   EditorContentChange,
-  EditorContentState,
   Asset,
   FeedbackSubmission,
   SourceFormat,
@@ -41,26 +39,9 @@ import {
 import { EditorStoreProvider } from "../store/EditorStoreProvider";
 import { useEditorStore } from "../store/hooks";
 
-const startingContent = defaultContent;
-
 // ── Public prop interface ─────────────────────────────────────────
 
 export interface editorProps {
-  /** The source content string (PreTeXt XML, LaTeX, or Markdown) of the current editor view. */
-  source: string;
-  /**
-   * The format of `source`.  Defaults to `"pretext"` when omitted.
-   * When set to `"latex"`, the editor displays a LaTeX code editor, `"markdown"` displays a Markdown code editor, and
-   * derives a read-only PreTeXt preview via conversion.
-   */
-  sourceFormat?: SourceFormat;
-  /**
-   * Pre-computed PreTeXt XML corresponding to `source`.
-   * Providing this avoids running the conversion on first render when the
-   * host already has a cached result.  Only meaningful when
-   * `sourceFormat` is not `"pretext"`.
-   */
-  pretextSource?: string;
   /**
    * The docinfo element for a pretext document, which can contain macros and similar
    * document wide information.
@@ -83,18 +64,13 @@ export interface editorProps {
    */
   onCommonDocinfoChange?: (value: string) => void;
   /**
-   * Called whenever the source content changes (user edits in the code
-   * editor or WYSIWYG editor).
-   *
-   * @param value - The new source string (`undefined` is passed by Monaco on
-   *   certain edge cases; treat it as an empty string).
-   * @param meta - The full derived {@link EditorContentChange} state at the
-   *   time of the change, including the converted PreTeXt and any error.
+   * Called whenever content changes — a division edit, a structural reorder
+   * (which rewrites a parent division's content), or a document-wide docinfo
+   * edit.  The single {@link EditorContentChange} payload carries the affected
+   * division's `xmlId` along with the derived content state, so the host can
+   * update the right record in its divisions pool.
    */
-  onContentChange: (
-    value: string | undefined,
-    meta?: EditorContentChange,
-  ) => void;
+  onContentChange: (change: EditorContentChange) => void;
   /** Document title shown in the menu bar title field. */
   title?: string;
   /** Called when the user edits the title field. */
@@ -138,10 +114,10 @@ export interface editorProps {
   projectType?: "article" | "book";
   // ── Divisions API ────────────────────────────────────────────────────────────
   /**
-   * Flat pool of all division records for this project.  Providing this
-   * enables divisions mode and bypasses the legacy split/merge path.
+   * Flat pool of all division records for this project.  The editor's content
+   * is always sourced from these divisions.
    */
-  divisions?: Division[];
+  divisions: Division[];
 
   /**
    * The `xmlId` of the root division (book, article, or slideshow).
@@ -161,11 +137,6 @@ export interface editorProps {
    * The host should update `activeDivisionId`.
    */
   onDivisionSelect?: (xmlId: string) => void;
-
-  /**
-   * Called when the user edits the content of the active division.
-   */
-  onDivisionContentChange?: (xmlId: string, content: string) => void;
 
   /**
    * Called when the user creates a new division via the TOC UI.
@@ -221,30 +192,19 @@ export interface editorProps {
   onLoadLibraryAssets?: () => Promise<Asset[]>;
 }
 
-// ── Content state helper ────────────────────────────────────────────────────
+// ── Helper: find the root division for a divisions pool ─────────────────────
 
-const createEditorContentState = ({
-  source: source,
-  sourceFormat,
-  pretextSource: pretextSource,
-}: Pick<
-  editorProps,
-  "source" | "sourceFormat" | "pretextSource"
->): EditorContentState => {
-  const sourceContent = source ?? startingContent;
-  const resolvedSourceFormat = sourceFormat ?? "pretext";
-  const derivedPretext =
-    resolvedSourceFormat === "pretext"
-      ? { pretextSource: sourceContent, pretextError: undefined }
-      : pretextSource !== undefined
-      ? { pretextSource, pretextError: undefined }
-      : derivePretextContent(sourceContent, resolvedSourceFormat);
-  return {
-    sourceContent,
-    sourceFormat: resolvedSourceFormat,
-    ...derivedPretext,
-  };
-};
+const findRootDivision = (
+  divisions: Division[],
+  rootDivisionId?: string,
+): Division | null =>
+  divisions.find((d) =>
+    rootDivisionId
+      ? d.xmlId === rootDivisionId
+      : d.type === "book" || d.type === "article" || d.type === "slideshow",
+  ) ??
+  divisions[0] ??
+  null;
 
 // ── Outer component: creates store + provides it ───────────────────────────
 
@@ -257,26 +217,24 @@ const Editors = (props: editorProps) => {
   // bindCallbacks is a plain function (not a React ref), so passing it during
   // render does not trigger the react-hooks/refs lint rule.
   const [handle] = useState<EditorStoreHandle>(() => {
-    const initRootDivision =
-      props.divisions?.find((d) =>
-        props.rootDivisionId
-          ? d.xmlId === props.rootDivisionId
-          : d.type === "book" || d.type === "article" || d.type === "slideshow",
-      ) ??
-      props.divisions?.[0] ??
-      null;
+    const initRootDivision = findRootDivision(
+      props.divisions,
+      props.rootDivisionId,
+    );
+    const initActiveId = props.activeDivisionId ?? initRootDivision?.xmlId ?? null;
+    const initActive =
+      props.divisions.find((d) => d.xmlId === initActiveId) ?? initRootDivision;
 
     return createEditorStore({
-      source: props.source ?? startingContent,
-      sourceFormat: props.sourceFormat ?? "pretext",
+      source: initActive?.content ?? "",
+      sourceFormat: initActive?.sourceFormat ?? "pretext",
       title: props.title ?? "Document Title",
       docinfo: props.docinfo ?? "",
       commonDocinfo: props.commonDocinfo ?? "",
       useCommonDocinfo: props.useCommonDocinfo ?? false,
       projectType: props.projectType,
       divisions: props.divisions,
-      activeDivisionId: props.activeDivisionId ?? initRootDivision?.xmlId ?? null,
-      // TODO: do we need assets here?  Anything else missing?
+      activeDivisionId: initActiveId,
     });
   });
 
@@ -295,7 +253,6 @@ interface EditorsInnerProps extends editorProps {
 
 const EditorsInner = (props: EditorsInnerProps) => {
   const { bindCallbacks } = props;
-  const { source, sourceFormat, pretextSource } = props;
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
   const showFullPreview = useEditorStore((s) => s.showFullPreview);
@@ -322,46 +279,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const title = props.title ?? internalTitle;
 
-  const contentState: EditorContentState = useMemo(
-    () => createEditorContentState({ source, sourceFormat, pretextSource }),
-    [source, sourceFormat, pretextSource],
-  );
-
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
 
-  // ── Content update callback ─────────────────────────────────────────────
-  const updateContentState = (sourceContent: string | undefined) => {
-    const normalizedSourceContent = sourceContent || "";
-    const derivedPretext =
-      contentState.sourceFormat === "pretext"
-        ? { pretextSource: normalizedSourceContent, pretextError: undefined }
-        : derivePretextContent(
-            normalizedSourceContent,
-            contentState.sourceFormat,
-          );
-    const nextState: EditorContentState = {
-      sourceContent: normalizedSourceContent,
-      sourceFormat: contentState.sourceFormat,
-      docinfo: props.docinfo ?? internalDocinfo,
-      commonDocinfo: props.commonDocinfo ?? internalCommonDocinfo,
-      useCommonDocinfo: props.useCommonDocinfo ?? internalUseCommonDocinfo,
-      ...derivedPretext,
-    };
-    props.onContentChange(normalizedSourceContent, nextState);
-  };
-
-  // ── Divisions mode ───────────────────────────────────────────────────────
-  const isDivisionsMode = props.divisions !== undefined;
-
-  const rootDivision =
-    props.divisions?.find((d) =>
-      props.rootDivisionId
-        ? d.xmlId === props.rootDivisionId
-        : d.type === "book" || d.type === "article" || d.type === "slideshow",
-    ) ??
-    props.divisions?.[0] ??
-    null;
+  // ── Active division ──────────────────────────────────────────────────────
+  const rootDivision = findRootDivision(props.divisions, props.rootDivisionId);
 
   const [internalActiveDivisionId, setInternalActiveDivisionId] = useState<
     string | null
@@ -372,34 +294,47 @@ const EditorsInner = (props: EditorsInnerProps) => {
       ? props.activeDivisionId
       : internalActiveDivisionId;
 
-  const activeDivision = isDivisionsMode
-    ? (props.divisions?.find((d) => d.xmlId === activeDivisionId) ??
-       props.divisions?.[0] ??
-       null)
-    : null;
+  const activeDivision =
+    props.divisions.find((d) => d.xmlId === activeDivisionId) ??
+    props.divisions[0] ??
+    null;
 
-  const activeDivisionFormat =
-    activeDivision?.sourceFormat ?? contentState.sourceFormat;
+  const activeDivisionFormat = activeDivision?.sourceFormat ?? "pretext";
 
   const divisionActiveSource = activeDivision
     ? activeDivisionFormat === "latex"
       ? stripLatexSectionWrapper(activeDivision.content, activeDivision.type)
       : stripSectionWrapper(activeDivision.content)
-    : contentState.sourceContent;
+    : "";
 
-  // Lazily convert the active division's source to PreTeXt for the convert dialog.
-  // Only computed in divisions mode when the active division is non-PreTeXt.
+  // ── Content-change emitter ───────────────────────────────────────────────
+  // Single channel for every content change: a division edit, a structural
+  // reorder, or a docinfo edit.  Always carries the affected division's xmlId.
+  const emitContentChange = (
+    xmlId: string,
+    content: string,
+    format: SourceFormat,
+    extra?: Partial<EditorContentChange>,
+  ) => {
+    props.onContentChange({
+      xmlId,
+      sourceContent: content,
+      sourceFormat: format,
+      pretextSource: format === "pretext" ? content : undefined,
+      ...extra,
+    });
+  };
+
+  // Lazily convert the active division's source to PreTeXt for the convert
+  // dialog.  Only computed when the active division is non-PreTeXt.
   const divisionConvertedPretext = useMemo(() => {
-    if (!isDivisionsMode || !activeDivision || activeDivisionFormat === "pretext") return undefined;
+    if (!activeDivision || activeDivisionFormat === "pretext") return undefined;
     const result = derivePretextContent(divisionActiveSource, activeDivisionFormat);
     return result.pretextError ? undefined : result.pretextSource;
-  }, [isDivisionsMode, activeDivision, activeDivisionFormat, divisionActiveSource]);
+  }, [activeDivision, activeDivisionFormat, divisionActiveSource]);
 
   const handleDivisionContentChange = (newContent: string | undefined) => {
-    if (!activeDivision) {
-      updateContentState(newContent);
-      return;
-    }
+    if (!activeDivision) return;
     const inner = newContent || "";
     const wrapped =
       activeDivisionFormat === "latex"
@@ -411,17 +346,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
           )
         : normalizeSelfClosingRefs(rewrapSection(inner, activeDivision.type));
     if (wrapped === activeDivision.content) return;
-    props.onDivisionContentChange?.(activeDivision.xmlId, wrapped);
-    props.onContentChange(wrapped, {
-      sourceContent: wrapped,
-      sourceFormat: activeDivisionFormat,
-      pretextSource:
-        activeDivisionFormat === "pretext" ? wrapped : undefined,
-    });
+    emitContentChange(activeDivision.xmlId, wrapped, activeDivisionFormat);
 
     // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
     // that appeared in the edited content but don't yet have a matching division.
-    if (props.onDivisionAdd && props.divisions) {
+    if (props.onDivisionAdd) {
       const existingIds = new Set(props.divisions.map((d) => d.xmlId));
       for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped)) {
         if (!existingIds.has(xmlId)) {
@@ -462,10 +391,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     return () => window.removeEventListener("resize", handleResize);
   }, [setIsNarrowScreen]);
 
-  // ── Computed flags ───────────────────────────────────────────────────────
-  const isLatexDoc = contentState.sourceFormat === "latex";
-  const isMarkdownDoc = contentState.sourceFormat === "markdown";
-  const isNonPretextDoc = isLatexDoc || isMarkdownDoc;
+  const isNonPretextDoc = activeDivisionFormat !== "pretext";
 
   // ── Bind callbacks after every render ────────────────────────────────────
   // Store actions call through the internal bag so they always invoke the
@@ -473,16 +399,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // without requiring stable identities for any of the callback functions.
   useLayoutEffect(() => {
     bindCallbacks({
-      selectDivision: isDivisionsMode ? handleDivisionSelect : () => {},
-      addDivision: isDivisionsMode ? () => handleDivisionAdd() : () => {},
-      removeDivision: isDivisionsMode
-        ? (xmlId) => props.onDivisionRemove?.(xmlId)
-        : () => {},
-      updateDivision: isDivisionsMode
-        ? (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes)
-        : () => {},
-      divisionContentChange: props.onDivisionContentChange,
-      updateContent: updateContentState,
+      selectDivision: handleDivisionSelect,
+      addDivision: () => handleDivisionAdd(),
+      removeDivision: (xmlId) => props.onDivisionRemove?.(xmlId),
+      updateDivision: (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes),
+      // Structural reorders rewrite a parent division's content; route them
+      // through the same unified content-change channel as direct edits.
+      divisionContentChange: (xmlId, content) => {
+        const division = props.divisions.find((d) => d.xmlId === xmlId);
+        emitContentChange(xmlId, content, division?.sourceFormat ?? "pretext");
+      },
       handleDivisionContentChange,
       assetInsert: handleAssetInsert,
       insertContentAtCursor: (content) => codeEditorRef.current?.insertAtCursor(content),
@@ -496,13 +422,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Sync controlled/derived state into store ─────────────────────────────
   // These effects ensure the store always mirrors the latest host data so
-  // deep components (which read from the store) stay in sync.
+  // deep components (which read from the store) stay in sync.  `source` /
+  // `sourceFormat` track the active division (read by the feedback link).
   useEffect(() => {
     syncState({
-      source: contentState.sourceContent,
-      sourceFormat: contentState.sourceFormat,
-      pretextSource: contentState.pretextSource,
-      pretextError: contentState.pretextError,
+      source: divisionActiveSource,
+      sourceFormat: activeDivisionFormat,
       projectAssets: props.projectAssets,
       libraryAssets: props.libraryAssets,
       title,
@@ -514,34 +439,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
       divisions: props.divisions,
       rootDivisionId: rootDivision?.xmlId,
       activeDivisionId,
-      isDivisionsMode,
-      isMarkdownDoc,
-      isLatexDoc,
-      isNonPretextDoc,
       canConvertToPretext: divisionConvertedPretext !== undefined,
-      activeEditorSource: isDivisionsMode ? divisionActiveSource : contentState.sourceContent,
+      activeEditorSource: divisionActiveSource,
       hasFeedback: props.onFeedbackSubmit !== undefined,
     });
   });
 
   // ── Preview content ──────────────────────────────────────────────────────
-  const previewContent = (() => {
-    if (isDivisionsMode) {
-      if (activeDivision && activeDivisionFormat === "pretext") {
-        return activeDivision.content || undefined;
-      }
-      return contentState.pretextSource ?? undefined;
-    }
-    return (
-      contentState.pretextSource ??
-      (contentState.sourceFormat === "pretext"
-        ? contentState.sourceContent
-        : undefined)
-    );
-  })();
-
-  const previewUnavailable =
-    !isDivisionsMode && contentState.pretextError !== undefined;
+  const previewContent =
+    activeDivision && activeDivisionFormat === "pretext"
+      ? activeDivision.content || undefined
+      : divisionConvertedPretext;
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
@@ -582,26 +490,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const codeEditor = (
     <CodeEditor
       ref={codeEditorRef}
-      content={isDivisionsMode ? divisionActiveSource : contentState.sourceContent}
-      sourceFormat={
-        isDivisionsMode ? activeDivisionFormat : contentState.sourceFormat
-      }
-      onChange={
-        isDivisionsMode ? handleDivisionContentChange : updateContentState
-      }
+      content={divisionActiveSource}
+      sourceFormat={activeDivisionFormat}
+      onChange={handleDivisionContentChange}
       onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
-        isDivisionsMode && isNonPretextDoc && divisionConvertedPretext !== undefined
+        isNonPretextDoc && divisionConvertedPretext !== undefined
           ? () => openModal("isConvertDialogOpen")
           : undefined
       }
       canConvertToPretext={divisionConvertedPretext !== undefined}
       onOpenAssets={
-        props.projectAssets !== undefined &&
-        contentState.sourceFormat === "pretext"
+        props.projectAssets !== undefined && activeDivisionFormat === "pretext"
           ? () => openModal("isAssetPickerOpen")
           : undefined
       }
@@ -610,19 +513,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (previewUnavailable) {
-    preview = (
-      <div className="pretext-plus-editor__preview-placeholder">
-        <p className="pretext-plus-editor__preview-placeholder-title">
-          Preview unavailable
-        </p>
-        <p>
-          {contentState.pretextError ||
-            "Could not generate PreTeXt preview content."}
-        </p>
-      </div>
-    );
-  } else if (showFullPreview && props.onPreviewRebuild) {
+  if (showFullPreview && props.onPreviewRebuild) {
     preview = (
       <FullPreview
         ref={fullPreviewRef}
@@ -632,49 +523,36 @@ const EditorsInner = (props: EditorsInnerProps) => {
       />
     );
   } else {
-    const visualContent =
-      isDivisionsMode && activeDivision ? divisionActiveSource : previewContent || "";
-    const effectiveFormat = isDivisionsMode
-      ? activeDivisionFormat
-      : contentState.sourceFormat;
-    const canEditVisually = effectiveFormat === "pretext";
+    const canEditVisually = activeDivisionFormat === "pretext";
     const editDisabledReason =
-      effectiveFormat === "markdown"
+      activeDivisionFormat === "markdown"
         ? "Visual editing is not available for Markdown documents."
-        : effectiveFormat === "latex"
+        : activeDivisionFormat === "latex"
         ? "Visual editing is not available for LaTeX documents."
         : "";
     preview = (
       <VisualEditor
-        content={visualContent}
+        content={divisionActiveSource}
         canEdit={canEditVisually}
         editDisabledReason={editDisabledReason}
-        onChange={(content) => {
-          if (isDivisionsMode) {
-            handleDivisionContentChange(content);
-          } else {
-            updateContentState(content);
-          }
-        }}
+        onChange={(content) => handleDivisionContentChange(content)}
       />
     );
   }
 
   // ── TOC sidebar ──────────────────────────────────────────────────────────
-  // Now only needs the props TableOfContents still requires externally.
   // Deep data + callbacks come from the store.
-  const tocSidebar =
-    !isDivisionsMode && props.projectAssets === undefined ? null : (
-      <TableOfContents
-        isCollapsed={isTocCollapsed}
-        onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
-        onOpenAssetPicker={
-          props.projectAssets !== undefined
-            ? () => openModal("isAssetPickerOpen")
-            : undefined
-        }
-      />
-    );
+  const tocSidebar = (
+    <TableOfContents
+      isCollapsed={isTocCollapsed}
+      onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
+      onOpenAssetPicker={
+        props.projectAssets !== undefined
+          ? () => openModal("isAssetPickerOpen")
+          : undefined
+      }
+    />
+  );
 
   // ── Layout ────────────────────────────────────────────────────────────────
   const editorTabId = "pretext-plus-tab-editor";
@@ -779,12 +657,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         showPreviewModeToggle={props.onPreviewRebuild !== undefined}
       />
       <div className="pretext-plus-editor__editor-displays">
-        <ErrorBoundary
-          resetKeys={[
-            isDivisionsMode ? divisionActiveSource : contentState.sourceContent,
-            activeDivisionId,
-          ]}
-        >
+        <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
           {editorDisplays}
         </ErrorBoundary>
         {isLatexDialogOpen ? (
@@ -817,12 +690,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 });
                 props.onCommonDocinfoChange?.(value.commonDocinfo);
                 props.onUseCommonDocinfoChange?.(value.useCommonDocinfo);
-                props.onContentChange(contentState.sourceContent, {
-                  ...contentState,
-                  docinfo: value.docinfo,
-                  commonDocinfo: value.commonDocinfo,
-                  useCommonDocinfo: value.useCommonDocinfo,
-                });
+                // Docinfo is document-wide: report it against the root
+                // division through the unified content-change channel.
+                const docinfoTarget = rootDivision ?? activeDivision;
+                emitContentChange(
+                  docinfoTarget?.xmlId ?? "",
+                  docinfoTarget?.content ?? "",
+                  docinfoTarget?.sourceFormat ?? "pretext",
+                  {
+                    docinfo: value.docinfo,
+                    commonDocinfo: value.commonDocinfo,
+                    useCommonDocinfo: value.useCommonDocinfo,
+                  },
+                );
               }
             }}
           />

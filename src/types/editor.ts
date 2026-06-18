@@ -84,7 +84,16 @@ export interface EditorContentState {
 }
 
 /**
- * The value passed to `onContentChange`.  Identical to `EditorContentState`
- * so consumers can inspect the full derived state on every change.
+ * The value passed to `onContentChange`.  Extends {@link EditorContentState}
+ * with the `xmlId` of the division the change applies to, so a single callback
+ * can describe every kind of change: a division content edit, a structural
+ * reorder (which rewrites a parent division's content), or a document-wide
+ * docinfo edit (reported against the root/document division).
  */
-export type EditorContentChange = EditorContentState;
+export interface EditorContentChange extends EditorContentState {
+  /**
+   * The `xml:id` of the division whose content changed.  For document-wide
+   * changes such as docinfo edits, this is the root/document division.
+   */
+  xmlId: string;
+}
