@@ -8,11 +8,7 @@ import type {
   SourceFormat,
 } from "./types/editor";
 import type { Division, DivisionType } from "./types/sections";
-import {
-  stripLatexSectionWrapper,
-  stripSectionWrapper,
-} from "./sectionUtils";
-import { derivePretextContent } from "./contentConversion";
+import { assembleProjectSource } from "./sectionUtils";
 
 // ---------------------------------------------------------------------------
 // Initial divisions for the article demo
@@ -238,55 +234,10 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
 // content (see Editors.tsx's `previewContent`), so it can't show what a real
 // "full build" would send: the whole document with every `<plus:* ref="..."/>`
 // placeholder resolved and every LaTeX/Markdown division converted to PreTeXt.
-// This reproduces that assembly from the `divisions` pool so the payload
-// panel below can show it live, independent of the (broken, tokenless)
-// preview iframe.
+// `assembleProjectSource` (from the library) reproduces that assembly from the
+// `divisions` pool so the payload panel below can show it live, independent
+// of the (broken, tokenless) preview iframe.
 // ---------------------------------------------------------------------------
-function resolveDivisionXml(
-  xmlId: string,
-  divisions: Division[],
-  ancestors: Set<string>,
-): string {
-  const division = divisions.find((d) => d.xmlId === xmlId);
-  if (!division) return `<!-- missing division: ${xmlId} -->`;
-  if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
-
-  let xml: string;
-  if (division.sourceFormat === "pretext") {
-    xml = division.content;
-  } else {
-    // LaTeX/Markdown divisions store raw source without a PreTeXt wrapper, so
-    // strip their format-specific header, convert the body, then wrap it in
-    // the element the document tree expects.
-    const inner =
-      division.sourceFormat === "latex"
-        ? stripLatexSectionWrapper(division.content, division.type)
-        : stripSectionWrapper(division.content);
-    const { pretextSource, pretextError } = derivePretextContent(
-      inner,
-      division.sourceFormat,
-    );
-    const body = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-    xml = `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${body}\n</${division.type}>`;
-  }
-
-  // Per the Division model, only PreTeXt divisions can embed <plus:* ref=.../>
-  // placeholders -- LaTeX/Markdown divisions are always leaves.
-  if (division.sourceFormat !== "pretext") return xml;
-
-  const nextAncestors = new Set(ancestors).add(xmlId);
-  return xml.replace(
-    /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g,
-    (_match, ref: string) => resolveDivisionXml(ref, divisions, nextAncestors),
-  );
-}
-
-function assembleFullBuildSource(
-  divisions: Division[],
-  rootXmlId: string,
-): string {
-  return resolveDivisionXml(rootXmlId, divisions, new Set());
-}
 
 const handlePreviewRebuild = async (
   source: string,
@@ -356,7 +307,7 @@ function App() {
   const fullBuildPayload = useMemo(() => {
     if (!rootDivision) return null;
     return {
-      source: assembleFullBuildSource(divisions, rootDivision.xmlId),
+      source: assembleProjectSource(divisions, rootDivision.xmlId),
       title,
       token: "demo",
     };
