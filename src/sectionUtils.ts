@@ -17,6 +17,7 @@ import type {
   DocumentSectionType,
   DocumentSplitResult,
 } from "./types/sections";
+import { derivePretextContent } from "./contentConversion";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -1351,5 +1352,120 @@ export function getOrphanRoots(
     }
   }
   return orphans.filter((d) => !referenced.has(d.xmlId));
+}
+
+// ---------------------------------------------------------------------------
+// Full project source assembly
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a single division to its final PreTeXt XML, then recursively expand
+ * any `<plus:* ref="..."/>` placeholders found inside it.
+ *
+ * LaTeX/Markdown divisions are leaves (see {@link Division}): their content is
+ * converted to PreTeXt and wrapped in the division's own element before
+ * recursion, since only PreTeXt divisions can embed child ref placeholders.
+ *
+ * `ancestors` guards against cycles in the ref graph — a division that
+ * (directly or transitively) references itself is rendered as a comment
+ * rather than recursing forever.
+ */
+function resolveDivisionXml(
+  xmlId: string,
+  divisions: Division[],
+  ancestors: Set<string>,
+): string {
+  const division = divisions.find((d) => d.xmlId === xmlId);
+  if (!division) return `<!-- missing division: ${xmlId} -->`;
+  if (ancestors.has(xmlId)) return `<!-- circular reference: ${xmlId} -->`;
+
+  let xml: string;
+  if (division.sourceFormat === "pretext") {
+    xml = division.content;
+  } else {
+    const inner =
+      division.sourceFormat === "latex"
+        ? stripLatexSectionWrapper(division.content, division.type)
+        : stripSectionWrapper(division.content);
+    const { pretextSource, pretextError } = derivePretextContent(
+      inner,
+      division.sourceFormat,
+    );
+    const body = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+    xml = `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${body}\n</${division.type}>`;
+  }
+
+  if (division.sourceFormat !== "pretext") return xml;
+
+  const nextAncestors = new Set(ancestors).add(xmlId);
+  return xml.replace(
+    /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g,
+    (_match, ref: string) => resolveDivisionXml(ref, divisions, nextAncestors),
+  );
+}
+
+/**
+ * Assemble the full PreTeXt source for a project by resolving the root
+ * division and recursively expanding every `<plus:* ref="..."/>` placeholder
+ * it (transitively) contains, converting any LaTeX/Markdown divisions to
+ * PreTeXt along the way.
+ *
+ * This is what a host application sends to the build server (e.g.
+ * `https://build.pretext.plus`) to produce the final rendered document — the
+ * `divisions` pool itself is never a valid build input, since it's a flat
+ * list of fragments rather than a single document tree.
+ */
+export function assembleProjectSource(
+  divisions: Division[],
+  rootXmlId: string,
+): string {
+  return resolveDivisionXml(rootXmlId, divisions, new Set());
+}
+
+// ---------------------------------------------------------------------------
+// Division-scoped preview wrapping
+// ---------------------------------------------------------------------------
+
+/** Division types that are direct children of `<book>`. */
+const BOOK_CHILD_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
+  "part",
+  "chapter",
+]);
+
+/** Root division types — already a valid top-level PreTeXt element on their own. */
+const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
+  "book",
+  "article",
+  "slideshow",
+]);
+
+/**
+ * Wrap a single division's own tagged XML (e.g.
+ * `<section xml:id="...">...</section>`) into a standalone PreTeXt fragment
+ * document suitable for a build-server preview of just that division.
+ *
+ * Unlike {@link assembleProjectSource}, this never expands `<plus:* ref="..."/>`
+ * placeholders — they are left as-is for the build server to handle when
+ * rendering a fragment preview.
+ *
+ * `divisionType` determines the minimal wrapper needed around `divisionXml`:
+ * root types (`book`/`article`/`slideshow`) need none, `chapter`/`part` are
+ * wrapped in a bare `<book>`, and everything else in a bare `<article>`.
+ * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
+ * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
+ * document shape.
+ */
+export function wrapDivisionForPreview(
+  divisionType: DivisionType,
+  divisionXml: string,
+  docinfo: string,
+): string {
+  const body = ROOT_DIVISION_TYPES.has(divisionType)
+    ? divisionXml
+    : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
+    ? `<book>\n${divisionXml}\n</book>`
+    : `<article>\n${divisionXml}\n</article>`;
+  const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
+  return `<pretext>\n${docinfoBlock}${body}\n</pretext>`;
 }
 

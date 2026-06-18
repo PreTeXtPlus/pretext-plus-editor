@@ -30,6 +30,7 @@ import {
   normalizeSelfClosingRefs,
   parseDivisionRefsWithTypes,
   createDivisionWithId,
+  wrapDivisionForPreview,
 } from "../sectionUtils";
 import {
   createEditorStore,
@@ -98,7 +99,11 @@ export interface editorProps {
    * instead of the Tiptap visual editor, and a rebuild button / Ctrl+Enter
    * shortcut become active.
    *
-   * @param source - The current PreTeXt XML to render.
+   * @param source - A standalone PreTeXt fragment document for just the
+   * active division: wrapped in a synthetic `<pretext>`/`<book>`/`<article>`
+   * root (as needed for the division's type) with `<docinfo>` inserted, but
+   * with any `<plus:* ref="..."/>` placeholders inside the division left
+   * unexpanded. Not the raw division content, and not the full document.
    * @param title - The current document title.
    * @param postToIframe - Helper to post a message into the preview iframe.
    */
@@ -446,10 +451,31 @@ const EditorsInner = (props: EditorsInnerProps) => {
   });
 
   // ── Preview content ──────────────────────────────────────────────────────
+  // The docinfo that actually governs rendering: the user's common
+  // docinfo/preamble when opted in, otherwise the project's own.
+  const effectiveDocinfo = (props.useCommonDocinfo ?? internalUseCommonDocinfo)
+    ? props.commonDocinfo ?? internalCommonDocinfo
+    : props.docinfo ?? internalDocinfo;
+
+  // The active division's own tagged XML (outer element included), with no
+  // conversion performed here — `divisionConvertedPretext` is already kept
+  // up to date for non-PreTeXt divisions.
+  const divisionTaggedXml = activeDivision
+    ? activeDivisionFormat === "pretext"
+      ? activeDivision.content
+      : divisionConvertedPretext !== undefined
+      ? `<${activeDivision.type} xml:id="${activeDivision.xmlId}">\n<title>${activeDivision.title}</title>\n\n${divisionConvertedPretext}\n</${activeDivision.type}>`
+      : undefined
+    : undefined;
+
   const previewContent =
-    activeDivision && activeDivisionFormat === "pretext"
-      ? activeDivision.content || undefined
-      : divisionConvertedPretext;
+    activeDivision && divisionTaggedXml !== undefined
+      ? wrapDivisionForPreview(
+          activeDivision.type,
+          divisionTaggedXml,
+          effectiveDocinfo,
+        )
+      : undefined;
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
