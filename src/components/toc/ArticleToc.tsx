@@ -16,7 +16,6 @@ export interface ArticleTocProps {
 }
 
 const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
-  const isDivisionsMode = useEditorStore((s) => s.isDivisionsMode);
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
@@ -34,18 +33,15 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const editDraft = useEditorStore((s) => s.editDraft);
 
   // ── Tree structure ──────────────────────────────────────────────────────────
-  const rootDivision =
-    isDivisionsMode && divisions
-      ? (divisions.find((d) => d.xmlId === rootDivisionId) ??
-          divisions.find(
-            (d) =>
-              d.type === "book" ||
-              d.type === "article" ||
-              d.type === "slideshow",
-          ) ??
-          divisions[0] ??
-          null)
-      : null;
+  const rootDivision = divisions
+    ? (divisions.find((d) => d.xmlId === rootDivisionId) ??
+        divisions.find(
+          (d) =>
+            d.type === "book" || d.type === "article" || d.type === "slideshow",
+        ) ??
+        divisions[0] ??
+        null)
+    : null;
 
   const treeNodes =
     rootDivision && divisions
@@ -158,19 +154,6 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       ),
     );
   };
-
-  // ── Non-divisions mode ───────────────────────────────────────────────────────
-  if (!isDivisionsMode) {
-    return onOpenAssetPicker ? (
-      <button
-        type="button"
-        className="pretext-plus-editor__toc-assets-btn"
-        onClick={onOpenAssetPicker}
-      >
-        Manage Assets
-      </button>
-    ) : null;
-  }
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (

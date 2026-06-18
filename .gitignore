@@ -26,3 +26,5 @@ dist-ssr
 .npmrc
 
 .claude
+
+.claude/

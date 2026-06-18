@@ -46,8 +46,8 @@ export interface EditorCallbacks {
   addDivision: (afterId: string | null) => void;
   removeDivision: (id: string) => void;
   updateDivision: (id: string, changes: DivisionChanges) => void;
-  divisionContentChange?: (xmlId: string, content: string) => void;
-  updateContent: (content: string | undefined) => void;
+  /** Emit a content change for a specific division (edit or structural reorder). */
+  divisionContentChange: (xmlId: string, content: string) => void;
   handleDivisionContentChange: (content: string | undefined) => void;
   assetInsert: (asset: Asset) => void;
   updateTitle: (title: string) => void;
@@ -60,8 +60,6 @@ export interface EditorStoreState {
 
   source: string;
   sourceFormat: SourceFormat;
-  pretextSource: string | undefined;
-  pretextError: string | undefined;
   projectAssets: Asset[] | undefined;
   libraryAssets: Asset[] | undefined;
   title: string;
@@ -77,10 +75,6 @@ export interface EditorStoreState {
   activeDivisionId: string | null;
 
   // Computed flags (re-derived each sync)
-  isDivisionsMode: boolean;
-  isMarkdownDoc: boolean;
-  isLatexDoc: boolean;
-  isNonPretextDoc: boolean;
   canConvertToPretext: boolean;
 
   /** The source string currently open in the code editor. */
@@ -148,8 +142,6 @@ export type EditorSyncableState = Pick<
   EditorStoreState,
   | "source"
   | "sourceFormat"
-  | "pretextSource"
-  | "pretextError"
   | "projectAssets"
   | "libraryAssets"
   | "title"
@@ -161,10 +153,6 @@ export type EditorSyncableState = Pick<
   | "divisions"
   | "rootDivisionId"
   | "activeDivisionId"
-  | "isDivisionsMode"
-  | "isMarkdownDoc"
-  | "isLatexDoc"
-  | "isNonPretextDoc"
   | "canConvertToPretext"
   | "activeEditorSource"
   | "hasFeedback"
@@ -184,7 +172,7 @@ export interface EditorStoreInit {
   commonDocinfo: string;
   useCommonDocinfo: boolean;
   projectType: "article" | "book" | undefined;
-  divisions: Division[] | undefined;
+  divisions: Division[];
   activeDivisionId: string | null;
 }
 
@@ -212,7 +200,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       addDivision: noop,
       removeDivision: noop,
       updateDivision: noop,
-      updateContent: noop,
+      divisionContentChange: noop,
       handleDivisionContentChange: noop,
       assetInsert: noop,
       updateTitle: noop,
@@ -223,8 +211,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     // ── Initial data ───────────────────────────────────────────────────────
     source: init.source,
     sourceFormat: init.sourceFormat,
-    pretextSource: undefined,
-    pretextError: undefined,
     projectAssets: undefined,
     libraryAssets: undefined,
     title: init.title,
@@ -236,10 +222,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     divisions: init.divisions,
     rootDivisionId: undefined,
     activeDivisionId: init.activeDivisionId,
-    isDivisionsMode: init.divisions !== undefined,
-    isMarkdownDoc: init.sourceFormat === "markdown",
-    isLatexDoc: init.sourceFormat === "latex",
-    isNonPretextDoc: init.sourceFormat !== "pretext",
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
