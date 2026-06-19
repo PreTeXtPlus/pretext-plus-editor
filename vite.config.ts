@@ -25,14 +25,17 @@ export default defineConfig(({ mode }) => {
           }
         },
         rollupOptions: {
-          external: ['react', 'react-dom', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom/client'],
+          // Regexes (not exact strings) so every subpath (react/jsx-runtime,
+          // react-dom/client, use-sync-external-store/shim/with-selector, ...)
+          // stays external too. Without this, transitive CJS deps that
+          // `require('react')` get inlined with a runtime CJS-interop shim
+          // that throws "Dynamic require of react is not supported" once the
+          // consuming app's bundler processes it.
+          external: [/^react($|\/)/, /^react-dom($|\/)/, /^use-sync-external-store($|\/)/],
           output: {
             globals: {
               react: 'React',
-              'react-dom': 'ReactDOM',
-              'react/jsx-runtime': 'ReactJSXRuntime',
-              'react/jsx-dev-runtime': 'ReactJSXDevRuntime',
-              'react-dom/client': 'ReactDOMClient'
+              'react-dom': 'ReactDOM'
             }
           }
         },
