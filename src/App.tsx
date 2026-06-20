@@ -228,6 +228,74 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Single-division demos for the non-PreTeXt source formats — a single root
+// `article` division authored entirely in LaTeX or Markdown, so the whole
+// document goes through the per-division convert-to-PreTeXt path rather than
+// having LaTeX/Markdown nested as leaf sections under a PreTeXt root.
+// ---------------------------------------------------------------------------
+const LATEX_DEMO_DIVISIONS: Division[] = [
+  {
+    id: "latex-root",
+    xmlId: "latex-demo",
+    title: "Testing LaTeX Source Mode",
+    type: "article",
+    sourceFormat: "latex",
+    content: String.raw`This paragraph appears before the first section, so it becomes the
+introduction when converted to PreTeXt.
+
+\section{Background}
+
+This is the first proper section. It contains inline math like $a^2 + b^2 = c^2$
+and displayed math:
+\[
+  E = mc^2
+\]
+
+\section{Methods}
+
+Here is the second section. You can add \textbf{bold} text, \emph{emphasis},
+and environments like \texttt{verbatim}.
+
+\section{Results}
+
+The third section can contain whatever you like.`,
+  },
+];
+
+const MARKDOWN_DEMO_DIVISIONS: Division[] = [
+  {
+    id: "markdown-root",
+    xmlId: "markdown-demo",
+    title: "Testing Markdown Source Mode",
+    type: "article",
+    sourceFormat: "markdown",
+    content: `# Markdown Demo
+
+This demo lets you test the **markdown** source mode in the code editor.
+
+## Features To Try
+
+- Heading and paragraph editing
+- Lists and inline code like \`inline code\`
+- Fenced code blocks
+
+## Example Math-like Text
+
+Inline math such as $E = mc^2$ converts to PreTeXt.
+
+## Blocks and environments
+
+Theorem:
+  This is the theorem.
+
+  Proof:
+    This is the proof.
+
+More text.`,
+  },
+];
+
+// ---------------------------------------------------------------------------
 // Full-build payload assembly (demo-only)
 //
 // `onPreviewRebuild` only ever receives the *active division's* converted
@@ -294,6 +362,7 @@ function App() {
   const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
 
   const [projectType, setProjectType] = useState<"article" | "book">("article");
+  const [demoLabel, setDemoLabel] = useState("Article");
 
   // ---------------------------------------------------------------------------
   // Full-build payload panel (demo-only debug tool)
@@ -322,6 +391,7 @@ function App() {
     setActiveDivisionId("sec-intro");
     setTitle("Divisions Mode Demo");
     setProjectType("article");
+    setDemoLabel("Article");
   };
 
   const loadBookDemo = () => {
@@ -329,6 +399,23 @@ function App() {
     setActiveDivisionId("ch1-sec1");
     setTitle("A Demo Book");
     setProjectType("book");
+    setDemoLabel("Book");
+  };
+
+  const loadLatexDemo = () => {
+    setDivisions(LATEX_DEMO_DIVISIONS);
+    setActiveDivisionId("latex-demo");
+    setTitle("Testing LaTeX Source Mode");
+    setProjectType("article");
+    setDemoLabel("LaTeX");
+  };
+
+  const loadMarkdownDemo = () => {
+    setDivisions(MARKDOWN_DEMO_DIVISIONS);
+    setActiveDivisionId("markdown-demo");
+    setTitle("Testing Markdown Source Mode");
+    setProjectType("article");
+    setDemoLabel("Markdown");
   };
 
   // ---------------------------------------------------------------------------
@@ -442,8 +529,7 @@ function App() {
   // Toolbar label
   // ---------------------------------------------------------------------------
 
-  const toolbarLabel =
-    projectType === "book" ? "Demo: Book" : "Demo: Article";
+  const toolbarLabel = `Demo: ${demoLabel}`;
 
   return (
     <>
@@ -457,6 +543,15 @@ function App() {
         </button>
         <button className="app-demo-toolbar__button" onClick={loadBookDemo}>
           Load Book Demo
+        </button>
+        <button className="app-demo-toolbar__button" onClick={loadLatexDemo}>
+          Load LaTeX Demo
+        </button>
+        <button
+          className="app-demo-toolbar__button"
+          onClick={loadMarkdownDemo}
+        >
+          Load Markdown Demo
         </button>
         <button
           className="app-demo-toolbar__button"

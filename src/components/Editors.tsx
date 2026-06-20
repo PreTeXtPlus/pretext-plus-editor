@@ -24,13 +24,14 @@ import type { Division, DivisionType } from "../types/sections";
 import {
   createNewSection,
   rewrapSection,
-  rewrapLatexSection,
-  stripSectionWrapper,
-  stripLatexSectionWrapper,
   normalizeSelfClosingRefs,
   parseDivisionRefsWithTypes,
   createDivisionWithId,
   wrapDivisionForPreview,
+  extractDivisionMetadata,
+  extractLatexDivisionTitle,
+  findDivisionParent,
+  renameDivisionRef,
 } from "../sectionUtils";
 import {
   createEditorStore,
@@ -306,11 +307,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const activeDivisionFormat = activeDivision?.sourceFormat ?? "pretext";
 
-  const divisionActiveSource = activeDivision
-    ? activeDivisionFormat === "latex"
-      ? stripLatexSectionWrapper(activeDivision.content, activeDivision.type)
-      : stripSectionWrapper(activeDivision.content)
-    : "";
+  // The code editor now shows (and edits) the division's full source,
+  // wrapper tag included, rather than a stripped-down body — the wrapper
+  // (with its xml:id/label attributes and title) is the source of truth.
+  const divisionActiveSource = activeDivision?.content ?? "";
 
   // ── Content-change emitter ───────────────────────────────────────────────
   // Single channel for every content change: a division edit, a structural
@@ -340,18 +340,63 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const handleDivisionContentChange = (newContent: string | undefined) => {
     if (!activeDivision) return;
-    const inner = newContent || "";
+    // The user now edits the division's full source (wrapper tag included),
+    // so it's stored as-is — only the `<plus:* ref="..."/>` placeholder form
+    // is normalized, matching what an XML round-trip would otherwise produce.
     const wrapped =
-      activeDivisionFormat === "latex"
-        ? rewrapLatexSection(
-            inner,
-            activeDivision.type,
-            activeDivision.title,
-            activeDivision.content,
-          )
-        : normalizeSelfClosingRefs(rewrapSection(inner, activeDivision.type));
+      activeDivisionFormat === "pretext"
+        ? normalizeSelfClosingRefs(newContent || "")
+        : newContent || "";
     if (wrapped === activeDivision.content) return;
     emitContentChange(activeDivision.xmlId, wrapped, activeDivisionFormat);
+
+    // The source is the source of truth for title/type/xml:id/label: re-derive
+    // them from the edited content so the TOC stays in sync even when the
+    // dropdown form is never used.
+    if (props.onDivisionUpdate) {
+      if (activeDivisionFormat === "pretext") {
+        const meta = extractDivisionMetadata(wrapped);
+        if (meta) {
+          props.onDivisionUpdate(activeDivision.xmlId, {
+            title: meta.title,
+            type: meta.type,
+            xmlId: meta.xmlId || null,
+            label: meta.label || null,
+          });
+
+          // Keep the parent's <plus:* ref="..."/> placeholder in sync with an
+          // xml:id rename or type change, so editing the source doesn't
+          // orphan the division from its place in the tree.
+          const newXmlId = meta.xmlId || activeDivision.xmlId;
+          if (newXmlId !== activeDivision.xmlId || meta.type !== activeDivision.type) {
+            const parent = findDivisionParent(props.divisions, activeDivision.xmlId);
+            if (parent) {
+              const newParentContent = renameDivisionRef(
+                parent.content,
+                activeDivision.xmlId,
+                newXmlId,
+                meta.type,
+              );
+              if (newParentContent !== parent.content) {
+                emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+              }
+            }
+          }
+
+          // Follow an xml:id rename so the user isn't bumped to a different
+          // division once the host re-supplies divisions under the new id.
+          if (meta.xmlId && meta.xmlId !== activeDivision.xmlId) {
+            setInternalActiveDivisionId(meta.xmlId);
+            props.onDivisionSelect?.(meta.xmlId);
+          }
+        }
+      } else if (activeDivisionFormat === "latex" && activeDivision.type === "section") {
+        const title = extractLatexDivisionTitle(wrapped);
+        if (title !== null) {
+          props.onDivisionUpdate(activeDivision.xmlId, { title });
+        }
+      }
+    }
 
     // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
     // that appeared in the edited content but don't yet have a matching division.

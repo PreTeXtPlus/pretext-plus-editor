@@ -8,6 +8,8 @@ import {
 interface SectionEditFormProps {
   draft: EditDraft;
   isLatex: boolean;
+  /** The root division's type (book/article/slideshow) is structural and not user-editable. */
+  isRoot?: boolean;
   onDraftChange: (draft: EditDraft) => void;
   onCommit: () => void;
   onCancel: () => void;
@@ -16,6 +18,7 @@ interface SectionEditFormProps {
 const SectionEditForm = ({
   draft,
   isLatex,
+  isRoot = false,
   onDraftChange,
   onCommit,
   onCancel,
@@ -36,24 +39,26 @@ const SectionEditForm = ({
     </label>
     {!isLatex && (
       <>
-        <label className="pretext-plus-editor__toc-edit-field">
-          <span>Type</span>
-          <select
-            value={draft.type}
-            onChange={(e) =>
-              onDraftChange({
-                ...draft,
-                type: e.target.value as DocumentSectionType,
-              })
-            }
-          >
-            {REGULAR_DIVISION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {TYPE_FULL_LABELS[t]}
-              </option>
-            ))}
-          </select>
-        </label>
+        {!isRoot && (
+          <label className="pretext-plus-editor__toc-edit-field">
+            <span>Type</span>
+            <select
+              value={draft.type}
+              onChange={(e) =>
+                onDraftChange({
+                  ...draft,
+                  type: e.target.value as DocumentSectionType,
+                })
+              }
+            >
+              {REGULAR_DIVISION_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_FULL_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="pretext-plus-editor__toc-edit-field">
           <span>xml:id</span>
           <input

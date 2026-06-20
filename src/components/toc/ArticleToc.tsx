@@ -180,6 +180,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
               },
             ]}
             isLatex={rootDivision.sourceFormat === "latex"}
+            isRoot
           />
         )}
 

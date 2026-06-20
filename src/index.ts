@@ -40,6 +40,8 @@ export {
   insertDivisionRef,
   removeDivisionRef,
   moveDivisionRef,
+  renameDivisionRef,
+  findDivisionParent,
   reorderDivisionRefs,
   normalizeSelfClosingRefs,
   getOrphanedDivisions,
@@ -58,12 +60,14 @@ export {
   mergeTwoSections,
   getSectionAttributes,
   updateSectionMetadata,
+  extractDivisionMetadata,
   // LaTeX division utilities
   // TODO: update these to work for generic divisions, not just sections
   stripLatexSectionWrapper,
   rewrapLatexSection,
   ensureLatexSectionWrapper,
   updateLatexSectionTitle,
+  extractLatexDivisionTitle,
   createNewLatexSection,
   createLatexIntroduction,
   createLatexConclusion,

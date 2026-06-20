@@ -56,6 +56,16 @@ const SECTION_TAGS: ReadonlySet<string> = new Set([
   "conclusion",
 ]);
 
+/** Every tag name recognised as a `DivisionType`. */
+const ALL_DIVISION_TYPES: ReadonlySet<string> = new Set([
+  "book",
+  "article",
+  "slideshow",
+  "part",
+  "chapter",
+  ...SECTION_TAGS,
+]);
+
 function tagToType(tag: string): DocumentSectionType {
   return SECTION_TAGS.has(tag) ? (tag as DocumentSectionType) : "section";
 }
@@ -667,6 +677,22 @@ export function updateLatexSectionTitle(
   return content;
 }
 
+/**
+ * Derive a LaTeX section's title directly from its header — the code
+ * editor's source-of-truth content — mirroring the two header styles
+ * {@link updateLatexSectionTitle} writes. Returns `null` when no header is
+ * found (introduction/conclusion have none), so callers leave title as-is.
+ */
+export function extractLatexDivisionTitle(content: string): string | null {
+  const sectionMatch = /^\\section\*?\{([^}]*)\}/.exec(content);
+  if (sectionMatch) return sectionMatch[1].trim();
+  if (content.includes("\\begin{section}")) {
+    const titleMatch = /\\title\{([^}]*)\}/.exec(content);
+    if (titleMatch) return titleMatch[1].trim();
+  }
+  return null;
+}
+
 /** Create a new blank LaTeX section as a `Division`. */
 export function createNewLatexSection(title = "New Section"): DocumentSection {
   const id = generateId();
@@ -789,6 +815,36 @@ export function getSectionAttributes(content: string): {
   } catch {
     return { xmlId: "", label: "" };
   }
+}
+
+/**
+ * Derive a division's title, type, `xml:id`, and `label` directly from its
+ * full PreTeXt source — the code editor's content, wrapper tag included.
+ * Used to keep the TOC in sync when the user edits these directly in the
+ * source rather than through the metadata dropdown form.
+ *
+ * Returns `null` when `content` isn't well-formed XML or its root element
+ * isn't a recognised division tag (both common mid-edit), so callers can
+ * skip the update rather than clobbering existing metadata with junk.
+ */
+export function extractDivisionMetadata(content: string): {
+  title: string;
+  type: DivisionType;
+  xmlId: string;
+  label: string;
+} | null {
+  const tree = safeFromXml(content);
+  if (!tree) return null;
+  const el = tree.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+  if (!el || !ALL_DIVISION_TYPES.has(el.name)) return null;
+  return {
+    title: extractTitle(el),
+    type: el.name as DivisionType,
+    xmlId: (el.attributes?.["xml:id"] as string) ?? "",
+    label: (el.attributes?.["label"] as string) ?? "",
+  };
 }
 
 /**
@@ -1215,6 +1271,43 @@ export function moveDivisionRef(
     );
   }
   return withoutRef + "\n" + originalTag;
+}
+
+/**
+ * Rename an existing `<plus:* ref="oldXmlId"/>` placeholder in-place to point
+ * at `newXmlId`, also updating the `*` tag name to `newType` if it changed.
+ * Unlike {@link moveDivisionRef}, the placeholder's position is left
+ * untouched — only its `ref` value and element name are rewritten.
+ *
+ * Used to keep a parent division's child placeholder in sync when the
+ * child's own `xml:id`/type are edited directly in its source, so the
+ * rename doesn't orphan the child from its parent.
+ *
+ * Returns `content` unchanged if no placeholder for `oldXmlId` is found.
+ */
+export function renameDivisionRef(
+  content: string,
+  oldXmlId: string,
+  newXmlId: string,
+  newType: DivisionType,
+): string {
+  const re = new RegExp(divisionRefSource(oldXmlId));
+  if (!re.test(content)) return content;
+  return content.replace(re, `<plus:${newType} ref="${newXmlId}"/>`);
+}
+
+/**
+ * Find the division in `divisions` whose content contains a
+ * `<plus:* ref="xmlId"/>` placeholder for `xmlId` — i.e. `xmlId`'s parent in
+ * the division tree.  Returns `null` if `xmlId` is unplaced (orphaned) or is
+ * the root.
+ */
+export function findDivisionParent(
+  divisions: Division[],
+  xmlId: string,
+): Division | null {
+  const re = new RegExp(divisionRefSource(xmlId));
+  return divisions.find((d) => re.test(d.content)) ?? null;
 }
 
 /**

@@ -17,6 +17,7 @@ interface SectionItemProps {
   onEditCancel: () => void;
   menuItems: DivisionMenuItem[];
   isLatex: boolean;
+  isRoot?: boolean;
 }
 
 const SectionItem = ({
@@ -33,6 +34,7 @@ const SectionItem = ({
   onEditCancel,
   menuItems,
   isLatex,
+  isRoot = false,
 }: SectionItemProps) => {
   const isEditing = editDraft !== null;
 
@@ -81,6 +83,7 @@ const SectionItem = ({
         <SectionEditForm
           draft={editDraft}
           isLatex={isLatex}
+          isRoot={isRoot}
           onDraftChange={onDraftChange}
           onCommit={onEditCommit}
           onCancel={onEditCancel}
