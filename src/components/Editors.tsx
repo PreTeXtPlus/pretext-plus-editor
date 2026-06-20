@@ -35,6 +35,7 @@ import {
 } from "../sectionUtils";
 import {
   createEditorStore,
+  type DivisionChanges,
   type EditorCallbacks,
   type EditorStoreHandle,
 } from "../store/editorStore";
@@ -274,35 +275,38 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
-  const internalTitle = useEditorStore((s) => s.internalTitle);
-  const setInternalTitle = useEditorStore((s) => s.setInternalTitle);
-  const internalDocinfo = useEditorStore((s) => s.internalDocinfo);
-  const internalCommonDocinfo = useEditorStore((s) => s.internalCommonDocinfo);
-  const internalUseCommonDocinfo = useEditorStore(
-    (s) => s.internalUseCommonDocinfo,
-  );
   const syncState = useEditorStore((s) => s.syncState);
 
-  const title = props.title ?? internalTitle;
+  // ── Authoritative editing buffer (read from the store, not props) ─────────
+  // The store owns the live edit after the initial seed.  Reading these here
+  // means a local edit displays immediately without the host having to echo
+  // anything back as new props.
+  const divisions = useEditorStore((s) => s.divisions) ?? [];
+  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const title = useEditorStore((s) => s.title);
+  const docinfo = useEditorStore((s) => s.docinfo);
+  const commonDocinfo = useEditorStore((s) => s.commonDocinfo);
+  const useCommonDocinfo = useEditorStore((s) => s.useCommonDocinfo);
+
+  // Editing-buffer mutators (optimistic; host callbacks fire as notifications).
+  const applyExternalUpdate = useEditorStore((s) => s.applyExternalUpdate);
+  const setDivisionContent = useEditorStore((s) => s.setDivisionContent);
+  const patchDivision = useEditorStore((s) => s.patchDivision);
+  const addDivisionToPool = useEditorStore((s) => s.addDivisionToPool);
+  const removeDivisionFromPool = useEditorStore((s) => s.removeDivisionFromPool);
+  const setActiveDivisionId = useEditorStore((s) => s.setActiveDivisionId);
+  const setTitle = useEditorStore((s) => s.setTitle);
+  const setDocinfo = useEditorStore((s) => s.setDocinfo);
 
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
 
-  // ── Active division ──────────────────────────────────────────────────────
-  const rootDivision = findRootDivision(props.divisions, props.rootDivisionId);
-
-  const [internalActiveDivisionId, setInternalActiveDivisionId] = useState<
-    string | null
-  >(() => rootDivision?.xmlId ?? null);
-
-  const activeDivisionId =
-    props.activeDivisionId !== undefined
-      ? props.activeDivisionId
-      : internalActiveDivisionId;
+  // ── Active division (derived from the store's authoritative pool) ─────────
+  const rootDivision = findRootDivision(divisions, props.rootDivisionId);
 
   const activeDivision =
-    props.divisions.find((d) => d.xmlId === activeDivisionId) ??
-    props.divisions[0] ??
+    divisions.find((d) => d.xmlId === activeDivisionId) ??
+    divisions[0] ??
     null;
 
   const activeDivisionFormat = activeDivision?.sourceFormat ?? "pretext";
@@ -315,12 +319,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // ── Content-change emitter ───────────────────────────────────────────────
   // Single channel for every content change: a division edit, a structural
   // reorder, or a docinfo edit.  Always carries the affected division's xmlId.
+  // Updates the store's pool optimistically first (so the edit displays without
+  // the host echoing it back), then notifies the host.
   const emitContentChange = (
     xmlId: string,
     content: string,
     format: SourceFormat,
     extra?: Partial<EditorContentChange>,
   ) => {
+    setDivisionContent(xmlId, content);
     props.onContentChange({
       xmlId,
       sourceContent: content,
@@ -328,6 +335,29 @@ const EditorsInner = (props: EditorsInnerProps) => {
       pretextSource: format === "pretext" ? content : undefined,
       ...extra,
     });
+  };
+
+  // The remaining structural mutations follow the same pattern: update the
+  // store's authoritative pool optimistically, then fire the (optional) host
+  // callback as a persistence notification.
+  const applyDivisionUpdate = (xmlId: string, changes: DivisionChanges) => {
+    patchDivision(xmlId, changes);
+    props.onDivisionUpdate?.(xmlId, changes);
+  };
+
+  const applyDivisionAdd = (division: Division) => {
+    addDivisionToPool(division);
+    props.onDivisionAdd?.(division);
+  };
+
+  const applyDivisionRemove = (xmlId: string) => {
+    removeDivisionFromPool(xmlId);
+    props.onDivisionRemove?.(xmlId);
+  };
+
+  const applyDivisionSelect = (xmlId: string) => {
+    setActiveDivisionId(xmlId);
+    props.onDivisionSelect?.(xmlId);
   };
 
   // Lazily convert the active division's source to PreTeXt for the convert
@@ -352,74 +382,69 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
     // The source is the source of truth for title/type/xml:id/label: re-derive
     // them from the edited content so the TOC stays in sync even when the
-    // dropdown form is never used.
-    if (props.onDivisionUpdate) {
-      if (activeDivisionFormat === "pretext") {
-        const meta = extractDivisionMetadata(wrapped);
-        if (meta) {
-          props.onDivisionUpdate(activeDivision.xmlId, {
-            title: meta.title,
-            type: meta.type,
-            xmlId: meta.xmlId || null,
-            label: meta.label || null,
-          });
+    // dropdown form is never used.  These flow through the apply* wrappers so
+    // the store reflects them whether or not the host wired the callbacks.
+    if (activeDivisionFormat === "pretext") {
+      const meta = extractDivisionMetadata(wrapped);
+      if (meta) {
+        applyDivisionUpdate(activeDivision.xmlId, {
+          title: meta.title,
+          type: meta.type,
+          xmlId: meta.xmlId || null,
+          label: meta.label || null,
+        });
 
-          // Keep the parent's <plus:* ref="..."/> placeholder in sync with an
-          // xml:id rename or type change, so editing the source doesn't
-          // orphan the division from its place in the tree.
-          const newXmlId = meta.xmlId || activeDivision.xmlId;
-          if (newXmlId !== activeDivision.xmlId || meta.type !== activeDivision.type) {
-            const parent = findDivisionParent(props.divisions, activeDivision.xmlId);
-            if (parent) {
-              const newParentContent = renameDivisionRef(
-                parent.content,
-                activeDivision.xmlId,
-                newXmlId,
-                meta.type,
-              );
-              if (newParentContent !== parent.content) {
-                emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
-              }
+        // Keep the parent's <plus:* ref="..."/> placeholder in sync with an
+        // xml:id rename or type change, so editing the source doesn't
+        // orphan the division from its place in the tree.
+        const newXmlId = meta.xmlId || activeDivision.xmlId;
+        if (newXmlId !== activeDivision.xmlId || meta.type !== activeDivision.type) {
+          const parent = findDivisionParent(divisions, activeDivision.xmlId);
+          if (parent) {
+            const newParentContent = renameDivisionRef(
+              parent.content,
+              activeDivision.xmlId,
+              newXmlId,
+              meta.type,
+            );
+            if (newParentContent !== parent.content) {
+              emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
             }
           }
+        }
 
-          // Follow an xml:id rename so the user isn't bumped to a different
-          // division once the host re-supplies divisions under the new id.
-          if (meta.xmlId && meta.xmlId !== activeDivision.xmlId) {
-            setInternalActiveDivisionId(meta.xmlId);
-            props.onDivisionSelect?.(meta.xmlId);
-          }
+        // Follow an xml:id rename so the user isn't bumped to a different
+        // division once the pool re-supplies it under the new id.
+        if (meta.xmlId && meta.xmlId !== activeDivision.xmlId) {
+          applyDivisionSelect(meta.xmlId);
         }
-      } else if (activeDivisionFormat === "latex" && activeDivision.type === "section") {
-        const title = extractLatexDivisionTitle(wrapped);
-        if (title !== null) {
-          props.onDivisionUpdate(activeDivision.xmlId, { title });
-        }
+      }
+    } else if (activeDivisionFormat === "latex" && activeDivision.type === "section") {
+      const latexTitle = extractLatexDivisionTitle(wrapped);
+      if (latexTitle !== null) {
+        applyDivisionUpdate(activeDivision.xmlId, { title: latexTitle });
       }
     }
 
     // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
     // that appeared in the edited content but don't yet have a matching division.
-    if (props.onDivisionAdd) {
-      const existingIds = new Set(props.divisions.map((d) => d.xmlId));
-      for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped)) {
-        if (!existingIds.has(xmlId)) {
-          props.onDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
-          existingIds.add(xmlId); // prevent duplicates within the same edit
-        }
+    const existingIds = new Set(divisions.map((d) => d.xmlId));
+    for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped)) {
+      if (!existingIds.has(xmlId)) {
+        applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
+        existingIds.add(xmlId); // prevent duplicates within the same edit
       }
     }
   };
 
   const handleDivisionSelect = (xmlId: string) => {
-    setInternalActiveDivisionId(xmlId);
-    props.onDivisionSelect?.(xmlId);
+    applyDivisionSelect(xmlId);
   };
 
   const handleDivisionAdd = () => {
     const newDiv = createNewSection();
-    props.onDivisionAdd?.(newDiv);
-    setInternalActiveDivisionId(newDiv.xmlId);
+    applyDivisionAdd(newDiv);
+    setActiveDivisionId(newDiv.xmlId);
   };
 
   // ── Asset insertion ─────────────────────────────────────────────────────
@@ -451,28 +476,30 @@ const EditorsInner = (props: EditorsInnerProps) => {
     bindCallbacks({
       selectDivision: handleDivisionSelect,
       addDivision: () => handleDivisionAdd(),
-      removeDivision: (xmlId) => props.onDivisionRemove?.(xmlId),
-      updateDivision: (xmlId, changes) => props.onDivisionUpdate?.(xmlId, changes),
+      removeDivision: (xmlId) => applyDivisionRemove(xmlId),
+      updateDivision: (xmlId, changes) => applyDivisionUpdate(xmlId, changes),
       // Structural reorders rewrite a parent division's content; route them
       // through the same unified content-change channel as direct edits.
       divisionContentChange: (xmlId, content) => {
-        const division = props.divisions.find((d) => d.xmlId === xmlId);
+        const division = divisions.find((d) => d.xmlId === xmlId);
         emitContentChange(xmlId, content, division?.sourceFormat ?? "pretext");
       },
       handleDivisionContentChange,
       assetInsert: handleAssetInsert,
       insertContentAtCursor: (content) => codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
-        setInternalTitle(value);
+        setTitle(value);
         props.onTitleChange?.(value);
       },
       feedbackSubmit: props.onFeedbackSubmit,
     });
   });
 
-  // ── Sync controlled/derived state into store ─────────────────────────────
-  // These effects ensure the store always mirrors the latest host data so
-  // deep components (which read from the store) stay in sync.  `source` /
+  // ── Sync derived/config state into store ─────────────────────────────────
+  // Only fields that are NEVER edited locally are mirrored from props/derived
+  // values on every render — the editing buffer itself (divisions, title,
+  // docinfo, activeDivisionId) is owned by the store and handled separately
+  // (optimistic edits above + external-update detection below).  `source` /
   // `sourceFormat` track the active division (read by the feedback link).
   useEffect(() => {
     syncState({
@@ -480,27 +507,95 @@ const EditorsInner = (props: EditorsInnerProps) => {
       sourceFormat: activeDivisionFormat,
       projectAssets: props.projectAssets,
       libraryAssets: props.libraryAssets,
-      title,
-      docinfo: props.docinfo ?? internalDocinfo,
-      commonDocinfo: props.commonDocinfo ?? internalCommonDocinfo,
-      useCommonDocinfo: props.useCommonDocinfo ?? internalUseCommonDocinfo,
       projectType: props.projectType,
       projectUrl: props.projectUrl,
-      divisions: props.divisions,
       rootDivisionId: rootDivision?.xmlId,
-      activeDivisionId,
       canConvertToPretext: divisionConvertedPretext !== undefined,
       activeEditorSource: divisionActiveSource,
       hasFeedback: props.onFeedbackSubmit !== undefined,
     });
   });
 
+  // ── Detect genuine external updates from the host ────────────────────────
+  // The store owns the live editing buffer, so we must NOT clobber it with a
+  // stale prop the host simply never updated.  A buffer field is pushed into
+  // the store only when its controlled prop actually *changed* since the last
+  // render (host-initiated) — which is how a real reset (e.g. reconciling
+  // server-assigned ids after a save, or switching projects) wins, while a
+  // host that ignores the change callbacks keeps its local edits.
+  const externalRef = useRef({
+    divisions: props.divisions,
+    title: props.title,
+    docinfo: props.docinfo,
+    commonDocinfo: props.commonDocinfo,
+    useCommonDocinfo: props.useCommonDocinfo,
+    activeDivisionId: props.activeDivisionId,
+  });
+  useEffect(() => {
+    const prev = externalRef.current;
+    const update: Parameters<typeof applyExternalUpdate>[0] = {};
+    let changed = false;
+
+    if (props.divisions !== prev.divisions) {
+      update.divisions = props.divisions;
+      const newRoot = findRootDivision(props.divisions, props.rootDivisionId);
+      // If the active division no longer exists in the incoming pool, fall back
+      // to the root so the editor never points at a missing division.
+      if (
+        activeDivisionId == null ||
+        !props.divisions.some((d) => d.xmlId === activeDivisionId)
+      ) {
+        update.activeDivisionId = newRoot?.xmlId ?? null;
+      }
+      changed = true;
+    }
+    if (props.title !== undefined && props.title !== prev.title) {
+      update.title = props.title;
+      changed = true;
+    }
+    if (props.docinfo !== undefined && props.docinfo !== prev.docinfo) {
+      update.docinfo = props.docinfo;
+      changed = true;
+    }
+    if (
+      props.commonDocinfo !== undefined &&
+      props.commonDocinfo !== prev.commonDocinfo
+    ) {
+      update.commonDocinfo = props.commonDocinfo;
+      changed = true;
+    }
+    if (
+      props.useCommonDocinfo !== undefined &&
+      props.useCommonDocinfo !== prev.useCommonDocinfo
+    ) {
+      update.useCommonDocinfo = props.useCommonDocinfo;
+      changed = true;
+    }
+    if (
+      props.activeDivisionId !== undefined &&
+      props.activeDivisionId !== prev.activeDivisionId
+    ) {
+      update.activeDivisionId = props.activeDivisionId;
+      changed = true;
+    }
+
+    if (changed) applyExternalUpdate(update);
+
+    externalRef.current = {
+      divisions: props.divisions,
+      title: props.title,
+      docinfo: props.docinfo,
+      commonDocinfo: props.commonDocinfo,
+      useCommonDocinfo: props.useCommonDocinfo,
+      activeDivisionId: props.activeDivisionId,
+    };
+  });
+
   // ── Preview content ──────────────────────────────────────────────────────
   // The docinfo that actually governs rendering: the user's common
-  // docinfo/preamble when opted in, otherwise the project's own.
-  const effectiveDocinfo = (props.useCommonDocinfo ?? internalUseCommonDocinfo)
-    ? props.commonDocinfo ?? internalCommonDocinfo
-    : props.docinfo ?? internalDocinfo;
+  // docinfo/preamble when opted in, otherwise the project's own.  Read from the
+  // store's authoritative buffer.
+  const effectiveDocinfo = useCommonDocinfo ? commonDocinfo : docinfo;
 
   // The active division's own tagged XML (outer element included), with no
   // conversion performed here — `divisionConvertedPretext` is already kept
@@ -554,7 +649,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       sourceFormat: "pretext",
       content: wrappedContent,
     };
-    props.onDivisionAdd?.(newDiv);
+    applyDivisionAdd(newDiv);
   };
 
   // ── Code editor ──────────────────────────────────────────────────────────
@@ -745,19 +840,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
         ) : null}
         {isDocinfoEditorOpen ? (
           <DocinfoEditor
-            docinfo={props.docinfo ?? internalDocinfo}
+            docinfo={docinfo}
             showCommonDocinfoControls
-            commonDocinfo={props.commonDocinfo ?? internalCommonDocinfo}
-            initialUseCommonDocinfo={
-              props.useCommonDocinfo ?? internalUseCommonDocinfo
-            }
+            commonDocinfo={commonDocinfo}
+            initialUseCommonDocinfo={useCommonDocinfo}
             onClose={(value) => {
               closeModal("isDocinfoEditorOpen");
               if (value !== undefined) {
-                syncState({
-                  internalDocinfo: value.docinfo,
-                  internalCommonDocinfo: value.commonDocinfo,
-                  internalUseCommonDocinfo: value.useCommonDocinfo,
+                setDocinfo({
+                  docinfo: value.docinfo,
+                  commonDocinfo: value.commonDocinfo,
+                  useCommonDocinfo: value.useCommonDocinfo,
                 });
                 props.onCommonDocinfoChange?.(value.commonDocinfo);
                 props.onUseCommonDocinfoChange?.(value.useCommonDocinfo);
