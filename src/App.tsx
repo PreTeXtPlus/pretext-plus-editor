@@ -313,7 +313,7 @@ const handlePreviewRebuild = async (
   title: string,
   postToIframe: (url: string, data: any) => void,
 ) => {
-  const token = "demo";
+  const token = import.meta.env.VITE_BUILD_TOKEN || "demo";
   const postData = { source: source, title: title, token: token };
   postToIframe("https://build.pretext.plus", postData);
 };
