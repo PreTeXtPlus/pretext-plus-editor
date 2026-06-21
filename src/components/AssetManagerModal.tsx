@@ -597,7 +597,7 @@ const AssetManagerModal = ({
           </button>
         </div>
 
-        <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__am-body">
+        <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
           {tab === "in-document"
             ? renderInDocument()
             : addKind === null

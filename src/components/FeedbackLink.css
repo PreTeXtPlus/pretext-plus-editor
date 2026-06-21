@@ -22,6 +22,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .pretext-plus-editor__feedback-label {

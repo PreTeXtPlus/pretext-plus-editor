@@ -731,68 +731,53 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const previewTabId = "pretext-plus-tab-preview";
   const tabPanelId = "pretext-plus-tabpanel";
 
-  const narrowTocDrawer =
-    isNarrowScreen && tocSidebar ? (
-      <div className="pretext-plus-editor__toc-drawer">
-        {isTocCollapsed ? (
-          <button
-            type="button"
-            className="pretext-plus-editor__toc-drawer-toggle"
-            onClick={() => setIsTocCollapsed(false)}
-          >
-            ☰ Contents
-          </button>
-        ) : (
-          <div className="pretext-plus-editor__toc-drawer-open">
-            {tocSidebar}
-          </div>
-        )}
-      </div>
-    ) : null;
-
   let editorDisplays: ReactNode;
   if (isNarrowScreen) {
     editorDisplays = (
       <div className="pretext-plus-editor__tabs">
-        {narrowTocDrawer}
-        <div className="pretext-plus-editor__tab-list" role="tablist">
-          <button
-            type="button"
-            id={editorTabId}
-            role="tab"
-            aria-controls={tabPanelId}
-            aria-selected={activeTab === "editor"}
-            tabIndex={activeTab === "editor" ? 0 : -1}
-            className={`pretext-plus-editor__tab-button ${
-              activeTab === "editor" ? "is-active" : ""
-            }`}
-            onClick={() => setActiveTab("editor")}
+        {tocSidebar}
+        <div className="pretext-plus-editor__tabs-main">
+          <div className="pretext-plus-editor__tab-list" role="tablist">
+            <button
+              type="button"
+              id={editorTabId}
+              role="tab"
+              aria-controls={tabPanelId}
+              aria-selected={activeTab === "editor"}
+              tabIndex={activeTab === "editor" ? 0 : -1}
+              className={`pretext-plus-editor__tab-button ${
+                activeTab === "editor" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("editor")}
+            >
+              Editor
+            </button>
+            <button
+              type="button"
+              id={previewTabId}
+              role="tab"
+              aria-controls={tabPanelId}
+              aria-selected={activeTab === "preview"}
+              tabIndex={activeTab === "preview" ? 0 : -1}
+              className={`pretext-plus-editor__tab-button ${
+                activeTab === "preview" ? "is-active" : ""
+              }`}
+              onClick={() => setActiveTab("preview")}
+            >
+              Preview
+            </button>
+          </div>
+          <div
+            id={tabPanelId}
+            className="pretext-plus-editor__tab-panel"
+            role="tabpanel"
+            aria-labelledby={
+              activeTab === "editor" ? editorTabId : previewTabId
+            }
           >
-            Editor
-          </button>
-          <button
-            type="button"
-            id={previewTabId}
-            role="tab"
-            aria-controls={tabPanelId}
-            aria-selected={activeTab === "preview"}
-            tabIndex={activeTab === "preview" ? 0 : -1}
-            className={`pretext-plus-editor__tab-button ${
-              activeTab === "preview" ? "is-active" : ""
-            }`}
-            onClick={() => setActiveTab("preview")}
-          >
-            Preview
-          </button>
-        </div>
-        <div
-          id={tabPanelId}
-          className="pretext-plus-editor__tab-panel"
-          role="tabpanel"
-          aria-labelledby={activeTab === "editor" ? editorTabId : previewTabId}
-        >
-          <div style={{ height: "100%" }}>
-            {activeTab === "editor" ? codeEditor : preview}
+            <div style={{ height: "100%" }}>
+              {activeTab === "editor" ? codeEditor : preview}
+            </div>
           </div>
         </div>
       </div>

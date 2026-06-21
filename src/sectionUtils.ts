@@ -1470,7 +1470,7 @@ function ensureRootLabel(xml: string): string {
       ? firstElement.children.find((node): node is Element => node.type === "element")
       : firstElement;
     if (!el) return xml;
-    if (!el.attributes.label && !el.attributes.xmlId) {
+    if (!el.attributes.label && !el.attributes["xml:id"]) {
       el.attributes.label = "preview";
       return toXml(tree);
     }

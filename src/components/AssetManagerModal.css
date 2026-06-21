@@ -4,16 +4,20 @@
   height: min(85%, 600px);
 }
 
-/* Override dialog-content min-height so the grid row doesn't force overflow */
-.pretext-plus-editor__dialog--asset-manager .pretext-plus-editor__dialog-content {
-  min-height: 0;
-  overflow: hidden;
-}
+@media (max-height: 600px) {
+  .pretext-plus-editor__dialog--asset-manager {
+    height: 98%;
+  }
 
-/* ── Body — the single scroll container ──────────── */
-.pretext-plus-editor__am-body {
-  overflow-y: auto;
-  min-height: 0;
+  .pretext-plus-editor__am-kind-picker {
+    min-height: 0;
+    padding: 1rem 0.5rem;
+  }
+
+  .pretext-plus-editor__am-drop-zone {
+    min-height: 110px;
+    padding: 1.25rem 1rem;
+  }
 }
 
 /* ── Shared placeholder / empty states ───────────── */
