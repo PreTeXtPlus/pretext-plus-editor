@@ -1106,6 +1106,24 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * Tag names that may appear in a `<plus:TAG ref="..."/>` placeholder used to
+ * position a `Division` within its parent's content — i.e. every
+ * `DivisionType` plus the generic `division` alias.
+ *
+ * Asset placeholders (`<plus:image ref="..."/>`, `<plus:doenet ref="..."/>`)
+ * share the same `<plus:* ref="..."/>` shape but are NOT divisions — they
+ * reference project assets and must be excluded here, otherwise asset refs
+ * get parsed as division children, auto-created as bogus Division records,
+ * and shown/orphaned in the TOC.
+ */
+const DIVISION_REF_TAGS: ReadonlySet<string> = new Set([
+  "division",
+  ...ALL_DIVISION_TYPES,
+]);
+
+const DIVISION_REF_TAG_ALTERNATION = Array.from(DIVISION_REF_TAGS).join("|");
+
+/**
  * Build a regex source that matches a `<plus:TAG ... ref="..." ...>` placeholder
  * in EITHER form:
  *   - self-closing:     `<plus:section ref="x"/>`
@@ -1115,13 +1133,17 @@ function escapeRegex(s: string): string {
  * `stripSectionWrapper`/`rewrapSection`) produces, so every consumer must
  * accept it as well as the canonical self-closing form a user might type.
  *
+ * Only matches tag names in {@link DIVISION_REF_TAGS} — asset placeholders
+ * (`plus:image`, `plus:doenet`, ...) are deliberately excluded.
+ *
  * When `refValue` is `null` the ref value is captured in group 1; otherwise the
  * pattern matches only that specific ref (nothing captured).
  */
 function divisionRefSource(refValue: string | null): string {
   const ref =
     refValue === null ? `ref="([^"]+)"` : `ref="${escapeRegex(refValue)}"`;
-  return `<plus:[a-z-]+\\s[^>]*${ref}[^>]*?(?:/>|>\\s*</plus:[a-z-]+>)`;
+  const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
+  return `<plus:${tag}\\s[^>]*${ref}[^>]*?(?:/>|>\\s*</plus:${tag}>)`;
 }
 
 /**
@@ -1145,15 +1167,54 @@ export function parseDivisionRefs(content: string): string[] {
  * Like {@link parseDivisionRefs} but also returns the division type inferred
  * from the tag name (e.g. `<plus:chapter ref="x"/>` → `{ type: "chapter", xmlId: "x" }`).
  * Used to auto-create Division records when new refs appear in edited content.
+ *
+ * Only tag names in {@link DIVISION_REF_TAGS} are considered — asset
+ * placeholders (`plus:image`, `plus:doenet`, ...) are not divisions and are
+ * skipped. The generic `<plus:division ref="x"/>` alias falls back to type
+ * `"section"`, matching {@link tagToType}'s default for unrecognised tags.
  */
 export function parseDivisionRefsWithTypes(
   content: string,
 ): { xmlId: string; type: DivisionType }[] {
   const refs: { xmlId: string; type: DivisionType }[] = [];
-  const re = /<plus:([a-z-]+)\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g;
+  const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
+  const re = new RegExp(
+    `<plus:(${DIVISION_REF_TAG_ALTERNATION})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${tag}>)`,
+    "g",
+  );
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    refs.push({ type: m[1] as DivisionType, xmlId: m[2] });
+    const tagName = m[1];
+    const type: DivisionType = tagName === "division" ? "section" : (tagName as DivisionType);
+    refs.push({ type, xmlId: m[2] });
+  }
+  return refs;
+}
+
+// ---------------------------------------------------------------------------
+// Asset ref utilities — `<plus:image|doenet ref="..."/>` placeholder parsing
+// ---------------------------------------------------------------------------
+
+/** A `<plus:image ref="..."/>` / `<plus:doenet ref="..."/>` asset placeholder. */
+export interface AssetRef {
+  kind: "image" | "doenet";
+  ref: string;
+}
+
+/**
+ * Parse every `<plus:image ref="..."/>` / `<plus:doenet ref="..."/>` asset
+ * placeholder out of `content`, in document order, without de-duplicating.
+ *
+ * Asset placeholders share the `<plus:* ref="..."/>` shape used by division
+ * refs (see {@link DIVISION_REF_TAGS}) but are deliberately parsed by a
+ * separate, disjoint tag set so the two kinds of include are never conflated.
+ */
+export function parseAssetRefs(content: string): AssetRef[] {
+  const refs: AssetRef[] = [];
+  const re = /<plus:(image|doenet)\b[^>]*\bref="([^"]+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    refs.push({ kind: m[1] as AssetRef["kind"], ref: m[2] });
   }
   return refs;
 }
@@ -1467,13 +1528,17 @@ function ensureRootLabel(xml: string): string {
     const tree: Root = fromXml(xml);
     const firstElement = tree.children.find((node): node is Element => node.type === "element");
     const el = firstElement?.name === "pretext"
-      ? firstElement.children.find((node): node is Element => node.type === "element")
-      : firstElement;
+      ? firstElement.children.find(
+          (node): node is Element =>
+            node.type === "element" && ROOT_DIVISION_TYPES.has(node.name as DivisionType),
+        )
+      : firstElement && ROOT_DIVISION_TYPES.has(firstElement.name as DivisionType)
+        ? firstElement
+        : undefined;
     if (!el) return xml;
     if (!el.attributes.label) {
       const unusedLabel = findUnusedLabel(tree, "pretext-plus-preview");
       el.attributes.label = unusedLabel;
-      console.log(`Added label="${unusedLabel}" to root element ${el.name} for previewing.`);
       return toXml(tree);
     }
     return xml;

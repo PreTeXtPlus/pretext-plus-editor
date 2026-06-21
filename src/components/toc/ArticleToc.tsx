@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import type { Division } from "../../types/sections";
+import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
 
 import {
@@ -7,6 +8,7 @@ import {
   getOrphanRoots,
   insertDivisionRef,
   normalizeSelfClosingRefs,
+  parseAssetRefs,
   removeDivisionRef,
 } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
@@ -15,10 +17,14 @@ export interface ArticleTocProps {
   onOpenAssetPicker?: () => void;
 }
 
+const ASSET_KIND_LABELS: Record<AssetKind, string> = { image: "Images", doenet: "Doenet" };
+const ASSET_KIND_ORDER: AssetKind[] = ["image", "doenet"];
+
 const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const removeSection = useEditorStore((s) => s.removeSection);
@@ -52,6 +58,30 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     rootDivision && divisions
       ? getOrphanRoots(divisions, rootDivision.xmlId)
       : [];
+
+  // ── Asset refs — pooled across every division, deduplicated ────────────────
+  const assetRefs = (() => {
+    if (!divisions) return [] as ReturnType<typeof parseAssetRefs>;
+    const seen = new Set<string>();
+    const refs: ReturnType<typeof parseAssetRefs> = [];
+    for (const division of divisions) {
+      for (const ref of parseAssetRefs(division.content)) {
+        const key = `${ref.kind}:${ref.ref}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          refs.push(ref);
+        }
+      }
+    }
+    return refs;
+  })();
+
+  const groupedAssetRefs = ASSET_KIND_ORDER.map((kind) => ({
+    kind,
+    items: assetRefs.filter((a) => a.kind === kind),
+  })).filter((g) => g.items.length > 0);
+
+  const [assetsExpanded, setAssetsExpanded] = useState(false);
 
   // ── Expand/collapse: track which IDs are collapsed (empty = all open) ───────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
@@ -153,6 +183,10 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
         insertDivisionRef(rootDivision.content, orphan.xmlId, orphan.type, null),
       ),
     );
+  };
+
+  const handleInsertAsset = (kind: AssetKind, ref: string) => {
+    insertAtCursor(`<plus:${kind} ref="${ref}"/>`);
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -312,6 +346,84 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
           </ul>
         </div>
       )}
+
+      {/* Asset refs — kept separate from divisions, folded by default */}
+      <div className="pretext-plus-editor__toc-assets">
+        <div className="pretext-plus-editor__toc-assets-header">
+          <button
+            type="button"
+            className="pretext-plus-editor__toc-assets-toggle"
+            onClick={() => setAssetsExpanded((v) => !v)}
+            aria-expanded={assetsExpanded}
+          >
+            <span className="pretext-plus-editor__toc-assets-chevron">
+              {assetsExpanded ? "▾" : "▸"}
+            </span>
+            <span>Assets</span>
+            {assetRefs.length > 0 && (
+              <span className="pretext-plus-editor__toc-assets-count">
+                {assetRefs.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {assetsExpanded && (
+          <div className="pretext-plus-editor__toc-assets-body">
+            {assetRefs.length === 0 ? (
+              <p className="pretext-plus-editor__toc-assets-empty">
+                No assets referenced in this document.{" "}
+                {onOpenAssetPicker && (
+                  <button
+                    type="button"
+                    className="pretext-plus-editor__toc-assets-add-link"
+                    onClick={onOpenAssetPicker}
+                  >
+                    Add one
+                  </button>
+                )}
+              </p>
+            ) : (
+              <div className="pretext-plus-editor__toc-assets-groups">
+                {groupedAssetRefs.map(({ kind, items }) => (
+                  <div key={kind}>
+                    <div className="pretext-plus-editor__toc-assets-group-header">
+                      {ASSET_KIND_LABELS[kind]}
+                    </div>
+                    <ul className="pretext-plus-editor__toc-assets-list">
+                      {items.map(({ ref }) => {
+                        const asset = projectAssets.find(
+                          (a) => a.kind === kind && a.ref === ref,
+                        );
+                        return (
+                          <li key={ref} className="pretext-plus-editor__toc-asset-item">
+                            <div className="pretext-plus-editor__toc-asset-name">
+                              <span className="pretext-plus-editor__toc-asset-label">
+                                {asset?.name ?? ref}
+                              </span>
+                              <span className="pretext-plus-editor__toc-asset-filename">
+                                {ref}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="pretext-plus-editor__toc-action-btn"
+                              onClick={() => handleInsertAsset(kind, ref)}
+                              title={`Insert <plus:${kind} ref="${ref}"/> at cursor`}
+                            >
+                              Insert
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {onOpenAssetPicker && (
         <button

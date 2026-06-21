@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import type { Asset, AssetKind } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
+import { parseAssetRefs } from "../sectionUtils";
 import "./dialog.css";
 import "./AssetManagerModal.css";
 import doenetLogo from "../assets/doenet.png";
@@ -34,13 +35,11 @@ const KIND_ORDER: AssetKind[] = ["image", "doenet"];
 function parseDocumentAssets(source: string): Array<{ kind: AssetKind; ref: string }> {
   const seen = new Set<string>();
   const results: Array<{ kind: AssetKind; ref: string }> = [];
-  const regex = /<plus:(image|doenet)\b[^>]*\bref="([^"]+)"/g;
-  let match;
-  while ((match = regex.exec(source)) !== null) {
-    const key = `${match[1]}:${match[2]}`;
+  for (const { kind, ref } of parseAssetRefs(source)) {
+    const key = `${kind}:${ref}`;
     if (!seen.has(key)) {
       seen.add(key);
-      results.push({ kind: match[1] as AssetKind, ref: match[2] });
+      results.push({ kind, ref });
     }
   }
   return results;
