@@ -1470,8 +1470,10 @@ function ensureRootLabel(xml: string): string {
       ? firstElement.children.find((node): node is Element => node.type === "element")
       : firstElement;
     if (!el) return xml;
-    if (!el.attributes.label && !el.attributes["xml:id"]) {
-      el.attributes.label = "preview";
+    if (!el.attributes.label) {
+      const unusedLabel = findUnusedLabel(tree, "pretext-plus-preview");
+      el.attributes.label = unusedLabel;
+      console.log(`Added label="${unusedLabel}" to root element ${el.name} for previewing.`);
       return toXml(tree);
     }
     return xml;
@@ -1479,6 +1481,41 @@ function ensureRootLabel(xml: string): string {
     console.error("Error ensuring label:", error);
     return xml;
   }
+}
+
+/**
+ * Check if a label is already used in the document tree.
+ * @param node: The node to search within.
+ * @param label: The label to search for.
+ */
+function hasLabelInTree(node: Root | Element, label: string): boolean {
+  if (node.type === "element" && (node as Element).attributes?.label === label) {
+    return true;
+  }
+  if ("children" in node && node.children) {
+    return node.children.some((child) => {
+      if (child.type === "element") {
+        return hasLabelInTree(child as Element, label);
+      }
+      return false;
+    });
+  }
+  return false;
+}
+
+/**
+ * Utility to find a label that is not already used in the document.  If the desired label is already used, it will append a number to it until it finds an unused label.
+ * @param tree: The root of the document tree.
+ * @param desiredLabel: The label we want to use.
+ */
+function findUnusedLabel(tree: Root, desiredLabel: string): string {
+  let label = desiredLabel;
+  let i = 1;
+  while (hasLabelInTree(tree, label)) {
+    label = `${desiredLabel}-${i}`;
+    i++;
+  }
+  return label;
 }
 
 /**
@@ -1528,21 +1565,54 @@ function resolveDivisionXml(
 }
 
 /**
- * Assemble the full PreTeXt source for a project by resolving the root
- * division and recursively expanding every `<plus:* ref="..."/>` placeholder
- * it (transitively) contains, converting any LaTeX/Markdown divisions to
- * PreTeXt along the way.
+ * Resolve the root division and recursively expand every
+ * `<plus:* ref="..."/>` placeholder it (transitively) contains, converting
+ * any LaTeX/Markdown divisions to PreTeXt along the way. Returns the bare
+ * root element (e.g. `<book>...</book>`) — *not* wrapped in `<pretext>` and
+ * without `<docinfo>`.
  *
- * This is what a host application sends to the build server (e.g.
- * `https://build.pretext.plus`) to produce the final rendered document — the
- * `divisions` pool itself is never a valid build input, since it's a flat
- * list of fragments rather than a single document tree.
+ * This is the body half of a full document. Most callers that want an
+ * actual buildable/persistable document should use
+ * {@link assembleFullProjectSource} instead; this lower-level function
+ * remains for callers (like the division-scoped preview path) that need to
+ * compose the resolved body further before wrapping it themselves.
  */
 export function assembleProjectSource(
   divisions: Division[],
   rootXmlId: string,
 ): string {
   return ensureRootLabel(resolveDivisionXml(rootXmlId, divisions, new Set()));
+}
+
+/**
+ * Wrap a resolved document body in the outer `<pretext>` element with
+ * `<docinfo>` inserted as its sibling, matching real PreTeXt document shape.
+ */
+function wrapInPretextDocument(body: string, docinfo: string): string {
+  const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
+  return ensureRootLabel(`<pretext>\n${docinfoBlock}${body}\n</pretext>`);
+}
+
+/**
+ * Assemble the complete PreTeXt document for a project: the root division,
+ * fully resolved (every `<plus:* ref="..."/>` placeholder expanded and any
+ * LaTeX/Markdown divisions converted to PreTeXt), wrapped in the outer
+ * `<pretext>` element with `<docinfo>` inserted as its sibling.
+ *
+ * This is the same shape produced for a root-division preview build, and is
+ * what a host application should persist as "the full source" and send to a
+ * build server (e.g. `https://build.pretext.plus`) to produce the final
+ * rendered document — the `divisions` pool itself is never a valid build
+ * input, since it's a flat list of fragments rather than a single document
+ * tree.
+ */
+export function assembleFullProjectSource(
+  divisions: Division[],
+  rootXmlId: string,
+  docinfo: string,
+): string {
+  const body = resolveDivisionXml(rootXmlId, divisions, new Set());
+  return wrapInPretextDocument(body, docinfo);
 }
 
 // ---------------------------------------------------------------------------
@@ -1590,7 +1660,6 @@ export function wrapDivisionForPreview(
     : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
     ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
     : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
-  const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
-  return ensureRootLabel(`<pretext>\n${docinfoBlock}${body}\n</pretext>`);
+  return wrapInPretextDocument(body, docinfo);
 }
 

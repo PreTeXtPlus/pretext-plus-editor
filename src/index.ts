@@ -35,6 +35,7 @@ export type {
 export type { DivisionTreeNode } from "./sectionUtils";
 export {
   assembleProjectSource,
+  assembleFullProjectSource,
   // Division ref utilities (new architecture)
   parseDivisionRefs,
   insertDivisionRef,
