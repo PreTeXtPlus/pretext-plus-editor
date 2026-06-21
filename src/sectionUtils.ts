@@ -77,7 +77,6 @@ function untitledLabel(tag: string): string {
 const DOCUMENT_ROOT_TAGS: ReadonlySet<string> = new Set([
   "article",
   "book",
-  "chapter",
   "letter",
   "memo",
   "slideshow",
@@ -1537,27 +1536,36 @@ const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
  * `<section xml:id="...">...</section>`) into a standalone PreTeXt fragment
  * document suitable for a build-server preview of just that division.
  *
- * Unlike {@link assembleProjectSource}, this never expands `<plus:* ref="..."/>`
- * placeholders — they are left as-is for the build server to handle when
- * rendering a fragment preview.
+ * This function itself never expands `<plus:* ref="..."/>` placeholders —
+ * the real build server has no notion of that placeholder syntax, so callers
+ * must resolve them first (e.g. via {@link assembleProjectSource}) before
+ * passing `divisionXml` in. Passing unresolved refs produces invalid PreTeXt
+ * and a build failure.
  *
  * `divisionType` determines the minimal wrapper needed around `divisionXml`:
  * root types (`book`/`article`/`slideshow`) need none, `chapter`/`part` are
  * wrapped in a bare `<book>`, and everything else in a bare `<article>`.
+ * The PreTeXt schema requires `<book>`/`<article>` to have a `<title>` as
+ * their first child, so a wrapper built here uses `wrapperTitle` for that —
+ * without it the build server's schema validation rejects the document,
+ * produces no output, and 500s.
  * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
  * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
  * document shape.
+ * 
+ * We need to add `label="preview"` (or really any label) since if this isn't present the build server won't know what file to return.
  */
 export function wrapDivisionForPreview(
   divisionType: DivisionType,
   divisionXml: string,
   docinfo: string,
+  wrapperTitle: string,
 ): string {
   const body = ROOT_DIVISION_TYPES.has(divisionType)
     ? divisionXml
     : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
-    ? `<book>\n${divisionXml}\n</book>`
-    : `<article>\n${divisionXml}\n</article>`;
+    ? `<book label="preview">\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
+    : `<article label="preview">\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
   const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
   return `<pretext>\n${docinfoBlock}${body}\n</pretext>`;
 }

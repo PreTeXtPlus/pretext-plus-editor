@@ -28,6 +28,7 @@ import {
   parseDivisionRefsWithTypes,
   createDivisionWithId,
   wrapDivisionForPreview,
+  assembleProjectSource,
   extractDivisionMetadata,
   extractLatexDivisionTitle,
   findDivisionParent,
@@ -597,12 +598,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // store's authoritative buffer.
   const effectiveDocinfo = useCommonDocinfo ? commonDocinfo : docinfo;
 
-  // The active division's own tagged XML (outer element included), with no
-  // conversion performed here — `divisionConvertedPretext` is already kept
-  // up to date for non-PreTeXt divisions.
+  // The active division's own tagged XML (outer element included). For
+  // PreTeXt divisions this also expands any `<plus:* ref="..."/>` child
+  // placeholders against the full divisions pool — the real build server
+  // has no notion of that placeholder syntax, so previewing a division that
+  // still contains unresolved refs to its children produces invalid PreTeXt
+  // and a build failure. `divisionConvertedPretext` is already kept up to
+  // date for non-PreTeXt divisions (which are leaves and never contain refs).
   const divisionTaggedXml = activeDivision
     ? activeDivisionFormat === "pretext"
-      ? activeDivision.content
+      ? assembleProjectSource(divisions, activeDivision.xmlId)
       : divisionConvertedPretext !== undefined
       ? `<${activeDivision.type} xml:id="${activeDivision.xmlId}">\n<title>${activeDivision.title}</title>\n\n${divisionConvertedPretext}\n</${activeDivision.type}>`
       : undefined
@@ -614,6 +619,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           activeDivision.type,
           divisionTaggedXml,
           effectiveDocinfo,
+          activeDivision.title,
         )
       : undefined;
 
