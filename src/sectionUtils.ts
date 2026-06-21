@@ -1450,6 +1450,37 @@ export function getOrphanRoots(
 // Full project source assembly
 // ---------------------------------------------------------------------------
 
+
+/** Root division types — already a valid top-level PreTeXt element on their own. */
+const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
+  "book",
+  "article",
+  "slideshow",
+]);
+
+/**
+ * Ensure that the provided xml string has either a label or xml:id attribute on the root document element (Book, Article, or Slideshow).  If not, add a label="preview" attribute to the root element.  This is necessary for the build server to know which file to return for previewing.
+ * @param xml: Full XML for a pretext document, including <pretext> around the <book>/<article>/<slideshow> root element. 
+ */
+function ensureRootLabel(xml: string): string {
+  try {
+    const tree: Root = fromXml(xml);
+    const firstElement = tree.children.find((node): node is Element => node.type === "element");
+    const el = firstElement?.name === "pretext"
+      ? firstElement.children.find((node): node is Element => node.type === "element")
+      : firstElement;
+    if (!el) return xml;
+    if (!el.attributes.label && !el.attributes.xmlId) {
+      el.attributes.label = "preview";
+      return toXml(tree);
+    }
+    return xml;
+  } catch (error) {
+    console.error("Error ensuring label:", error);
+    return xml;
+  }
+}
+
 /**
  * Resolve a single division to its final PreTeXt XML, then recursively expand
  * any `<plus:* ref="..."/>` placeholders found inside it.
@@ -1511,7 +1542,7 @@ export function assembleProjectSource(
   divisions: Division[],
   rootXmlId: string,
 ): string {
-  return resolveDivisionXml(rootXmlId, divisions, new Set());
+  return ensureRootLabel(resolveDivisionXml(rootXmlId, divisions, new Set()));
 }
 
 // ---------------------------------------------------------------------------
@@ -1524,12 +1555,7 @@ const BOOK_CHILD_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
   "chapter",
 ]);
 
-/** Root division types — already a valid top-level PreTeXt element on their own. */
-const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
-  "book",
-  "article",
-  "slideshow",
-]);
+
 
 /**
  * Wrap a single division's own tagged XML (e.g.
@@ -1552,8 +1578,6 @@ const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
  * `docinfo` (the full `<docinfo>...</docinfo>` element, or `""`) is inserted
  * as a sibling of the root element inside `<pretext>`, matching real PreTeXt
  * document shape.
- * 
- * We need to add `label="preview"` (or really any label) since if this isn't present the build server won't know what file to return.
  */
 export function wrapDivisionForPreview(
   divisionType: DivisionType,
@@ -1564,9 +1588,9 @@ export function wrapDivisionForPreview(
   const body = ROOT_DIVISION_TYPES.has(divisionType)
     ? divisionXml
     : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
-    ? `<book label="preview">\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
-    : `<article label="preview">\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
+    ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
+    : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
   const docinfoBlock = docinfo.trim() ? `${docinfo.trim()}\n` : "";
-  return `<pretext>\n${docinfoBlock}${body}\n</pretext>`;
+  return ensureRootLabel(`<pretext>\n${docinfoBlock}${body}\n</pretext>`);
 }
 
