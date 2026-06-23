@@ -34,6 +34,7 @@ import { getSectionAttributes } from "../sectionUtils";
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
+  id?: string;
   title?: string;
   type?: DivisionType;
   xmlId?: string | null;
@@ -304,6 +305,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           d.xmlId === xmlId
             ? {
                 ...d,
+                ...(changes.id !== undefined && { id: changes.id }),
                 ...(changes.title !== undefined && { title: changes.title }),
                 ...(changes.type !== undefined && { type: changes.type }),
                 ...(changes.xmlId != null && { xmlId: changes.xmlId }),

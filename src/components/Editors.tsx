@@ -33,6 +33,7 @@ import {
   extractLatexDivisionTitle,
   findDivisionParent,
   renameDivisionRef,
+  normalizeDivisionsOnLoad,
 } from "../sectionUtils";
 import {
   createEditorStore,
@@ -147,9 +148,19 @@ export interface editorProps {
   onDivisionSelect?: (xmlId: string) => void;
 
   /**
-   * Called when the user creates a new division via the TOC UI.
+   * Called when the user creates a new division via the TOC UI (including
+   * an auto-create triggered by typing a new `<plus:TYPE ref="..."/>`
+   * placeholder). `division` is the full local record — including the
+   * `xmlId` the editor picked — and should be persisted as-is.
+   *
+   * The division is added to the local pool synchronously and immediately,
+   * before this is called, so the host's `id` provisioning never blocks the
+   * UI. If a host needs to mint its own stable `id` (e.g. a Rails record
+   * id) for the division, it can return that id here; once the returned
+   * promise resolves, the editor patches it into the division's `id` field
+   * in place. `xmlId` is unaffected and is never remapped.
    */
-  onDivisionAdd?: (division: Division) => void;
+  onDivisionAdd?: (division: Division) => Promise<string> | void;
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -188,8 +199,13 @@ export interface editorProps {
   onAssetAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /** Called when the user uploads an image file. */
   onAssetUpload?: (file: File) => Promise<Asset>;
-  /** Called when the user adds an image by URL. */
-  onAssetAddUrl?: (url: string, name: string) => Promise<Asset>;
+  /**
+   * Called when the user adds an image by URL. Should fetch the URL
+   * server-side (to avoid CORS) and return the raw file bytes — it must
+   * NOT create a persisted asset. The returned file is then committed via
+   * `onAssetUpload`, the same as a local file pick.
+   */
+  onAssetFetchUrl?: (url: string) => Promise<File>;
   /** Called when the user creates a new Doenet activity. */
   onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Called when the user removes an asset from the project. */
@@ -229,19 +245,31 @@ const Editors = (props: editorProps) => {
       props.divisions,
       props.rootDivisionId,
     );
-    const initActiveId = props.activeDivisionId ?? initRootDivision?.xmlId ?? null;
+    // Hosts aren't required to persist a division's title or root wrapper
+    // separately from its PreTeXt source, so the very first pool of
+    // divisions a host hands over may be missing both — back-derive them
+    // from each division's own content before seeding the store.
+    const normalizedDivisions = normalizeDivisionsOnLoad(
+      props.divisions,
+      initRootDivision?.xmlId,
+      props.projectType,
+    );
+    const normalizedRoot =
+      normalizedDivisions.find((d) => d.xmlId === initRootDivision?.xmlId) ??
+      initRootDivision;
+    const initActiveId = props.activeDivisionId ?? normalizedRoot?.xmlId ?? null;
     const initActive =
-      props.divisions.find((d) => d.xmlId === initActiveId) ?? initRootDivision;
+      normalizedDivisions.find((d) => d.xmlId === initActiveId) ?? normalizedRoot;
 
     return createEditorStore({
       source: initActive?.content ?? "",
       sourceFormat: initActive?.sourceFormat ?? "pretext",
-      title: props.title ?? "Document Title",
+      title: props.title || normalizedRoot?.title || "Document Title",
       docinfo: props.docinfo ?? "",
       commonDocinfo: props.commonDocinfo ?? "",
       useCommonDocinfo: props.useCommonDocinfo ?? false,
       projectType: props.projectType,
-      divisions: props.divisions,
+      divisions: normalizedDivisions,
       activeDivisionId: initActiveId,
     });
   });
@@ -348,7 +376,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const applyDivisionAdd = (division: Division) => {
     addDivisionToPool(division);
-    props.onDivisionAdd?.(division);
+    // Added to the pool synchronously above so the UI never waits on the
+    // host. If the host provisions its own stable `id` (e.g. a Rails record
+    // id), patch just that field in once it resolves — `xmlId` is what every
+    // other code path keys on, so this never needs to be remapped anywhere.
+    const provisioned = props.onDivisionAdd?.(division);
+    provisioned?.then((id) => patchDivision(division.xmlId, { id })).catch(() => {});
   };
 
   const applyDivisionRemove = (xmlId: string) => {
@@ -538,15 +571,28 @@ const EditorsInner = (props: EditorsInnerProps) => {
     let changed = false;
 
     if (props.divisions !== prev.divisions) {
-      update.divisions = props.divisions;
       const newRoot = findRootDivision(props.divisions, props.rootDivisionId);
+      const normalizedDivisions = normalizeDivisionsOnLoad(
+        props.divisions,
+        newRoot?.xmlId,
+        props.projectType,
+      );
+      update.divisions = normalizedDivisions;
+      const normalizedRoot =
+        normalizedDivisions.find((d) => d.xmlId === newRoot?.xmlId) ?? newRoot;
       // If the active division no longer exists in the incoming pool, fall back
       // to the root so the editor never points at a missing division.
       if (
         activeDivisionId == null ||
         !props.divisions.some((d) => d.xmlId === activeDivisionId)
       ) {
-        update.activeDivisionId = newRoot?.xmlId ?? null;
+        update.activeDivisionId = normalizedRoot?.xmlId ?? null;
+      }
+      // Hosts that don't persist a title separately rely on the root
+      // division's own <title> for it; re-derive whenever a fresh divisions
+      // pool arrives and the host isn't supplying an explicit title of its own.
+      if (!props.title && normalizedRoot?.title) {
+        update.title = normalizedRoot.title;
       }
       changed = true;
     }
@@ -870,7 +916,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onLoadLibraryAssets={props.onLoadLibraryAssets}
             onAddFromLibrary={props.onAssetAddFromLibrary}
             onUpload={props.onAssetUpload}
-            onAddUrl={props.onAssetAddUrl}
+            onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove}
             onInsert={handleAssetInsert}

@@ -17,8 +17,13 @@ export interface AssetManagerModalProps {
   onAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /** Upload an image file; host returns the created asset. */
   onUpload?: (file: File) => Promise<Asset>;
-  /** Add an image from a URL; host downloads and returns the created asset. */
-  onAddUrl?: (url: string, name: string) => Promise<Asset>;
+  /**
+   * Fetch an external URL on the user's behalf (server-side, to avoid CORS)
+   * and return the raw file bytes. Must not create a persisted asset — the
+   * returned file is then committed via `onUpload`, the same as a local
+   * file pick, so there is a single code path that creates project assets.
+   */
+  onFetchUrl?: (url: string) => Promise<File>;
   /** Create a new Doenet activity; host returns the created asset. */
   onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Remove an asset from the project. */
@@ -53,7 +58,7 @@ const AssetManagerModal = ({
   onInsert,
   onAddFromLibrary,
   onUpload,
-  onAddUrl,
+  onFetchUrl,
   onCreateDoenet,
   onRemoveAsset,
 }: AssetManagerModalProps) => {
@@ -169,19 +174,27 @@ const AssetManagerModal = ({
   const handleUrlInsert = async () => {
     const url = urlValue.trim();
     if (!url) return;
-    const name = urlName.trim() || url;
-    if (onAddUrl) {
+    const name = urlName.trim();
+    if (onFetchUrl && onUpload) {
       setUrlError(null);
       setIsAddingUrl(true);
       try {
-        const asset = await onAddUrl(url, name);
+        const fetched = await onFetchUrl(url);
+        const file = name ? new File([fetched], name, { type: fetched.type }) : fetched;
+        const asset = await onUpload(file);
         handleInsertAndClose(asset);
       } catch (err) {
         setUrlError(err instanceof Error ? err.message : "Failed to add URL.");
         setIsAddingUrl(false);
       }
     } else {
-      handleInsertAndClose({ id: `url-${Date.now()}`, name, ref: url.split("/").pop() ?? "image", kind: "image" });
+      handleInsertAndClose({
+        id: `url-${Date.now()}`,
+        name: name || url,
+        ref: url.split("/").pop() ?? "image",
+        kind: "image",
+        url,
+      });
     }
   };
 
@@ -481,7 +494,7 @@ const AssetManagerModal = ({
               onClick={handleUrlInsert}
               disabled={!urlValue.trim() || isAddingUrl}
             >
-              {isAddingUrl ? "Adding…" : onAddUrl ? "Add to Library & Insert" : "Insert"}
+              {isAddingUrl ? "Adding…" : onFetchUrl && onUpload ? "Add to Library & Insert" : "Insert"}
             </button>
           </div>
         )}

@@ -18,11 +18,11 @@ const DEMO_DIVISIONS: Division[] = [
   {
     id: "demo-root",
     xmlId: "demo-article",
-    title: "Divisions Mode Demo",
+    title: "",
     type: "article",
     sourceFormat: "pretext",
-    content: `<article xml:id="demo-article">
-<title>Divisions Mode Demo</title>
+    content: `<article>
+<title>Divisions Mode Demo for Article</title>
 <p>Each section is a separate <c>Division</c> record in a flat pool. The TOC reads their order from <c>plus:section</c> placeholder tags embedded in this root division's content.</p>
 <p>Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview.</p>
 <plus:section ref="sec-intro"/>
@@ -30,12 +30,13 @@ const DEMO_DIVISIONS: Division[] = [
 <plus:section ref="sec-results"/>
 <plus:section ref="sec-latex"/>
 <plus:section ref="sec-markdown"/>
-</article>`,
+</article>
+`,
   },
   {
     id: "demo-intro",
     xmlId: "sec-intro",
-    title: "Introduction",
+    title: "",
     type: "introduction",
     sourceFormat: "pretext",
     content: `<introduction xml:id="sec-intro">
@@ -47,7 +48,7 @@ const DEMO_DIVISIONS: Division[] = [
   {
     id: "demo-background",
     xmlId: "sec-background",
-    title: "Background",
+    title: "",
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-background">
@@ -119,8 +120,8 @@ You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^
   {
     id: "demo-orphan",
     xmlId: "sec-orphan",
-    title: "Unplaced Section",
-    type: "section",
+    title: "",
+    type: "",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-orphan">
 <title>Unplaced Section</title>
@@ -444,9 +445,15 @@ function App() {
     );
   };
 
-  const handleDivisionAdd = (division: Division) => {
+  const handleDivisionAdd = async (division: Division): Promise<string> => {
     setDivisions((prev) => [...prev, division]);
     setActiveDivisionId(division.xmlId);
+    // Simulate a Rails round-trip that provisions the record's real id.
+    // The editor already shows the division locally; this id is patched in
+    // once it resolves, without affecting the xmlId used everywhere else.
+    console.log("Division provisioning started:", division.xmlId);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return `division-${Date.now()}`;
   };
 
   const handleDivisionRemove = (xmlId: string) => {
@@ -506,22 +513,14 @@ function App() {
     return newAsset;
   };
 
-  const handleAssetAddUrl = async (
-    url: string,
-    name: string,
-  ): Promise<Asset> => {
-    console.log("Asset URL add started:", url, name);
+  const handleAssetFetchUrl = async (url: string): Promise<File> => {
+    console.log("Fetching URL on the user's behalf (demo stand-in for a server-side proxy):", url);
     await new Promise((resolve) => setTimeout(resolve, 600));
     const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
-    const newAsset: Asset = {
-      id: `asset-${Date.now()}`,
-      name: name || filename.replace(/\.[^.]+$/, ""),
-      ref: filename,
-      kind: "image",
-    };
-    setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
-    return newAsset;
+    // A real host fetches `url` server-side (avoiding CORS) and streams the
+    // bytes back; it must not persist anything here — persistence happens
+    // when the returned file is passed to onAssetUpload.
+    return new File([], filename, { type: "image/png" });
   };
 
   const handleAssetAddFromLibrary = async (asset: Asset) => {
@@ -635,7 +634,7 @@ function App() {
         onAssetInsert={handleAssetInsert}
         onAssetAddFromLibrary={handleAssetAddFromLibrary}
         onAssetUpload={handleAssetUpload}
-        onAssetAddUrl={handleAssetAddUrl}
+        onAssetFetchUrl={handleAssetFetchUrl}
         divisions={divisions}
         activeDivisionId={activeDivisionId}
         onDivisionSelect={handleDivisionSelect}

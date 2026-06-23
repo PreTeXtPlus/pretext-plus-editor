@@ -1728,3 +1728,70 @@ export function wrapDivisionForPreview(
   return wrapInPretextDocument(body, docinfo);
 }
 
+// ---------------------------------------------------------------------------
+// Initial-load normalization
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a division pool right after it arrives from the host, before
+ * it's seeded into the store as the editing buffer.
+ *
+ * Hosts aren't required to persist a division's `title` separately from its
+ * PreTeXt source — it's meant to be read from the `<title>` element inside
+ * `content` — so a freshly loaded division's `title` field can be blank even
+ * though its content already has a real title. Backfill it here so the TOC
+ * doesn't show "Untitled" for content that already has one.
+ *
+ * The root division additionally needs an `<article>`/`<book>` wrapper
+ * element. A host that hands back a brand-new project's root division as a
+ * bare body fragment (no wrapper at all) gets one added here, chosen from
+ * `projectType` (`"book"` vs. the default `"article"`).
+ */
+/**
+ * Strip a leading `<title>...</title>` element off a bare (unwrapped) PreTeXt
+ * fragment, returning its text alongside the remaining body. A fragment with
+ * several top-level siblings generally isn't well-formed XML on its own (only
+ * one root element is allowed), so this matches by string rather than
+ * parsing — mirroring {@link stripWrapperByRegex}'s fallback approach.
+ */
+function extractLeadingTitle(content: string): { title: string; body: string } {
+  const trimmed = content.trim();
+  const m = trimmed.match(/^<title\b[^>]*>([\s\S]*?)<\/title>\s*/);
+  if (!m) return { title: "", body: trimmed };
+  return { title: m[1].trim(), body: trimmed.slice(m[0].length) };
+}
+
+export function normalizeDivisionsOnLoad(
+  divisions: Division[],
+  rootDivisionId: string | undefined,
+  projectType: "article" | "book" | undefined,
+): Division[] {
+  const wrapperType: DivisionType = projectType === "book" ? "book" : "article";
+
+  return divisions.map((division) => {
+    if (division.sourceFormat !== "pretext") return division;
+
+    const meta = extractDivisionMetadata(division.content);
+
+    if (division.xmlId === rootDivisionId && !(meta && ROOT_DIVISION_TYPES.has(meta.type))) {
+      // The bare fragment may already carry its own leading <title> even
+      // though it was never wrapped in <article>/<book> — use that ahead of
+      // "Untitled" so a real title isn't discarded, and drop it from the body
+      // so it isn't duplicated once it's reinserted as the wrapper's <title>.
+      const { title: embeddedTitle, body } = extractLeadingTitle(division.content);
+      const title = division.title || embeddedTitle || "Untitled";
+      return {
+        ...division,
+        type: wrapperType,
+        title,
+        content: `<${wrapperType} xml:id="${division.xmlId}">\n<title>${title}</title>\n\n${body}\n</${wrapperType}>`,
+      };
+    }
+
+    if (!division.title && meta?.title) {
+      return { ...division, title: meta.title };
+    }
+    return division;
+  });
+}
+
