@@ -121,7 +121,7 @@ You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^
     id: "demo-orphan",
     xmlId: "sec-orphan",
     title: "",
-    type: "",
+    type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-orphan">
 <title>Unplaced Section</title>

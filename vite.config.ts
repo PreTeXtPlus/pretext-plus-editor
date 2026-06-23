@@ -35,7 +35,10 @@ export default defineConfig(({ mode }) => {
           output: {
             globals: {
               react: 'React',
-              'react-dom': 'ReactDOM'
+              'react/jsx-runtime': 'React',
+              'react-dom': 'ReactDOM',
+              'use-sync-external-store/shim/index.js': 'useSyncExternalStoreShim',
+              'use-sync-external-store/shim/with-selector.js': 'useSyncExternalStoreShimWithSelector'
             }
           }
         },
