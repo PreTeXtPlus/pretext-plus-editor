@@ -18,8 +18,20 @@ export interface Asset {
   ref?: string;
   /** The kind of asset — determines the tag inserted into the document. */
   kind: AssetKind;
-  /** Source content for an asset to be generated. */
+  /**
+   * User-authored inner XML for the asset's PreTeXt element — e.g.
+   * `<shortdescription>...</shortdescription>` and `<description>...</description>`
+   * for an image, or an activity's body for a Doenet interactive. Inserted
+   * verbatim as the children of the generated element.
+   */
   source?: string;
+  /**
+   * Whether this asset is backed by an uploaded/fetched file rather than
+   * being defined purely by `source`. File-based image assets get their
+   * `url` written as the `source` attribute on the generated `<image>`
+   * element; non-file image assets rely entirely on their authored `source`.
+   */
+  isFile?: boolean;
   /** Publicly accessible URL for the asset, if applicable. */
   url?: string;
   /** Mime type for the asset, if applicable.  Used for hints only. */

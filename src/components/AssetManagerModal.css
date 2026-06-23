@@ -409,6 +409,26 @@
   margin-top: 0.25rem;
 }
 
+.pretext-plus-editor__am-edit-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  color: #0f172a;
+  background: #fff;
+  resize: vertical;
+}
+
+.pretext-plus-editor__am-edit-textarea:focus {
+  outline: 2px solid #93c5fd;
+  outline-offset: 1px;
+}
+
 .pretext-plus-editor__am-error {
   margin: 0;
   padding: 0.4rem 0.6rem;

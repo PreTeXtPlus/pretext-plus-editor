@@ -26,7 +26,7 @@
  * they are stable while always calling the latest mode-routed callback.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
-import type { Asset, FeedbackSubmission, SourceFormat } from "../types/editor";
+import type { Asset, AssetKind, FeedbackSubmission, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { getSectionAttributes } from "../sectionUtils";
@@ -126,6 +126,9 @@ export interface EditorStoreState {
   editingId: string | null;
   editDraft: EditDraft | null;
 
+  /** The asset currently open in the asset edit modal, identified by kind+ref. */
+  editingAssetRef: { kind: AssetKind; ref: string } | null;
+
   // ── Actions ────────────────────────────────────────────────────────────────
 
   /** Sync a batch of derived/controlled data from Editors into the store. */
@@ -178,6 +181,9 @@ export interface EditorStoreState {
   // Assets / content
   insertAsset: (asset: Asset) => void;
   insertAtCursor: (content: string) => void;
+  /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
+  openAssetEditor: (kind: AssetKind, ref: string) => void;
+  closeAssetEditor: () => void;
   updateTitle: (title: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
@@ -279,6 +285,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isAssetPickerOpen: false,
     editingId: null,
     editDraft: null,
+    editingAssetRef: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
@@ -381,6 +388,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
+    openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
+    closeAssetEditor: () => set({ editingAssetRef: null }),
     updateTitle: (title) => bag.cbs.updateTitle(title),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));
