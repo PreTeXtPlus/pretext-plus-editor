@@ -8,6 +8,7 @@ import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import AssetManagerModal from "./AssetManagerModal";
+import AssetEditModal from "./AssetEditModal";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
 import ErrorBoundary from "./ErrorBoundary";
@@ -210,6 +211,8 @@ export interface editorProps {
   onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Called when the user removes an asset from the project. */
   onAssetRemove?: (asset: Asset) => void;
+  /** Called when the user saves edits to an asset's content (e.g. its `source`). */
+  onAssetUpdate?: (asset: Asset) => Promise<void> | void;
   /** Called when the asset modal opens to fetch the latest project assets. */
   onLoadAssets?: () => Promise<Asset[]>;
   /** Called when the asset modal opens to fetch the full library asset list. */
@@ -302,9 +305,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
+  const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
+  const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
+
+  const editingAsset = editingAssetRef
+    ? props.projectAssets?.find(
+        (a) => a.kind === editingAssetRef.kind && a.ref === editingAssetRef.ref,
+      )
+    : undefined;
 
   // ── Authoritative editing buffer (read from the store, not props) ─────────
   // The store owns the live edit after the initial seed.  Reading these here
@@ -653,7 +664,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // date for non-PreTeXt divisions (which are leaves and never contain refs).
   const divisionTaggedXml = activeDivision
     ? activeDivisionFormat === "pretext"
-      ? assembleProjectSource(divisions, activeDivision.xmlId)
+      ? assembleProjectSource(divisions, activeDivision.xmlId, props.projectAssets)
       : divisionConvertedPretext !== undefined
       ? `<${activeDivision.type} xml:id="${activeDivision.xmlId}">\n<title>${activeDivision.title}</title>\n\n${divisionConvertedPretext}\n</${activeDivision.type}>`
       : undefined
@@ -920,6 +931,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove}
             onInsert={handleAssetInsert}
+          />
+        ) : null}
+        {editingAsset ? (
+          <AssetEditModal
+            asset={editingAsset}
+            onClose={closeAssetEditor}
+            onSave={(asset) => props.onAssetUpdate?.(asset)}
           />
         ) : null}
       </div>

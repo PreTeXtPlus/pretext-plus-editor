@@ -11,6 +11,12 @@ import type {
 import type { Division, DivisionType } from "./types/sections";
 import { assembleProjectSource } from "./sectionUtils";
 
+/** A self-contained placeholder image (no network dependency) for demo image assets. */
+function demoImageDataUrl(label: string, color: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="160"><rect width="100%" height="100%" fill="${color}"/><text x="50%" y="50%" font-size="20" fill="#fff" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif">${label}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Initial divisions for the article demo
 // ---------------------------------------------------------------------------
@@ -343,24 +349,37 @@ function App() {
       name: "Euler Formula",
       ref: "euler-formula.png",
       kind: "image",
+      isFile: true,
+      url: demoImageDataUrl("Euler Formula", "#0e639c"),
+      contentType: "image/svg+xml",
+      source: "<shortdescription>Euler's formula relating complex exponentials to trigonometric functions.</shortdescription>",
     },
     {
       id: "asset-2",
       name: "Markdown Logo",
       ref: "markdown-logo.svg",
       kind: "image",
+      isFile: true,
+      url: demoImageDataUrl("Markdown Logo", "#0f766e"),
+      contentType: "image/svg+xml",
+      source: "<shortdescription>The Markdown logo.</shortdescription>",
     },
     {
       id: "asset-3",
       name: "PreTeXt Logo",
       ref: "pretext-logo.png",
       kind: "image",
+      isFile: true,
+      url: demoImageDataUrl("PreTeXt Logo", "#7c3aed"),
+      contentType: "image/svg+xml",
+      source: "<shortdescription>The PreTeXt logo.</shortdescription>",
     },
     {
       id: "asset-4",
       name: "Sample Activity",
       ref: "sample-activity",
       kind: "doenet",
+      source: "<!-- DoenetML for the sample activity goes here -->",
     },
   ]);
   const [projectAssetIds, setProjectAssetIds] = useState<Set<string>>(
@@ -383,11 +402,11 @@ function App() {
   const fullBuildPayload = useMemo(() => {
     if (!rootDivision) return null;
     return {
-      source: assembleProjectSource(divisions, rootDivision.xmlId),
+      source: assembleProjectSource(divisions, rootDivision.xmlId, projectAssets),
       title,
       token: "demo",
     };
-  }, [divisions, rootDivision, title]);
+  }, [divisions, rootDivision, title, projectAssets]);
 
   // ---------------------------------------------------------------------------
   // Demo loaders
@@ -507,6 +526,9 @@ function App() {
       name: file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
       kind: "image",
+      isFile: true,
+      url: URL.createObjectURL(file),
+      contentType: file.type,
     };
     setLibraryAssets((prev) => [...prev, newAsset]);
     setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
@@ -528,6 +550,30 @@ function App() {
     await new Promise((resolve) => setTimeout(resolve, 200));
     setProjectAssetIds((prev) => new Set([...prev, asset.id]));
     console.log("Asset added to project:", asset.ref);
+  };
+
+  const handleCreateDoenet = async (name: string, ref: string): Promise<Asset> => {
+    console.log("Creating Doenet activity:", name, ref);
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    const newAsset: Asset = { id: `asset-${Date.now()}`, name, ref, kind: "doenet" };
+    setLibraryAssets((prev) => [...prev, newAsset]);
+    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    return newAsset;
+  };
+
+  const handleAssetRemove = (asset: Asset) => {
+    console.log("Removing asset from project:", asset.ref);
+    setProjectAssetIds((prev) => {
+      const next = new Set(prev);
+      next.delete(asset.id);
+      return next;
+    });
+  };
+
+  const handleAssetUpdate = async (asset: Asset) => {
+    console.log("Updating asset:", asset.ref, asset.source);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    setLibraryAssets((prev) => prev.map((a) => (a.id === asset.id ? asset : a)));
   };
 
   // ---------------------------------------------------------------------------
@@ -635,6 +681,9 @@ function App() {
         onAssetAddFromLibrary={handleAssetAddFromLibrary}
         onAssetUpload={handleAssetUpload}
         onAssetFetchUrl={handleAssetFetchUrl}
+        onCreateDoenet={handleCreateDoenet}
+        onAssetRemove={handleAssetRemove}
+        onAssetUpdate={handleAssetUpdate}
         divisions={divisions}
         activeDivisionId={activeDivisionId}
         onDivisionSelect={handleDivisionSelect}

@@ -65,6 +65,7 @@ const AssetManagerModal = ({
   const source = useEditorStore((s) => s.activeEditorSource);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
   const libraryAssets = useEditorStore((s) => s.libraryAssets);
+  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
 
   const [dynamicAssets, setDynamicAssets] = useState<Asset[] | null>(null);
@@ -327,6 +328,16 @@ const AssetManagerModal = ({
                           title={`Insert <plus:${kind} ref="${ref}"/>`}
                         >
                           Insert
+                        </button>
+                      )}
+                      {asset && (
+                        <button
+                          type="button"
+                          className="pretext-plus-editor__am-action-btn"
+                          onClick={() => openAssetEditor(kind, ref)}
+                          title="Edit asset content"
+                        >
+                          Edit
                         </button>
                       )}
                       <button

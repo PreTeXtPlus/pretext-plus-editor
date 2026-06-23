@@ -9,7 +9,7 @@
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
 import type { Element, Root } from "xast";
-import type { SourceFormat } from "./types/editor";
+import type { Asset, AssetKind, SourceFormat } from "./types/editor";
 import type {
   Division,
   DivisionType,
@@ -18,6 +18,8 @@ import type {
   DocumentSplitResult,
 } from "./types/sections";
 import { derivePretextContent } from "./contentConversion";
+import { ASSET_KINDS, resolveAssetRef } from "./assetTransforms";
+import { escapeAttribute } from "./xmlUtils";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -413,14 +415,6 @@ export function mergeDocument(
  */
 export function stripChapterWrapper(chapterXml: string): string {
   return stripSectionWrapper(chapterXml);
-}
-
-/** Escape a string for safe use inside a double-quoted XML attribute value. */
-function escapeAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/"/g, "&quot;");
 }
 
 /**
@@ -1599,6 +1593,7 @@ function resolveDivisionXml(
   xmlId: string,
   divisions: Division[],
   ancestors: Set<string>,
+  assets: Asset[],
 ): string {
   const division = divisions.find((d) => d.xmlId === xmlId);
   if (!division) return `<!-- missing division: ${xmlId} -->`;
@@ -1624,8 +1619,11 @@ function resolveDivisionXml(
 
   const nextAncestors = new Set(ancestors).add(xmlId);
   return xml.replace(
-    /<plus:[a-z-]+\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:[a-z-]+>)/g,
-    (_match, ref: string) => resolveDivisionXml(ref, divisions, nextAncestors),
+    /<plus:([a-z-]+)\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:\1>)/g,
+    (_match, tag: string, ref: string) =>
+      ASSET_KINDS.has(tag as AssetKind)
+        ? resolveAssetRef(tag as AssetKind, ref, assets)
+        : resolveDivisionXml(ref, divisions, nextAncestors, assets),
   );
 }
 
@@ -1645,8 +1643,11 @@ function resolveDivisionXml(
 export function assembleProjectSource(
   divisions: Division[],
   rootXmlId: string,
+  assets: Asset[] = [],
 ): string {
-  return ensureRootLabel(resolveDivisionXml(rootXmlId, divisions, new Set()));
+  return ensureRootLabel(
+    resolveDivisionXml(rootXmlId, divisions, new Set(), assets),
+  );
 }
 
 /**
@@ -1675,8 +1676,9 @@ export function assembleFullProjectSource(
   divisions: Division[],
   rootXmlId: string,
   docinfo: string,
+  assets: Asset[] = [],
 ): string {
-  const body = resolveDivisionXml(rootXmlId, divisions, new Set());
+  const body = resolveDivisionXml(rootXmlId, divisions, new Set(), assets);
   return wrapInPretextDocument(body, docinfo);
 }
 

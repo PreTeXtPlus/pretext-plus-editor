@@ -31,6 +31,8 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
   const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
 
+  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
+
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
   const commitSectionEdit = useEditorStore((s) => s.commitSectionEdit);
@@ -397,14 +399,19 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                         );
                         return (
                           <li key={ref} className="pretext-plus-editor__toc-asset-item">
-                            <div className="pretext-plus-editor__toc-asset-name">
+                            <button
+                              type="button"
+                              className="pretext-plus-editor__toc-asset-name"
+                              onClick={() => openAssetEditor(kind, ref)}
+                              title="Edit asset content"
+                            >
                               <span className="pretext-plus-editor__toc-asset-label">
                                 {asset?.name ?? ref}
                               </span>
                               <span className="pretext-plus-editor__toc-asset-filename">
                                 {ref}
                               </span>
-                            </div>
+                            </button>
                             <button
                               type="button"
                               className="pretext-plus-editor__toc-action-btn"
