@@ -90,6 +90,15 @@ export interface EditorStoreState {
   sourceFormat: SourceFormat;
   projectAssets: Asset[] | undefined;
   libraryAssets: Asset[] | undefined;
+  /**
+   * Assets known locally that may not yet be reflected in the host's
+   * `projectAssets` prop — populated as soon as an asset is created or
+   * freshly loaded via `onLoadAssets`, so the asset editor can find an
+   * asset the very first time it's referenced, without waiting for the
+   * host to echo it back as a new prop. Takes precedence over `projectAssets`
+   * wherever an asset needs to be looked up by kind+ref.
+   */
+  liveProjectAssets: Asset[] | null;
   title: string;
   docinfo: string;
   commonDocinfo: string;
@@ -184,6 +193,10 @@ export interface EditorStoreState {
   /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
   openAssetEditor: (kind: AssetKind, ref: string) => void;
   closeAssetEditor: () => void;
+  /** Replace the locally-known asset list (e.g. after `onLoadAssets` resolves). */
+  setLiveProjectAssets: (assets: Asset[] | null) => void;
+  /** Merge a single created/edited asset into the locally-known asset list. */
+  upsertLiveAsset: (asset: Asset) => void;
   updateTitle: (title: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
@@ -260,6 +273,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     sourceFormat: init.sourceFormat,
     projectAssets: undefined,
     libraryAssets: undefined,
+    liveProjectAssets: null,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
@@ -390,6 +404,15 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
     openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
     closeAssetEditor: () => set({ editingAssetRef: null }),
+    setLiveProjectAssets: (assets) => set({ liveProjectAssets: assets }),
+    upsertLiveAsset: (asset) =>
+      set((state) => {
+        const base = state.liveProjectAssets ?? state.projectAssets ?? [];
+        const next = base.some((a) => a.kind === asset.kind && a.ref === asset.ref)
+          ? base.map((a) => (a.kind === asset.kind && a.ref === asset.ref ? asset : a))
+          : [...base, asset];
+        return { liveProjectAssets: next };
+      }),
     updateTitle: (title) => bag.cbs.updateTitle(title),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));

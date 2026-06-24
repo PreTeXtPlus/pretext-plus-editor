@@ -12,19 +12,19 @@ import {
   removeDivisionRef,
 } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
+import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: () => void;
 }
 
-const ASSET_KIND_LABELS: Record<AssetKind, string> = { image: "Images", doenet: "Doenet" };
-const ASSET_KIND_ORDER: AssetKind[] = ["image", "doenet"];
-
 const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
-  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
+  const syncedProjectAssets = useEditorStore((s) => s.projectAssets);
+  const projectAssets = liveProjectAssets ?? syncedProjectAssets ?? [];
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const removeSection = useEditorStore((s) => s.removeSection);
@@ -78,7 +78,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     return refs;
   })();
 
-  const groupedAssetRefs = ASSET_KIND_ORDER.map((kind) => ({
+  const groupedAssetRefs = VISIBLE_ASSET_KINDS.map((kind) => ({
     kind,
     items: assetRefs.filter((a) => a.kind === kind),
   })).filter((g) => g.items.length > 0);

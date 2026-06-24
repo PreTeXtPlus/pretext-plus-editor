@@ -307,12 +307,18 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
   const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
   const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
+  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
+  const upsertLiveAsset = useEditorStore((s) => s.upsertLiveAsset);
+  const setLiveProjectAssets = useEditorStore((s) => s.setLiveProjectAssets);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
 
+  // `liveProjectAssets` takes precedence: an asset just created (or freshly
+  // fetched via `onLoadAssets`) may not be in `props.projectAssets` yet if
+  // the host hasn't echoed it back as a new prop.
   const editingAsset = editingAssetRef
-    ? props.projectAssets?.find(
+    ? (liveProjectAssets ?? props.projectAssets)?.find(
         (a) => a.kind === editingAssetRef.kind && a.ref === editingAssetRef.ref,
       )
     : undefined;
@@ -501,6 +507,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const handleAssetInsert = (asset: Asset) => {
     const snippet = buildAssetSnippet(asset);
     if (snippet) codeEditorRef.current?.insertAtCursor(snippet);
+    // Record the asset locally so it's editable immediately, even before the
+    // host echoes it back as an updated `projectAssets` prop.
+    upsertLiveAsset(asset);
     props.onAssetInsert?.(asset);
   };
 
@@ -560,6 +569,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hasFeedback: props.onFeedbackSubmit !== undefined,
     });
   });
+
+  // Once the host pushes a genuinely new `projectAssets` array, it has caught
+  // up — drop the local stand-in so future lookups trust the host again.
+  const prevProjectAssetsRef = useRef(props.projectAssets);
+  useEffect(() => {
+    if (props.projectAssets !== prevProjectAssetsRef.current) {
+      prevProjectAssetsRef.current = props.projectAssets;
+      setLiveProjectAssets(null);
+    }
+  }, [props.projectAssets, setLiveProjectAssets]);
 
   // ── Detect genuine external updates from the host ────────────────────────
   // The store owns the live editing buffer, so we must NOT clobber it with a
@@ -937,7 +956,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
           <AssetEditModal
             asset={editingAsset}
             onClose={closeAssetEditor}
-            onSave={(asset) => props.onAssetUpdate?.(asset)}
+            onSave={async (asset) => {
+              await props.onAssetUpdate?.(asset);
+              upsertLiveAsset(asset);
+            }}
           />
         ) : null}
       </div>

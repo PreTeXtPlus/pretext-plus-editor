@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import type { Asset, AssetKind } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
 import { parseAssetRefs } from "../sectionUtils";
+import { ASSET_KIND_LABELS, SHOW_DOENET, VISIBLE_ASSET_KINDS } from "../assetKinds";
 import "./dialog.css";
 import "./AssetManagerModal.css";
 import doenetLogo from "../assets/doenet.png";
@@ -34,9 +35,6 @@ type MainTab = "in-document" | "add";
 type ImageSourceTab = "library" | "upload" | "url";
 type DoenetSourceTab = "library" | "create";
 
-const KIND_LABELS: Record<AssetKind, string> = { image: "Images", doenet: "Doenet" };
-const KIND_ORDER: AssetKind[] = ["image", "doenet"];
-
 function parseDocumentAssets(source: string): Array<{ kind: AssetKind; ref: string }> {
   const seen = new Set<string>();
   const results: Array<{ kind: AssetKind; ref: string }> = [];
@@ -64,6 +62,8 @@ const AssetManagerModal = ({
 }: AssetManagerModalProps) => {
   const source = useEditorStore((s) => s.activeEditorSource);
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
+  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
+  const setLiveProjectAssets = useEditorStore((s) => s.setLiveProjectAssets);
   const libraryAssets = useEditorStore((s) => s.libraryAssets);
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
@@ -73,7 +73,7 @@ const AssetManagerModal = ({
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const resolvedAssets = dynamicAssets ?? projectAssets;
+  const resolvedAssets = dynamicAssets ?? liveProjectAssets ?? projectAssets;
   const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedAssets;
   const projectAssetIds = new Set(resolvedAssets.map((a) => a.id));
 
@@ -113,14 +113,17 @@ const AssetManagerModal = ({
       onLoadLibraryAssets?.() ?? Promise.resolve(null),
     ])
       .then(([proj, lib]) => {
-        if (proj !== null) setDynamicAssets(proj);
+        if (proj !== null) {
+          setDynamicAssets(proj);
+          setLiveProjectAssets(proj);
+        }
         if (lib !== null) setDynamicLibraryAssets(lib);
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Failed to load assets.");
       })
       .finally(() => setIsLoadingAssets(false));
-  }, [onLoadAssets, onLoadLibraryAssets]);
+  }, [onLoadAssets, onLoadLibraryAssets, setLiveProjectAssets]);
 
   useEffect(() => {
     if (!open) return;
@@ -240,7 +243,7 @@ const AssetManagerModal = ({
           <p className="pretext-plus-editor__am-empty-text">Loading…</p>
         ) : assets.length === 0 ? (
           <p className="pretext-plus-editor__am-empty-text">
-            No {KIND_LABELS[kind].toLowerCase()} assets in your library.
+            No {ASSET_KIND_LABELS[kind].toLowerCase()} assets in your library.
           </p>
         ) : (
           <ul className="pretext-plus-editor__am-list">
@@ -291,7 +294,7 @@ const AssetManagerModal = ({
       );
     }
 
-    const byKind = KIND_ORDER.reduce<Record<AssetKind, Array<{ ref: string; asset?: Asset }>>>(
+    const byKind = VISIBLE_ASSET_KINDS.reduce<Record<AssetKind, Array<{ ref: string; asset?: Asset }>>>(
       (acc, kind) => {
         acc[kind] = documentAssets
           .filter((d) => d.kind === kind)
@@ -303,11 +306,11 @@ const AssetManagerModal = ({
 
     return (
       <div className="pretext-plus-editor__am-in-doc">
-        {KIND_ORDER.filter((kind) => byKind[kind].length > 0).map((kind) => (
+        {VISIBLE_ASSET_KINDS.filter((kind) => byKind[kind].length > 0).map((kind) => (
           <div key={kind} className="pretext-plus-editor__am-kind-group">
             <div className="pretext-plus-editor__am-kind-header">
               <span aria-hidden="true">📁</span>
-              <span>{KIND_LABELS[kind]}</span>
+              <span>{ASSET_KIND_LABELS[kind]}</span>
               <span className="pretext-plus-editor__am-kind-count">{byKind[kind].length}</span>
             </div>
             <ul className="pretext-plus-editor__am-list">
@@ -383,15 +386,27 @@ const AssetManagerModal = ({
           <span className="pretext-plus-editor__am-kind-card-label">Image</span>
           <span className="pretext-plus-editor__am-kind-card-hint">PNG, JPEG, SVG, etc.</span>
         </button>
-        <button
-          type="button"
-          className="pretext-plus-editor__am-kind-card"
-          onClick={() => { setAddKind("doenet"); setDoenetTab("library"); }}
-        >
-          <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
-          <span className="pretext-plus-editor__am-kind-card-label">Doenet</span>
-          <span className="pretext-plus-editor__am-kind-card-hint">Interactive activity</span>
-        </button>
+        {SHOW_DOENET && (
+          <button
+            type="button"
+            className="pretext-plus-editor__am-kind-card"
+            onClick={() => { setAddKind("doenet"); setDoenetTab("library"); }}
+          >
+            <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
+            <span className="pretext-plus-editor__am-kind-card-label">Doenet</span>
+            <span className="pretext-plus-editor__am-kind-card-hint">Interactive activity</span>
+          </button>
+        )}
+        {!SHOW_DOENET && (
+          <div
+            className="pretext-plus-editor__am-kind-card pretext-plus-editor__am-kind-card--soon"
+            aria-disabled="true"
+          >
+            <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true">✨</span>
+            <span className="pretext-plus-editor__am-kind-card-label">More coming soon</span>
+            <span className="pretext-plus-editor__am-kind-card-hint">Interactive activities and more</span>
+          </div>
+        )}
       </div>
     </div>
   );

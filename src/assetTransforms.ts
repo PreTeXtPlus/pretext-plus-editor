@@ -10,7 +10,7 @@ import { escapeAttribute } from "./xmlUtils";
 import type { Asset, AssetKind } from "./types/editor";
 
 /** Produces the PreTeXt markup for one resolved asset. */
-type AssetTransform = (asset: Asset, ref: string) => string;
+type AssetTransform = (asset: Asset, ref: string, width?: string) => string;
 
 /**
  * `<image>` markup for an image asset.
@@ -23,16 +23,22 @@ type AssetTransform = (asset: Asset, ref: string) => string;
  *
  * `asset.source` is the user-authored inner XML (`<shortdescription>`,
  * `<description>`, etc.) and is inserted verbatim as the element's children.
+ *
+ * `width` comes from the placeholder's own `width="..."` attribute (e.g.
+ * `<plus:image ref="..." width="50%"/>`) rather than from the asset itself,
+ * since the same asset can be embedded at different widths in different
+ * places.
  */
-function transformImageAsset(asset: Asset, ref: string): string {
+function transformImageAsset(asset: Asset, ref: string, width?: string): string {
   if (asset.isFile && !asset.url) {
     return `<!-- image asset "${ref}" is marked as file-based but has no url -->`;
   }
   const sourceAttr = asset.isFile ? ` source="${escapeAttribute(asset.url!)}"` : "";
+  const widthAttr = width ? ` width="${escapeAttribute(width)}"` : "";
   const inner = asset.source?.trim();
   return inner
-    ? `<image${sourceAttr}>\n${inner}\n</image>`
-    : `<image${sourceAttr}/>`;
+    ? `<image${sourceAttr}${widthAttr}>\n${inner}\n</image>`
+    : `<image${sourceAttr}${widthAttr}/>`;
 }
 
 /**
@@ -76,8 +82,9 @@ export function resolveAssetRef(
   kind: AssetKind,
   ref: string,
   assets: Asset[],
+  width?: string,
 ): string {
   const asset = assets.find((a) => a.kind === kind && a.ref === ref);
   if (!asset) return `<!-- missing asset: ${kind} ${ref} -->`;
-  return ASSET_TRANSFORMS[kind](asset, ref);
+  return ASSET_TRANSFORMS[kind](asset, ref, width);
 }

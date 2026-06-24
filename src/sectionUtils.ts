@@ -1619,11 +1619,15 @@ function resolveDivisionXml(
 
   const nextAncestors = new Set(ancestors).add(xmlId);
   return xml.replace(
-    /<plus:([a-z-]+)\s[^>]*ref="([^"]+)"[^>]*?(?:\/>|>\s*<\/plus:\1>)/g,
-    (_match, tag: string, ref: string) =>
-      ASSET_KINDS.has(tag as AssetKind)
-        ? resolveAssetRef(tag as AssetKind, ref, assets)
-        : resolveDivisionXml(ref, divisions, nextAncestors, assets),
+    /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
+    (_match, tag: string, attrs: string) => {
+      const ref = /ref="([^"]+)"/.exec(attrs)?.[1] ?? "";
+      if (!ASSET_KINDS.has(tag as AssetKind)) {
+        return resolveDivisionXml(ref, divisions, nextAncestors, assets);
+      }
+      const width = /width="([^"]+)"/.exec(attrs)?.[1];
+      return resolveAssetRef(tag as AssetKind, ref, assets, width);
+    },
   );
 }
 

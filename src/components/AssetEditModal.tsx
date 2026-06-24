@@ -1,7 +1,17 @@
 import { useState } from "react";
+import { Editor } from "@monaco-editor/react";
 import type { Asset } from "../types/editor";
 import "./dialog.css";
 import "./AssetManagerModal.css";
+
+const editorOptions = {
+  automaticLayout: true,
+  minimap: { enabled: false },
+  wordWrap: "on" as const,
+  insertSpaces: true,
+  tabSize: 2,
+  padding: { top: 10, bottom: 10 },
+};
 
 export interface AssetEditModalProps {
   asset: Asset;
@@ -69,21 +79,23 @@ const AssetEditModal = ({ asset, onClose, onSave }: AssetEditModalProps) => {
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               />
             )}
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-source">
+            <label className="pretext-plus-editor__dialog-label">
               Asset content
             </label>
             <p className="pretext-plus-editor__dialog-helper-copy">
               Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
               — e.g. <code>{"<shortdescription>...</shortdescription>"}</code>.
             </p>
-            <textarea
-              id="am-edit-source"
-              className="pretext-plus-editor__am-edit-textarea"
-              value={sourceValue}
-              onChange={(e) => setSourceValue(e.target.value)}
-              disabled={isSaving}
-              autoFocus
-            />
+            <div className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor">
+              <Editor
+                options={{ ...editorOptions, readOnly: isSaving }}
+                height="100%"
+                language="xml"
+                value={sourceValue}
+                onMount={(editor) => editor.focus()}
+                onChange={(value) => setSourceValue(value ?? "")}
+              />
+            </div>
             {error && <p className="pretext-plus-editor__am-error">{error}</p>}
           </div>
         </div>
