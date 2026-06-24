@@ -31,6 +31,16 @@ import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
 import { getSectionAttributes } from "../sectionUtils";
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Asset identity within a project: a `<plus:KIND ref="..."/>` placeholder is
+ * resolved by kind+ref, so that pair (not the host's `id`) is what every
+ * lookup and pool mutation keys on.
+ */
+const sameAssetRef = (a: Asset, b: Asset): boolean =>
+  a.kind === b.kind && a.ref === b.ref;
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
@@ -49,6 +59,7 @@ export type DivisionChanges = {
  */
 export interface ExternalUpdate {
   divisions?: Division[];
+  projectAssets?: Asset[];
   rootDivisionId?: string;
   activeDivisionId?: string | null;
   title?: string;
@@ -88,17 +99,23 @@ export interface EditorStoreState {
 
   source: string;
   sourceFormat: SourceFormat;
-  projectAssets: Asset[] | undefined;
-  libraryAssets: Asset[] | undefined;
   /**
-   * Assets known locally that may not yet be reflected in the host's
-   * `projectAssets` prop — populated as soon as an asset is created or
-   * freshly loaded via `onLoadAssets`, so the asset editor can find an
-   * asset the very first time it's referenced, without waiting for the
-   * host to echo it back as a new prop. Takes precedence over `projectAssets`
-   * wherever an asset needs to be looked up by kind+ref.
+   * Authoritative project-asset pool — owned by the store as a live editing
+   * buffer, exactly like {@link EditorStoreState.divisions}. Seeded once from
+   * the host's `projectAssets` prop, then mutated optimistically by
+   * `addAssetToPool`/`updateAssetInPool`/`removeAssetFromPool` (host callbacks
+   * fire purely as persistence notifications). A genuine external change to the
+   * prop wins via `applyExternalUpdate`, but a stale prop the host never updated
+   * can't clobber a just-created asset — so an asset is editable the instant
+   * it's added, without waiting for the host to echo it back.
    */
-  liveProjectAssets: Asset[] | null;
+  projectAssets: Asset[] | undefined;
+  /**
+   * The user's cross-project asset library. Unlike `projectAssets` this stays a
+   * host-owned, fetch-on-demand cache (loaded via `onLoadLibraryAssets`), so it
+   * is still mirrored from props every render via `syncState`.
+   */
+  libraryAssets: Asset[] | undefined;
   title: string;
   docinfo: string;
   commonDocinfo: string;
@@ -193,10 +210,26 @@ export interface EditorStoreState {
   /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
   openAssetEditor: (kind: AssetKind, ref: string) => void;
   closeAssetEditor: () => void;
-  /** Replace the locally-known asset list (e.g. after `onLoadAssets` resolves). */
-  setLiveProjectAssets: (assets: Asset[] | null) => void;
-  /** Merge a single created/edited asset into the locally-known asset list. */
-  upsertLiveAsset: (asset: Asset) => void;
+  /**
+   * Replace the whole project-asset pool — e.g. after `onLoadAssets` resolves
+   * with the server's fresh list. The server is authoritative at that point,
+   * so this overwrites the pool wholesale (matching how the divisions pool is
+   * reset on an external update).
+   */
+  setProjectAssets: (assets: Asset[]) => void;
+  /**
+   * Optimistically add an asset to the pool (no-op if one with the same
+   * kind+ref already exists). Used when an asset is uploaded, created, added
+   * from the library, or inserted, so it's editable immediately.
+   */
+  addAssetToPool: (asset: Asset) => void;
+  /**
+   * Optimistically replace the pool entry matching `asset` by kind+ref (adding
+   * it if absent). Used when an asset's content/source is edited.
+   */
+  updateAssetInPool: (asset: Asset) => void;
+  /** Optimistically remove the asset matching `asset` by kind+ref from the pool. */
+  removeAssetFromPool: (asset: Asset) => void;
   updateTitle: (title: string) => void;
   feedbackSubmit: (feedback: FeedbackSubmission) => void;
 }
@@ -206,7 +239,6 @@ export type EditorSyncableState = Pick<
   EditorStoreState,
   | "source"
   | "sourceFormat"
-  | "projectAssets"
   | "libraryAssets"
   | "title"
   | "docinfo"
@@ -234,6 +266,7 @@ export interface EditorStoreInit {
   projectType: "article" | "book" | undefined;
   divisions: Division[];
   activeDivisionId: string | null;
+  projectAssets: Asset[] | undefined;
 }
 
 /** The Zustand vanilla store instance type. */
@@ -271,9 +304,8 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     // ── Initial data ───────────────────────────────────────────────────────
     source: init.source,
     sourceFormat: init.sourceFormat,
-    projectAssets: undefined,
+    projectAssets: init.projectAssets,
     libraryAssets: undefined,
-    liveProjectAssets: null,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
@@ -404,15 +436,26 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
     openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
     closeAssetEditor: () => set({ editingAssetRef: null }),
-    setLiveProjectAssets: (assets) => set({ liveProjectAssets: assets }),
-    upsertLiveAsset: (asset) =>
-      set((state) => {
-        const base = state.liveProjectAssets ?? state.projectAssets ?? [];
-        const next = base.some((a) => a.kind === asset.kind && a.ref === asset.ref)
-          ? base.map((a) => (a.kind === asset.kind && a.ref === asset.ref ? asset : a))
-          : [...base, asset];
-        return { liveProjectAssets: next };
+    setProjectAssets: (assets) => set({ projectAssets: assets }),
+    addAssetToPool: (asset) =>
+      set((s) => {
+        const base = s.projectAssets ?? [];
+        if (base.some((a) => sameAssetRef(a, asset))) return {};
+        return { projectAssets: [...base, asset] };
       }),
+    updateAssetInPool: (asset) =>
+      set((s) => {
+        const base = s.projectAssets ?? [];
+        return base.some((a) => sameAssetRef(a, asset))
+          ? { projectAssets: base.map((a) => (sameAssetRef(a, asset) ? asset : a)) }
+          : { projectAssets: [...base, asset] };
+      }),
+    removeAssetFromPool: (asset) =>
+      set((s) => ({
+        projectAssets: (s.projectAssets ?? []).filter(
+          (a) => !sameAssetRef(a, asset),
+        ),
+      })),
     updateTitle: (title) => bag.cbs.updateTitle(title),
     feedbackSubmit: (feedback) => bag.cbs.feedbackSubmit?.(feedback),
   }));

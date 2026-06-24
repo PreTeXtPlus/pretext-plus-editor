@@ -274,6 +274,7 @@ const Editors = (props: editorProps) => {
       projectType: props.projectType,
       divisions: normalizedDivisions,
       activeDivisionId: initActiveId,
+      projectAssets: props.projectAssets,
     });
   });
 
@@ -307,18 +308,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
   const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
   const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
-  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
-  const upsertLiveAsset = useEditorStore((s) => s.upsertLiveAsset);
-  const setLiveProjectAssets = useEditorStore((s) => s.setLiveProjectAssets);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
 
-  // `liveProjectAssets` takes precedence: an asset just created (or freshly
-  // fetched via `onLoadAssets`) may not be in `props.projectAssets` yet if
-  // the host hasn't echoed it back as a new prop.
+  // The project-asset pool is read from the store (authoritative), not props —
+  // so an asset just uploaded/created is resolvable for editing immediately,
+  // without waiting for the host to echo it back as a new `projectAssets` prop.
+  const projectAssets = useEditorStore((s) => s.projectAssets);
+  const addAssetToPool = useEditorStore((s) => s.addAssetToPool);
+  const updateAssetInPool = useEditorStore((s) => s.updateAssetInPool);
+  const removeAssetFromPool = useEditorStore((s) => s.removeAssetFromPool);
+
   const editingAsset = editingAssetRef
-    ? (liveProjectAssets ?? props.projectAssets)?.find(
+    ? projectAssets?.find(
         (a) => a.kind === editingAssetRef.kind && a.ref === editingAssetRef.ref,
       )
     : undefined;
@@ -507,10 +510,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const handleAssetInsert = (asset: Asset) => {
     const snippet = buildAssetSnippet(asset);
     if (snippet) codeEditorRef.current?.insertAtCursor(snippet);
-    // Record the asset locally so it's editable immediately, even before the
-    // host echoes it back as an updated `projectAssets` prop.
-    upsertLiveAsset(asset);
+    // Add to the authoritative pool optimistically so it's editable immediately,
+    // even before the host echoes it back as an updated `projectAssets` prop.
+    addAssetToPool(asset);
     props.onAssetInsert?.(asset);
+  };
+
+  const handleAssetRemove = (asset: Asset) => {
+    // Optimistically drop it from the pool, then notify the host to persist.
+    removeAssetFromPool(asset);
+    props.onAssetRemove?.(asset);
   };
 
   // ── Resize listener ──────────────────────────────────────────────────────
@@ -559,7 +568,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     syncState({
       source: divisionActiveSource,
       sourceFormat: activeDivisionFormat,
-      projectAssets: props.projectAssets,
       libraryAssets: props.libraryAssets,
       projectType: props.projectType,
       projectUrl: props.projectUrl,
@@ -570,25 +578,19 @@ const EditorsInner = (props: EditorsInnerProps) => {
     });
   });
 
-  // Once the host pushes a genuinely new `projectAssets` array, it has caught
-  // up — drop the local stand-in so future lookups trust the host again.
-  const prevProjectAssetsRef = useRef(props.projectAssets);
-  useEffect(() => {
-    if (props.projectAssets !== prevProjectAssetsRef.current) {
-      prevProjectAssetsRef.current = props.projectAssets;
-      setLiveProjectAssets(null);
-    }
-  }, [props.projectAssets, setLiveProjectAssets]);
-
   // ── Detect genuine external updates from the host ────────────────────────
   // The store owns the live editing buffer, so we must NOT clobber it with a
   // stale prop the host simply never updated.  A buffer field is pushed into
   // the store only when its controlled prop actually *changed* since the last
   // render (host-initiated) — which is how a real reset (e.g. reconciling
   // server-assigned ids after a save, or switching projects) wins, while a
-  // host that ignores the change callbacks keeps its local edits.
+  // host that ignores the change callbacks keeps its local edits.  The
+  // project-asset pool follows the exact same rule: a stale `projectAssets`
+  // prop (e.g. one the host re-supplies on an unrelated content change before
+  // it has persisted a just-uploaded asset) won't drop the optimistic addition.
   const externalRef = useRef({
     divisions: props.divisions,
+    projectAssets: props.projectAssets,
     title: props.title,
     docinfo: props.docinfo,
     commonDocinfo: props.commonDocinfo,
@@ -599,6 +601,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const prev = externalRef.current;
     const update: Parameters<typeof applyExternalUpdate>[0] = {};
     let changed = false;
+
+    if (
+      props.projectAssets !== undefined &&
+      props.projectAssets !== prev.projectAssets
+    ) {
+      update.projectAssets = props.projectAssets;
+      changed = true;
+    }
 
     if (props.divisions !== prev.divisions) {
       const newRoot = findRootDivision(props.divisions, props.rootDivisionId);
@@ -660,6 +670,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
     externalRef.current = {
       divisions: props.divisions,
+      projectAssets: props.projectAssets,
       title: props.title,
       docinfo: props.docinfo,
       commonDocinfo: props.commonDocinfo,
@@ -683,7 +694,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // date for non-PreTeXt divisions (which are leaves and never contain refs).
   const divisionTaggedXml = activeDivision
     ? activeDivisionFormat === "pretext"
-      ? assembleProjectSource(divisions, activeDivision.xmlId, props.projectAssets)
+      ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
       : divisionConvertedPretext !== undefined
       ? `<${activeDivision.type} xml:id="${activeDivision.xmlId}">\n<title>${activeDivision.title}</title>\n\n${divisionConvertedPretext}\n</${activeDivision.type}>`
       : undefined
@@ -948,7 +959,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onUpload={props.onAssetUpload}
             onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}
-            onRemoveAsset={props.onAssetRemove}
+            onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
             onInsert={handleAssetInsert}
           />
         ) : null}
@@ -957,8 +968,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             asset={editingAsset}
             onClose={closeAssetEditor}
             onSave={async (asset) => {
+              // Optimistic: reflect the edit in the authoritative pool first so
+              // the change shows immediately, then notify the host to persist.
+              updateAssetInPool(asset);
               await props.onAssetUpdate?.(asset);
-              upsertLiveAsset(asset);
             }}
           />
         ) : null}

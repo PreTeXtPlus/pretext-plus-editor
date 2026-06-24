@@ -15,11 +15,12 @@ type AssetTransform = (asset: Asset, ref: string, width?: string) => string;
 /**
  * `<image>` markup for an image asset.
  *
- * File-based assets (`isFile`) get their hosted URL written as the `source`
- * attribute — the build pipeline fetches images from their public URL
- * rather than expecting a local file. Non-file assets carry no `source`
- * attribute at all; they're defined entirely by their authored `source`
- * content (e.g. a hand-written `<asymptote>`/`<latex-image>` body).
+ * File-based assets (`isFile`) get a `source` attribute written from
+ * `asset.fileRef` (a bare external-asset filename understood by the build
+ * server), falling back to `asset.url` when `fileRef` is absent for
+ * backwards compatibility. Non-file assets carry no `source` attribute at
+ * all; they're defined entirely by their authored `source` content (e.g. a
+ * hand-written `<asymptote>`/`<latex-image>` body).
  *
  * `asset.source` is the user-authored inner XML (`<shortdescription>`,
  * `<description>`, etc.) and is inserted verbatim as the element's children.
@@ -30,10 +31,12 @@ type AssetTransform = (asset: Asset, ref: string, width?: string) => string;
  * places.
  */
 function transformImageAsset(asset: Asset, ref: string, width?: string): string {
-  if (asset.isFile && !asset.url) {
-    return `<!-- image asset "${ref}" is marked as file-based but has no url -->`;
+  if (asset.isFile && !asset.fileRef && !asset.url) {
+    return `<!-- image asset "${ref}" is marked as file-based but has no fileRef or url -->`;
   }
-  const sourceAttr = asset.isFile ? ` source="${escapeAttribute(asset.url!)}"` : "";
+  const sourceAttr = asset.isFile
+    ? ` source="${escapeAttribute(asset.fileRef ?? asset.url!)}"`
+    : "";
   const widthAttr = width ? ` width="${escapeAttribute(width)}"` : "";
   const inner = asset.source?.trim();
   return inner

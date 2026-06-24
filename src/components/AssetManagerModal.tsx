@@ -61,19 +61,19 @@ const AssetManagerModal = ({
   onRemoveAsset,
 }: AssetManagerModalProps) => {
   const source = useEditorStore((s) => s.activeEditorSource);
+  // Authoritative project-asset pool, owned by the store. A fresh server list
+  // from `onLoadAssets` is written straight back into it via `setProjectAssets`.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
-  const setLiveProjectAssets = useEditorStore((s) => s.setLiveProjectAssets);
+  const setProjectAssets = useEditorStore((s) => s.setProjectAssets);
   const libraryAssets = useEditorStore((s) => s.libraryAssets);
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
 
-  const [dynamicAssets, setDynamicAssets] = useState<Asset[] | null>(null);
   const [dynamicLibraryAssets, setDynamicLibraryAssets] = useState<Asset[] | null>(null);
   const [isLoadingAssets, setIsLoadingAssets] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const resolvedAssets = dynamicAssets ?? liveProjectAssets ?? projectAssets;
+  const resolvedAssets = projectAssets;
   const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedAssets;
   const projectAssetIds = new Set(resolvedAssets.map((a) => a.id));
 
@@ -113,17 +113,17 @@ const AssetManagerModal = ({
       onLoadLibraryAssets?.() ?? Promise.resolve(null),
     ])
       .then(([proj, lib]) => {
-        if (proj !== null) {
-          setDynamicAssets(proj);
-          setLiveProjectAssets(proj);
-        }
+        // The server list is authoritative at load time — write it straight
+        // into the store's pool (any optimistic local additions were already
+        // persisted by the host before this fetch, so they'll be included).
+        if (proj !== null) setProjectAssets(proj);
         if (lib !== null) setDynamicLibraryAssets(lib);
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : "Failed to load assets.");
       })
       .finally(() => setIsLoadingAssets(false));
-  }, [onLoadAssets, onLoadLibraryAssets, setLiveProjectAssets]);
+  }, [onLoadAssets, onLoadLibraryAssets, setProjectAssets]);
 
   useEffect(() => {
     if (!open) return;

@@ -22,9 +22,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
-  const liveProjectAssets = useEditorStore((s) => s.liveProjectAssets);
-  const syncedProjectAssets = useEditorStore((s) => s.projectAssets);
-  const projectAssets = liveProjectAssets ?? syncedProjectAssets ?? [];
+  const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
 
   const selectSection = useEditorStore((s) => s.selectSection);
   const removeSection = useEditorStore((s) => s.removeSection);

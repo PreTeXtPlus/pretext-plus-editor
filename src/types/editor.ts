@@ -27,13 +27,31 @@ export interface Asset {
   source?: string;
   /**
    * Whether this asset is backed by an uploaded/fetched file rather than
-   * being defined purely by `source`. File-based image assets get their
-   * `url` written as the `source` attribute on the generated `<image>`
-   * element; non-file image assets rely entirely on their authored `source`.
+   * being defined purely by `source`. File-based image assets emit a
+   * `source` attribute on the generated `<image>` element (from
+   * {@link fileRef}, falling back to {@link url}); non-file image assets
+   * carry no `source` attribute and rely entirely on their authored
+   * `source` content.
    */
   isFile?: boolean;
-  /** Publicly accessible URL for the asset, if applicable. */
+  /**
+   * Publicly accessible URL used **only** as the asset-manager thumbnail
+   * (`<img src={url}>`). It is no longer the value written to the `<image>`
+   * `source` attribute — use {@link fileRef} for that. It remains the
+   * `source` fallback when `fileRef` is absent, for backwards compatibility.
+   */
   url?: string;
+  /**
+   * The exact string emitted as the `source` attribute of the generated
+   * `<image>` element for a file-backed asset — typically a bare external
+   * filename like `"euler-painting.png"`. The PreTeXt build server treats
+   * `<image source="X">` as an external-asset filename and prepends
+   * `external/` itself, so this must be a bare filename, not a URL.
+   *
+   * Only meaningful when {@link isFile} is true. When absent, the emit sites
+   * fall back to {@link url} so existing hosts keep working unchanged.
+   */
+  fileRef?: string;
   /** Mime type for the asset, if applicable.  Used for hints only. */
   contentType?: string;
 }
