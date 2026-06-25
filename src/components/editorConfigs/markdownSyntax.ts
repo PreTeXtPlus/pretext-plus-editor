@@ -30,8 +30,9 @@ const PYTHON_DIRECTIVE_PLAIN =
  *
  * Token types are chosen to match Monaco's built-in Monarch theme rules:
  *  - `keyword`  → colored (blue/purple) — used for headings, directives, list markers
- *  - `strong`   → bold font             — used for **bold**
+ *  - `strong`   → bold font             — used for **bold** and __bold__
  *  - `emphasis` → italic font           — used for *italic*
+ *  - `term`     → bold + italic font    — used for _term_ (a PreTeXt <term>)
  *  - `variable.source.markdown` → inline code color
  *  - `string`   → string color          — used for fenced code, links, escapes
  *  - `number`   → number color          — used for math
@@ -39,6 +40,19 @@ const PYTHON_DIRECTIVE_PLAIN =
  */
 export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
   monaco.languages.register({ id: "pretext-markdown" });
+
+  // The `term` token (single-underscore _term_) needs a bold + italic font
+  // style, which no built-in theme token provides. Define a theme that
+  // inherits the default light theme and adds that one rule, then apply it.
+  // The rule only matches the markdown `term` token, so other languages
+  // (xml/latex) are visually unchanged.
+  monaco.editor.defineTheme("pretext-markdown", {
+    base: "vs",
+    inherit: true,
+    rules: [{ token: "term", fontStyle: "bold italic" }],
+    colors: {},
+  });
+  monaco.editor.setTheme("pretext-markdown");
 
   monaco.languages.setMonarchTokensProvider("pretext-markdown", {
     // Lets the directive name alternation match both `theorem:` and `Theorem:`
@@ -87,22 +101,52 @@ export function registerMarkdownSyntax(monaco: any): { dispose: () => void } {
         [/.*$/, "string"],
       ],
 
+      // Multi-line math states: consume everything as `number` until the
+      // matching closing delimiter, so markdown emphasis is never applied
+      // inside math that spans more than one line.
+      mathDollarDollar: [
+        [/\$\$/, { token: "number", next: "@pop" }],
+        [/[^$]+/, "number"],
+        [/\$/, "number"],
+      ],
+      mathBracket: [
+        [/\\\]/, { token: "number", next: "@pop" }],
+        [/[^\\]+/, "number"],
+        [/\\/, "number"],
+      ],
+      mathParen: [
+        [/\\\)/, { token: "number", next: "@pop" }],
+        [/[^\\]+/, "number"],
+        [/\\/, "number"],
+      ],
+
       inline: [
-        // Display math before single $ to avoid partial match
+        // Math — same-line forms first, then multi-line openers that switch
+        // into a dedicated state. Inside math everything is tokenized as
+        // `number`, so interior underscores/asterisks never reach the
+        // emphasis/term rules below.
+        //
+        // Display math $$…$$ (before single $ to avoid a partial match)
         [/\$\$[^$]*\$\$/, "number"],
+        [/\$\$/, { token: "number", next: "@mathDollarDollar" }],
         // LaTeX display math  \[…\]
         [/\\\[[^\]]*\\\]/, "number"],
+        [/\\\[/, { token: "number", next: "@mathBracket" }],
         // LaTeX inline math   \(…\)
         [/\\\([^)]*\\\)/, "number"],
-        // Inline math
+        [/\\\(/, { token: "number", next: "@mathParen" }],
+        // Inline math $…$
         [/\$[^$\n]+\$/, "number"],
 
         // Bold before italic so ** isn't consumed as two * tokens
         [/\*\*[^*\n]+\*\*/, "strong"],
         [/__[^_\n]+__/, "strong"],
-        // Italic
+        // Italic (asterisk form only)
         [/\*[^*\n]+\*/, "emphasis"],
-        [/_[^_\n]+_/, "emphasis"],
+        // A single underscore marks a PreTeXt <term> — rendered bold + italic.
+        // Multi-line math is handled above, so underscores inside math never
+        // reach this rule.
+        [/_[^_\n]+_/, "term"],
 
         // Inline code
         [/`[^`\n]+`/, "variable.source.markdown"],
