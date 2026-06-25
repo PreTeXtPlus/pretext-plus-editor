@@ -46,6 +46,7 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
 
 /** Division types that can be freely reordered (not positionally constrained). */
 export const REGULAR_DIVISION_TYPES: DivisionType[] = [
+  "introduction",
   "part",
   "chapter",
   "section",
@@ -56,6 +57,7 @@ export const REGULAR_DIVISION_TYPES: DivisionType[] = [
   "glossary",
   "solutions",
   "reading-questions",
+  "conclusion",
 ];
 
 /** Returns true for division types that can be freely reordered. */

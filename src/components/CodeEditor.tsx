@@ -1,8 +1,10 @@
 import { Editor } from "@monaco-editor/react";
+import { constrainedEditor } from "constrained-editor-plugin";
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 import { editorConfigs } from "./editorConfigs";
 import CodeEditorMenu from "./CodeEditorMenu";
 import type { SourceFormat } from "../types/editor";
+import "./CodeEditor.css";
 
 interface CodeEditorProps {
   /** The current source content to display. */
@@ -33,6 +35,12 @@ interface CodeEditorProps {
   onOpenAssets?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
+  /**
+   * Called when the user double-clicks the locked wrapper's first line (the
+   * opening tag). Hosts use this to open the division's properties editor in
+   * the Table of Contents, since the tag/xml:id aren't editable in-place.
+   */
+  onRequestWrapperEdit?: () => void;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -78,10 +86,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   canConvertToPretext,
   onOpenAssets,
   onShowFullSource,
+  onRequestWrapperEdit,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
+  const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
+  const lockedDecorationsRef = useRef<any>(null);
+  const lockedRef = useRef(false);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isProgrammaticUpdateRef = useRef(false);
@@ -110,6 +124,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onRequestWrapperEditRef.current = onRequestWrapperEdit;
+  }, [onRequestWrapperEdit]);
   // const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
@@ -119,20 +137,105 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       monacoRef.current
         ? (config.registerMonacoExtensions?.(monacoRef.current) ?? null)
         : null;
+    // Switching format toggles whether the wrapper is locked (PreTeXt only).
+    applyConstraints();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceFormat]);
 
   useEffect(() => {
     return () => {
       contentListenerRef.current?.dispose?.();
       completionProviderRef.current?.dispose?.();
+      mouseListenerRef.current?.dispose?.();
+      constrainedRef.current?.disposeConstrainer?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 
+  // Lock the division wrapper so its tag/xml:id can't be edited in the code
+  // editor: only the body (lines 2 .. n-1) stays editable. xml:id and type are
+  // structural identity and are edited from the Table of Contents instead.
+  // Recomputed whenever the content or source format changes. Only PreTeXt
+  // divisions have a wrapper to protect, and only when it occupies its own
+  // first/last lines with a body in between.
+  const applyConstraints = () => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    const instance = constrainedRef.current;
+    if (!editor || !monaco || !instance) return;
+    const model = editor.getModel();
+    if (!model) return;
+
+    // Start clean — the previous restrictions reference stale line numbers.
+    if (typeof model.disposeRestrictions === "function") {
+      model.disposeRestrictions();
+    }
+
+    const lineCount = model.getLineCount();
+    const lockable = sourceFormat === "pretext" && lineCount >= 3;
+    lockedRef.current = lockable;
+
+    if (lockable) {
+      instance.addRestrictionsTo(model, [
+        {
+          range: [2, 1, lineCount - 1, model.getLineMaxColumn(lineCount - 1)],
+          allowMultiline: true,
+        },
+      ]);
+    }
+
+    // Cosmetic: dim the locked first/last lines so they read as structural.
+    if (typeof editor.createDecorationsCollection === "function") {
+      if (!lockedDecorationsRef.current) {
+        lockedDecorationsRef.current = editor.createDecorationsCollection();
+      }
+      if (!lockable) {
+        lockedDecorationsRef.current.clear();
+      } else {
+        const hoverMessage = {
+          value:
+            "The wrapper tag and xml:id are structural — edit them from the Table of Contents.",
+        };
+        // `className` + `isWholeLine` paints a full-width tint *behind* the text;
+        // `inlineClassName` is merged onto the token spans themselves so we can
+        // recolor them. The latter only applies to the decoration's range, so
+        // each range must span the whole line's text (col 1 → last column).
+        const lockedLineOptions = {
+          isWholeLine: true,
+          className: "pretext-plus-editor__locked-line",
+          inlineClassName: "pretext-plus-editor__locked-line-text",
+          hoverMessage,
+        };
+        lockedDecorationsRef.current.set([
+          {
+            range: new monaco.Range(1, 1, 1, model.getLineMaxColumn(1)),
+            options: lockedLineOptions,
+          },
+          {
+            range: new monaco.Range(
+              lineCount,
+              1,
+              lineCount,
+              model.getLineMaxColumn(lineCount),
+            ),
+            options: lockedLineOptions,
+          },
+        ]);
+      }
+    }
+  };
+
   const setModelValueSafely = (model: any, nextValue: string) => {
     if (model.getValue() === nextValue) return;
     isProgrammaticUpdateRef.current = true;
+    // Restrictions must be removed before a programmatic full-document setValue,
+    // or the plugin reverts it as an edit to the locked ranges. They're
+    // re-applied (against the new line count) immediately after.
+    if (typeof model.disposeRestrictions === "function") {
+      model.disposeRestrictions();
+    }
     model.setValue(nextValue);
+    applyConstraints();
     queueMicrotask(() => {
       isProgrammaticUpdateRef.current = false;
     });
@@ -159,6 +262,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const handleEditorMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
+    // Wire up the constrained-editor instance once per mount; restrictions
+    // themselves are (re)applied by applyConstraints below and on every sync.
+    constrainedRef.current = constrainedEditor(monaco);
+    constrainedRef.current.initializeIn(editor);
     // Ensure the newly mounted editor has the latest content in case the
     // component was remounted while content changed without triggering the
     // content-sync effect (editorRef.current was null at that point).
@@ -173,6 +280,20 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
     updateUndoRedoState();
 
+    // Double-clicking the locked wrapper's first line (the opening tag) opens
+    // the division's properties editor in the TOC, since the tag/xml:id can't
+    // be edited in place. `event.detail === 2` marks the dblclick mousedown.
+    mouseListenerRef.current?.dispose?.();
+    mouseListenerRef.current = editor.onMouseDown((e: any) => {
+      if (
+        lockedRef.current &&
+        e?.event?.detail === 2 &&
+        e?.target?.position?.lineNumber === 1
+      ) {
+        onRequestWrapperEditRef.current?.();
+      }
+    });
+
     // Register Ctrl+Enter to trigger a full rebuild
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
       onRebuildRef.current?.();
@@ -186,6 +307,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     completionProviderRef.current?.dispose?.();
     const config = editorConfigs[sourceFormat];
     completionProviderRef.current = config.registerMonacoExtensions?.(monaco) ?? null;
+
+    applyConstraints();
   };
 
   /**

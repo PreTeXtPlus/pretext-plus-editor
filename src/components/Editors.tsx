@@ -350,6 +350,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const addDivisionToPool = useEditorStore((s) => s.addDivisionToPool);
   const removeDivisionFromPool = useEditorStore((s) => s.removeDivisionFromPool);
   const setActiveDivisionId = useEditorStore((s) => s.setActiveDivisionId);
+  const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
   const setDocinfo = useEditorStore((s) => s.setDocinfo);
 
@@ -573,6 +574,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const handleDivisionSelect = (xmlId: string) => {
     applyDivisionSelect(xmlId);
+  };
+
+  // Double-clicking the locked wrapper line in the code editor opens the active
+  // division's properties form in the TOC. Expand the TOC first so the form is
+  // visible (it's collapsible, and collapsed in the narrow-screen drawer).
+  const handleRequestWrapperEdit = () => {
+    if (!activeDivision) return;
+    setIsTocCollapsed(false);
+    startSectionEdit(activeDivision);
   };
 
   const handleDivisionAdd = () => {
@@ -905,6 +915,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
           : undefined
       }
       onShowFullSource={() => openModal("isFullSourceOpen")}
+      onRequestWrapperEdit={
+        activeDivisionFormat === "pretext" ? handleRequestWrapperEdit : undefined
+      }
     />
   );
 
