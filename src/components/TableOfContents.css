@@ -251,6 +251,18 @@
   font-size: 0.83rem;
 }
 
+/* xml:id shown under the title — edited only via "Edit properties". */
+.pretext-plus-editor__toc-xmlid {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 400;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #94a3b8;
+}
+
 /* ── Action buttons wrapper (dots menu) ──────────────── */
 .pretext-plus-editor__toc-actions {
   display: flex;

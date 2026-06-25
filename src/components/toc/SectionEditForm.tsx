@@ -64,7 +64,7 @@ const SectionEditForm = ({
           <input
             type="text"
             value={draft.xmlId}
-            placeholder="optional"
+            placeholder="unique identifier"
             onChange={(e) => onDraftChange({ ...draft, xmlId: e.target.value })}
           />
         </label>

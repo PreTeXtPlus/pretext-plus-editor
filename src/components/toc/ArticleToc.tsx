@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import type { Division } from "../../types/sections";
 import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
@@ -97,26 +97,31 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     });
   };
 
-  // Auto-expand ancestors when the active division changes so it's always visible.
-  useEffect(() => {
-    if (!activeDivisionId || !rootDivision) return;
-    const nodeMap = new Map(treeNodes.map((n) => [n.division.xmlId, n]));
-    const toReveal = new Set<string>();
-    toReveal.add(rootDivision.xmlId);
-    let cur = activeDivisionId;
-    while (cur) {
-      const node = nodeMap.get(cur);
-      if (!node?.parentXmlId) break;
-      toReveal.add(node.parentXmlId);
-      cur = node.parentXmlId;
+  // Auto-expand ancestors when the active division changes so it's always
+  // visible. Done during render (with a previous-value guard) rather than in an
+  // effect to avoid cascading renders.
+  const [prevActiveId, setPrevActiveId] = useState(activeDivisionId);
+  if (activeDivisionId !== prevActiveId) {
+    setPrevActiveId(activeDivisionId);
+    if (activeDivisionId && rootDivision) {
+      const nodeMap = new Map(treeNodes.map((n) => [n.division.xmlId, n]));
+      const toReveal = new Set<string>();
+      toReveal.add(rootDivision.xmlId);
+      let cur: string | null = activeDivisionId;
+      while (cur) {
+        const node = nodeMap.get(cur);
+        if (!node?.parentXmlId) break;
+        toReveal.add(node.parentXmlId);
+        cur = node.parentXmlId;
+      }
+      setCollapsedIds((prev) => {
+        if ([...toReveal].every((id) => !prev.has(id))) return prev;
+        const next = new Set(prev);
+        toReveal.forEach((id) => next.delete(id));
+        return next;
+      });
     }
-    setCollapsedIds((prev) => {
-      if ([...toReveal].every((id) => !prev.has(id))) return prev;
-      const next = new Set(prev);
-      toReveal.forEach((id) => next.delete(id));
-      return next;
-    });
-  }, [activeDivisionId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   // ── Which IDs have children (used to show/hide the chevron) ────────────────
   const idsWithChildren = new Set(

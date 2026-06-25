@@ -7,6 +7,7 @@ import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
+import FullSourceModal from "./FullSourceModal";
 import AssetManagerModal from "./AssetManagerModal";
 import AssetEditModal from "./AssetEditModal";
 import MenuBar from "./MenuBar";
@@ -30,10 +31,12 @@ import {
   createDivisionWithId,
   wrapDivisionForPreview,
   assembleProjectSource,
+  assembleFullProjectSource,
   extractDivisionMetadata,
   extractLatexDivisionTitle,
   findDivisionParent,
   renameDivisionRef,
+  updateSectionMetadata,
   normalizeDivisionsOnLoad,
 } from "../sectionUtils";
 import {
@@ -307,6 +310,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isConvertDialogOpen = useEditorStore((s) => s.isConvertDialogOpen);
   const isDocinfoEditorOpen = useEditorStore((s) => s.isDocinfoEditorOpen);
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
+  const isFullSourceOpen = useEditorStore((s) => s.isFullSourceOpen);
   const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
   const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
   const openModal = useEditorStore((s) => s.openModal);
@@ -331,7 +335,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // The store owns the live edit after the initial seed.  Reading these here
   // means a local edit displays immediately without the host having to echo
   // anything back as new props.
-  const divisions = useEditorStore((s) => s.divisions) ?? [];
+  const divisionsRaw = useEditorStore((s) => s.divisions);
+  const divisions = useMemo(() => divisionsRaw ?? [], [divisionsRaw]);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
   const title = useEditorStore((s) => s.title);
   const docinfo = useEditorStore((s) => s.docinfo);
@@ -395,6 +400,62 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionUpdate?.(xmlId, changes);
   };
 
+  // Metadata edits from the TOC "Edit properties" form. Unlike code-editor
+  // edits — where the source is authoritative and already carries the new
+  // attributes — here the form fields are authoritative, so we must rewrite the
+  // division's own source wrapper *and* keep the parent's
+  // `<plus:* ref="..."/>` placeholder in sync. This is the single validated,
+  // atomic place an `xml:id` rename happens (the code editor can't change it).
+  const applyDivisionMetadataEdit = (
+    xmlId: string,
+    changes: DivisionChanges,
+  ) => {
+    const division = divisions.find((d) => d.xmlId === xmlId);
+    // Non-PreTeXt (or unknown) divisions don't represent xml:id/type in their
+    // source — just patch the record and notify the host.
+    if (!division || division.sourceFormat !== "pretext") {
+      applyDivisionUpdate(xmlId, changes);
+      return;
+    }
+
+    // 1. Rewrite this division's own source so its wrapper attributes match.
+    const updated = updateSectionMetadata(division, changes);
+    const newXmlId = updated.xmlId;
+    if (updated.content !== division.content) {
+      // Emit keyed on the OLD id — before the record is renamed in step 2.
+      emitContentChange(
+        division.xmlId,
+        normalizeSelfClosingRefs(updated.content),
+        "pretext",
+      );
+    }
+
+    // 2. Patch the record fields (this renames the pool key to newXmlId).
+    applyDivisionUpdate(xmlId, { ...changes, xmlId: newXmlId });
+
+    // 3. Keep the parent's ref placeholder in sync with an id or type change so
+    //    the division stays placed in the tree.
+    if (newXmlId !== division.xmlId || updated.type !== division.type) {
+      const parent = findDivisionParent(divisions, division.xmlId);
+      if (parent) {
+        const newParentContent = renameDivisionRef(
+          parent.content,
+          division.xmlId,
+          newXmlId,
+          updated.type,
+        );
+        if (newParentContent !== parent.content) {
+          emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+        }
+      }
+    }
+
+    // 4. Follow an id rename so the user stays on the same division.
+    if (newXmlId !== division.xmlId) {
+      applyDivisionSelect(newXmlId);
+    }
+  };
+
   const applyDivisionAdd = (division: Division) => {
     addDivisionToPool(division);
     // Added to the pool synchronously above so the UI never waits on the
@@ -428,50 +489,68 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // The user now edits the division's full source (wrapper tag included),
     // so it's stored as-is — only the `<plus:* ref="..."/>` placeholder form
     // is normalized, matching what an XML round-trip would otherwise produce.
-    const wrapped =
+    let wrapped =
       activeDivisionFormat === "pretext"
         ? normalizeSelfClosingRefs(newContent || "")
         : newContent || "";
+
+    // `xml:id` is structural identity and is NOT editable from the code editor:
+    // it's renamed only via the TOC (validated + atomic). If the user edited or
+    // removed the wrapper's xml:id, re-assert the canonical id back into the
+    // stored source so the division's identity can never be broken from here.
+    if (activeDivisionFormat === "pretext") {
+      const meta = extractDivisionMetadata(wrapped);
+      if (meta && meta.xmlId !== activeDivision.xmlId) {
+        // Rewrite only the xml:id back to canonical; pass the content's own
+        // title/type/label (via `meta`) so a simultaneous title or type edit in
+        // the same change isn't clobbered by stale record values.
+        wrapped = normalizeSelfClosingRefs(
+          updateSectionMetadata(
+            {
+              ...activeDivision,
+              content: wrapped,
+              title: meta.title,
+              type: meta.type,
+            },
+            { xmlId: activeDivision.xmlId, label: meta.label || null },
+          ).content,
+        );
+      }
+    }
+
     if (wrapped === activeDivision.content) return;
     emitContentChange(activeDivision.xmlId, wrapped, activeDivisionFormat);
 
-    // The source is the source of truth for title/type/xml:id/label: re-derive
-    // them from the edited content so the TOC stays in sync even when the
-    // dropdown form is never used.  These flow through the apply* wrappers so
-    // the store reflects them whether or not the host wired the callbacks.
+    // The source is the source of truth for title/type/label: re-derive them
+    // from the edited content so the TOC stays in sync even when the dropdown
+    // form is never used. (xml:id is excluded — see the re-assertion above.)
+    // These flow through the apply* wrappers so the store reflects them whether
+    // or not the host wired the callbacks.
     if (activeDivisionFormat === "pretext") {
       const meta = extractDivisionMetadata(wrapped);
       if (meta) {
         applyDivisionUpdate(activeDivision.xmlId, {
           title: meta.title,
           type: meta.type,
-          xmlId: meta.xmlId || null,
           label: meta.label || null,
         });
 
-        // Keep the parent's <plus:* ref="..."/> placeholder in sync with an
-        // xml:id rename or type change, so editing the source doesn't
-        // orphan the division from its place in the tree.
-        const newXmlId = meta.xmlId || activeDivision.xmlId;
-        if (newXmlId !== activeDivision.xmlId || meta.type !== activeDivision.type) {
+        // A type change is still allowed from source; keep the parent's
+        // `<plus:TYPE ref="..."/>` placeholder tag in sync. The id never
+        // changes here, so the ref target stays stable.
+        if (meta.type !== activeDivision.type) {
           const parent = findDivisionParent(divisions, activeDivision.xmlId);
           if (parent) {
             const newParentContent = renameDivisionRef(
               parent.content,
               activeDivision.xmlId,
-              newXmlId,
+              activeDivision.xmlId,
               meta.type,
             );
             if (newParentContent !== parent.content) {
               emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
             }
           }
-        }
-
-        // Follow an xml:id rename so the user isn't bumped to a different
-        // division once the pool re-supplies it under the new id.
-        if (meta.xmlId && meta.xmlId !== activeDivision.xmlId) {
-          applyDivisionSelect(meta.xmlId);
         }
       }
     } else if (activeDivisionFormat === "latex" && activeDivision.type === "section") {
@@ -541,7 +620,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       selectDivision: handleDivisionSelect,
       addDivision: () => handleDivisionAdd(),
       removeDivision: (xmlId) => applyDivisionRemove(xmlId),
-      updateDivision: (xmlId, changes) => applyDivisionUpdate(xmlId, changes),
+      updateDivision: (xmlId, changes) => applyDivisionMetadataEdit(xmlId, changes),
       // Structural reorders rewrite a parent division's content; route them
       // through the same unified content-change channel as direct edits.
       divisionContentChange: (xmlId, content) => {
@@ -722,6 +801,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // store's authoritative buffer.
   const effectiveDocinfo = useCommonDocinfo ? commonDocinfo : docinfo;
 
+  // The full assembled PreTeXt source for the whole project — every division
+  // resolved and `<plus:* ref="..."/>` placeholder expanded, wrapped in the
+  // outer `<pretext>`/`<docinfo>` shell. Computed only while the modal is open
+  // (it walks the entire divisions tree) and guarded so a malformed fragment
+  // can never crash the editor.
+  const fullProjectSource = useMemo(() => {
+    if (!isFullSourceOpen || !rootDivision) return "";
+    try {
+      return assembleFullProjectSource(
+        divisions,
+        rootDivision.xmlId,
+        effectiveDocinfo,
+        projectAssets ?? [],
+      );
+    } catch (error) {
+      return `<!-- Unable to assemble document source: ${
+        error instanceof Error ? error.message : String(error)
+      } -->`;
+    }
+  }, [isFullSourceOpen, rootDivision, divisions, effectiveDocinfo, projectAssets]);
+
   // The active division's own tagged XML (outer element included). For
   // PreTeXt divisions this also expands any `<plus:* ref="..."/>` child
   // placeholders against the full divisions pool — the real build server
@@ -804,6 +904,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
           ? () => openModal("isAssetPickerOpen")
           : undefined
       }
+      onShowFullSource={() => openModal("isFullSourceOpen")}
     />
   );
 
@@ -998,6 +1099,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
             onInsert={handleAssetInsert}
+          />
+        ) : null}
+        {isFullSourceOpen ? (
+          <FullSourceModal
+            source={fullProjectSource}
+            onClose={() => closeModal("isFullSourceOpen")}
           />
         ) : null}
         {editingAsset ? (

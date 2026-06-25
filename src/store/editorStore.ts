@@ -29,7 +29,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Asset, AssetKind, FeedbackSubmission, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
-import { getSectionAttributes } from "../sectionUtils";
+import { getSectionAttributes, sanitizeXmlId } from "../sectionUtils";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,8 @@ type ModalKey =
   | "isLatexDialogOpen"
   | "isConvertDialogOpen"
   | "isDocinfoEditorOpen"
-  | "isAssetPickerOpen";
+  | "isAssetPickerOpen"
+  | "isFullSourceOpen";
 
 /**
  * All callbacks wired by Editors.tsx that deep components need to call.
@@ -147,6 +148,7 @@ export interface EditorStoreState {
   isConvertDialogOpen: boolean;
   isDocinfoEditorOpen: boolean;
   isAssetPickerOpen: boolean;
+  isFullSourceOpen: boolean;
 
   // TOC inline edit form
   editingId: string | null;
@@ -329,6 +331,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isConvertDialogOpen: false,
     isDocinfoEditorOpen: false,
     isAssetPickerOpen: false,
+    isFullSourceOpen: false,
     editingId: null,
     editDraft: null,
     editingAssetRef: null,
@@ -419,12 +422,41 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     },
     setEditDraft: (editDraft) => set({ editDraft }),
     commitSectionEdit: () => {
-      const { editingId, editDraft } = get();
+      const { editingId, editDraft, divisions } = get();
       if (editingId && editDraft) {
+        const division = (divisions ?? []).find((d) => d.xmlId === editingId);
+
+        // For PreTeXt divisions the `xml:id` is structural identity: it must be
+        // a non-empty, unique NCName because it's the target of every
+        // `<plus:* ref="..."/>` placeholder. Validate before committing so an
+        // empty or duplicate id can never break the project; keep the form open
+        // on failure. Non-PreTeXt divisions don't carry an editable id.
+        let xmlId: string | null = null;
+        if (division && division.sourceFormat === "pretext") {
+          const sanitized = sanitizeXmlId(editDraft.xmlId);
+          if (!sanitized) {
+            window.alert(
+              "xml:id can't be empty — it identifies the division and is used by references to it.",
+            );
+            return;
+          }
+          if (
+            (divisions ?? []).some(
+              (d) => d.xmlId !== editingId && d.xmlId === sanitized,
+            )
+          ) {
+            window.alert(
+              `xml:id "${sanitized}" is already used by another division. Choose a unique id.`,
+            );
+            return;
+          }
+          xmlId = sanitized;
+        }
+
         bag.cbs.updateDivision(editingId, {
           title: editDraft.title.trim() || undefined,
           type: editDraft.type,
-          xmlId: editDraft.xmlId.trim() || null,
+          xmlId,
           label: editDraft.label.trim() || null,
         });
       }

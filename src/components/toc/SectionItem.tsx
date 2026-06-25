@@ -72,6 +72,11 @@ const SectionItem = ({
           <span className="pretext-plus-editor__toc-title">
             {division.title || <em>Untitled</em>}
           </span>
+          {!isLatex && division.xmlId && (
+            <span className="pretext-plus-editor__toc-xmlid">
+              {division.xmlId}
+            </span>
+          )}
         </button>
 
         <div className="pretext-plus-editor__toc-actions">

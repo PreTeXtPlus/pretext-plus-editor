@@ -31,6 +31,8 @@ interface CodeEditorProps {
   canConvertToPretext?: boolean;
   /** If provided, an "Assets" button is shown in the toolbar (PreTeXt mode only). */
   onOpenAssets?: () => void;
+  /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
+  onShowFullSource: () => void;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -75,6 +77,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onOpenConvertToPretext,
   canConvertToPretext,
   onOpenAssets,
+  onShowFullSource,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -240,6 +243,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         onConvertToPretext={onOpenConvertToPretext}
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
+        onShowFullSource={onShowFullSource}
       />
       <div style={{ flex: 1 }}>
         <Editor

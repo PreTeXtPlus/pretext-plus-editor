@@ -811,6 +811,21 @@ export function getSectionAttributes(content: string): {
 }
 
 /**
+ * Coerce a user-entered string into a value usable as an XML `xml:id`
+ * (an NCName).  Disallowed characters are replaced with `-`, and any leading
+ * characters that can't start an NCName (digits, `-`, `.`) are stripped.
+ *
+ * Returns `""` when nothing valid remains — callers treat that as "reject"
+ * since a division's `xml:id` is its identity and may not be empty.
+ */
+export function sanitizeXmlId(raw: string): string {
+  return raw
+    .trim()
+    .replace(/[^A-Za-z0-9_-]/g, "-")
+    .replace(/^[^A-Za-z_]+/, "");
+}
+
+/**
  * Derive a division's title, type, `xml:id`, and `label` directly from its
  * full PreTeXt source — the code editor's content, wrapper tag included.
  * Used to keep the TOC in sync when the user edits these directly in the

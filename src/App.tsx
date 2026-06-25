@@ -1,6 +1,5 @@
 import "./App.css";
 import Editors from "./components/Editors";
-import BareHostHarness from "./BareHostHarness";
 import { useMemo, useState } from "react";
 import type {
   Asset,
@@ -327,10 +326,6 @@ const handlePreviewRebuild = async (
 };
 
 function App() {
-  // Toggle between the full-featured demo and the bare-minimum host harness
-  // used to verify that the editor's store owns the live editing buffer.
-  const [showHarness, setShowHarness] = useState(false);
-
   const [title, setTitle] = useState("Divisions Mode Demo");
   // ---------------------------------------------------------------------------
   // Divisions state — the host always provides a list of divisions.
@@ -582,33 +577,10 @@ function App() {
 
   const toolbarLabel = `Demo: ${demoLabel}`;
 
-  if (showHarness) {
-    return (
-      <>
-        <div className="app-demo-toolbar">
-          <span className="app-demo-toolbar__label">Bare Host Harness</span>
-          <button
-            className="app-demo-toolbar__button"
-            onClick={() => setShowHarness(false)}
-          >
-            Back to Full Demo
-          </button>
-        </div>
-        <BareHostHarness />
-      </>
-    );
-  }
-
   return (
     <>
       <div className="app-demo-toolbar">
         <span className="app-demo-toolbar__label">{toolbarLabel}</span>
-        <button
-          className="app-demo-toolbar__button"
-          onClick={() => setShowHarness(true)}
-        >
-          Bare Host Harness
-        </button>
         <button
           className="app-demo-toolbar__button"
           onClick={loadDivisionsDemo}
