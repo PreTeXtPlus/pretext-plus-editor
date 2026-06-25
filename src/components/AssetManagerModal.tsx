@@ -125,14 +125,26 @@ const AssetManagerModal = ({
       .finally(() => setIsLoadingAssets(false));
   }, [onLoadAssets, onLoadLibraryAssets, setProjectAssets]);
 
+  // Load assets once per open. Keyed solely on `open` so it cannot re-fire on
+  // unrelated re-renders; `loadAssets` is read through a ref to avoid a
+  // self-sustaining loop (loading writes to the store → re-render → host hands
+  // a fresh `onClose`/loader → effect would otherwise re-run → reloads forever).
+  const loadAssetsRef = useRef(loadAssets);
+  useEffect(() => {
+    loadAssetsRef.current = loadAssets;
+  });
   useEffect(() => {
     if (!open) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadAssets();
+    loadAssetsRef.current();
+  }, [open]);
+
+  // Escape-to-close. Re-binds when `onClose` changes, but never triggers a load.
+  useEffect(() => {
+    if (!open) return;
     const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, loadAssets]);
+  }, [open, onClose]);
 
   if (!open) return null;
 

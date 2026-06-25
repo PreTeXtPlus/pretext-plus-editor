@@ -1751,7 +1751,9 @@ export function wrapDivisionForPreview(
  * The root division additionally needs an `<article>`/`<book>` wrapper
  * element. A host that hands back a brand-new project's root division as a
  * bare body fragment (no wrapper at all) gets one added here, chosen from
- * `projectType` (`"book"` vs. the default `"article"`).
+ * `projectType` (`"book"` vs. the default `"article"`). The wrapper's
+ * `<title>` falls back to the host's `projectTitle` when the fragment carries
+ * no title of its own, rather than the placeholder `"Untitled"`.
  */
 /**
  * Strip a leading `<title>...</title>` element off a bare (unwrapped) PreTeXt
@@ -1771,6 +1773,7 @@ export function normalizeDivisionsOnLoad(
   divisions: Division[],
   rootDivisionId: string | undefined,
   projectType: "article" | "book" | undefined,
+  projectTitle?: string,
 ): Division[] {
   const wrapperType: DivisionType = projectType === "book" ? "book" : "article";
 
@@ -1782,10 +1785,12 @@ export function normalizeDivisionsOnLoad(
     if (division.xmlId === rootDivisionId && !(meta && ROOT_DIVISION_TYPES.has(meta.type))) {
       // The bare fragment may already carry its own leading <title> even
       // though it was never wrapped in <article>/<book> — use that ahead of
-      // "Untitled" so a real title isn't discarded, and drop it from the body
-      // so it isn't duplicated once it's reinserted as the wrapper's <title>.
+      // the host's project title (and "Untitled" only as a last resort) so a
+      // real title isn't discarded, and drop it from the body so it isn't
+      // duplicated once it's reinserted as the wrapper's <title>.
       const { title: embeddedTitle, body } = extractLeadingTitle(division.content);
-      const title = division.title || embeddedTitle || "Untitled";
+      const title =
+        division.title || embeddedTitle || projectTitle || "Untitled";
       return {
         ...division,
         type: wrapperType,

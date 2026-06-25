@@ -256,6 +256,7 @@ const Editors = (props: editorProps) => {
       props.divisions,
       initRootDivision?.xmlId,
       props.projectType,
+      props.title,
     );
     const normalizedRoot =
       normalizedDivisions.find((d) => d.xmlId === initRootDivision?.xmlId) ??
@@ -616,6 +617,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         props.divisions,
         newRoot?.xmlId,
         props.projectType,
+        props.title,
       );
       update.divisions = normalizedDivisions;
       const normalizedRoot =
@@ -677,6 +679,41 @@ const EditorsInner = (props: EditorsInnerProps) => {
       useCommonDocinfo: props.useCommonDocinfo,
       activeDivisionId: props.activeDivisionId,
     };
+  });
+
+  // ── Push load-time normalization back to the host ─────────────────────────
+  // `normalizeDivisionsOnLoad` may rewrite a division's content on load — most
+  // notably wrapping a legacy root fragment that lacks its <article>/<book>
+  // element (with a <title>) around it. That rewrite is seeded straight into
+  // the store's buffer, so the host never learns of it through the normal edit
+  // path and the structural fix would be lost on the next reload. Emit it back
+  // as a content change so the host persists it (and its own change handler
+  // fires). Keyed on the raw `props.divisions` identity so a host that ignores
+  // the callback isn't re-notified on every render; the rewrite is a no-op once
+  // the host echoes the wrapped content back, so this never loops.
+  const normalizationEmittedRef = useRef<Division[] | null>(null);
+  useEffect(() => {
+    if (normalizationEmittedRef.current === props.divisions) return;
+    normalizationEmittedRef.current = props.divisions;
+
+    const newRoot = findRootDivision(props.divisions, props.rootDivisionId);
+    const normalized = normalizeDivisionsOnLoad(
+      props.divisions,
+      newRoot?.xmlId,
+      props.projectType,
+      props.title,
+    );
+    for (const division of normalized) {
+      if (division.sourceFormat !== "pretext") continue;
+      const original = props.divisions.find((d) => d.xmlId === division.xmlId);
+      if (!original || division.content === original.content) continue;
+      props.onContentChange({
+        xmlId: division.xmlId,
+        sourceContent: division.content,
+        sourceFormat: "pretext",
+        pretextSource: division.content,
+      });
+    }
   });
 
   // ── Preview content ──────────────────────────────────────────────────────
