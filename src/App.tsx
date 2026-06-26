@@ -27,14 +27,13 @@ const DEMO_DIVISIONS: Division[] = [
     type: "article",
     sourceFormat: "pretext",
     content: `<article>
-<title>Divisions Mode Demo for Article</title>
-<p>Each section is a separate <c>Division</c> record in a flat pool. The TOC reads their order from <c>plus:section</c> placeholder tags embedded in this root division's content.</p>
-<p>Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview.</p>
-<plus:section ref="sec-intro"/>
-<plus:section ref="sec-background"/>
-<plus:section ref="sec-results"/>
-<plus:section ref="sec-latex"/>
-<plus:section ref="sec-markdown"/>
+  <title>Divisions Mode Demo for Article</title>
+  
+  <plus:introduction ref="sec-intro"/>
+  <plus:section ref="sec-background"/>
+  <plus:section ref="sec-results"/>
+  <plus:section ref="sec-latex"/>
+  <plus:section ref="sec-markdown"/>
 </article>
 `,
   },
@@ -45,9 +44,21 @@ const DEMO_DIVISIONS: Division[] = [
     type: "introduction",
     sourceFormat: "pretext",
     content: `<introduction xml:id="sec-intro">
-<title>Introduction</title>
-<p>In the divisions model every structural element—article, chapter, section, worksheet—is a flat <c>Division</c> record. Hierarchy is expressed by <c>plus:section</c> placeholder tags inside a parent division's content.</p>
-<p>Click a section in the TOC to edit it. Drag sections to reorder them—reordering updates the placeholder order in the parent's content rather than a database sort column.</p>
+  <p>
+    Each section is a separate <c>Division</c> record in a flat pool. The TOC reads their order from <c>plus:section</c> placeholder tags embedded in this root division's content.
+  </p>
+
+  <p>
+    Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview.
+  </p>
+
+  <p> 
+    In the divisions model every structural element—article, chapter, section, worksheet—is a flat <c>Division</c> record. Hierarchy is expressed by <c>plus:section</c> placeholder tags inside a parent division's content.
+  </p>
+  
+  <p>
+    Click a section in the TOC to edit it. Drag sections to reorder them—reordering updates the placeholder order in the parent's content rather than a database sort column.
+  </p>
 </introduction>`,
   },
   {
@@ -57,9 +68,15 @@ const DEMO_DIVISIONS: Division[] = [
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-background">
-<title>Background</title>
-<p>Previously, sections were either stored merged into one document blob or kept in order via a database sort column. In divisions mode each division owns its own content independently and parent divisions reference children by <attr>xml:id</attr>.</p>
-<p>This means the XML source is the authoritative record of structure—not the database.</p>
+  <title>Background</title>
+  
+  <p>
+    Previously, sections were either stored merged into one document blob or kept in order via a database sort column. In divisions mode each division owns its own content independently and parent divisions reference children by <attr>xml:id</attr>.
+  </p>
+
+  <p>
+    This means the XML source is the authoritative record of structure—not the database.
+  </p>
 </section>`,
   },
   {
@@ -69,8 +86,11 @@ const DEMO_DIVISIONS: Division[] = [
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-results">
-<title>Results</title>
-<p>The TOC reads the ordered list of <c>plus:section ref="..."</c> tags from the root division's content and displays them in that order. Drag-to-reorder rewrites those placeholder tags in-place.</p>
+  <title>Results</title>
+  
+  <p>
+    The TOC reads the ordered list of <c>plus:section ref="..."</c> tags from the root division's content and displays them in that order. Drag-to-reorder rewrites those placeholder tags in-place.
+  </p>
 </section>`,
   },
   {
@@ -81,8 +101,8 @@ const DEMO_DIVISIONS: Division[] = [
     sourceFormat: "latex",
     // LaTeX divisions are stored as raw LaTeX. The leading
     // `\section{title}\label{xml:id}` line is the structural header: the code
-    // editor locks it (double-click it to edit the title/xml:id from the TOC),
-    // and the `\label` becomes the division's `xml:id` on conversion. Body
+    // editor locks it (click it to edit the title/xml:id from the TOC), and
+    // the `\label` becomes the division's `xml:id` on conversion. Body
     // content is converted to PreTeXt for the preview.
     content: `\\section{A LaTeX Section}\\label{sec-latex}
 
@@ -113,7 +133,6 @@ Inline math like $E = mc^2$ and display math both convert to PreTeXt:
 division: section
 xml:id: sec-markdown
 ---
-
 # A Markdown Section
 
 This section is authored in **Markdown**, which is auto-converted to PreTeXt.
@@ -133,8 +152,10 @@ You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="sec-orphan">
-<title>Unplaced Section</title>
-<p>This section is not referenced by any parent division, so it appears in the <q>Unplaced divisions</q> group at the bottom of the TOC. Add a <c>plus:section ref="sec-orphan"</c> tag inside the root article's content to place it.</p>
+  <title>Unplaced Section</title>
+
+  <p>
+  This section is not referenced by any parent division, so it appears in the <q>Unplaced divisions</q> group at the bottom of the TOC. Add a <c>plus:section ref="sec-orphan"</c> tag inside the root article's content to place it.</p>
 </section>`,
   },
 ];
@@ -198,9 +219,10 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Applications",
     type: "chapter",
     sourceFormat: "pretext",
-    content: `<chapter xml:id="ch-two">
-<title>Applications</title>
-<plus:section ref="ch2-sec1"/>
+    content: `<chapter xml:id="ch-two"> 
+  <title>Applications</title>
+  
+  <plus:section ref="ch2-sec1"/>
 </chapter>`,
   },
   {
@@ -210,8 +232,10 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="ch2-sec1">
-<title>Worked Examples</title>
-<p>The only section in chapter two — try dragging a section from chapter one into here.</p>
+  <title>Worked Examples</title>
+  <p>
+    The only section in chapter two — try dragging a section from chapter one into here.
+  </p>
 </section>`,
   },
   {
@@ -221,8 +245,8 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     type: "chapter",
     sourceFormat: "pretext",
     content: `<chapter xml:id="ch-appendix">
-<title>Appendix (unplaced)</title>
-<plus:section ref="appendix-sec"/>
+  <title>Appendix (unplaced)</title>
+  <plus:section ref="appendix-sec"/>
 </chapter>`,
   },
   {
@@ -232,8 +256,10 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     type: "section",
     sourceFormat: "pretext",
     content: `<section xml:id="appendix-sec">
-<title>Appendix Section</title>
-<p>This section belongs to the unplaced appendix chapter, so it appears nested under it in the <q>Unplaced divisions</q> group. Use the <c>+</c> button on the appendix to attach the whole subtree to the book.</p>
+  <title>Appendix Section</title>
+  <p>
+    This section belongs to the unplaced appendix chapter, so it appears nested under it in the <q>Unplaced divisions</q> group. Use the <c>+</c> button on the appendix to attach the whole subtree to the book.
+  </p>
 </section>`,
   },
 ];

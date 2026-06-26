@@ -1,13 +1,16 @@
 import type { DocumentSectionType } from "../../types/sections";
+import type { SourceFormat } from "../../types/editor";
 import {
   type EditDraft,
   REGULAR_DIVISION_TYPES,
+  SOURCE_FORMAT_LABELS,
   TYPE_FULL_LABELS,
 } from "./types";
 
 interface SectionEditFormProps {
   draft: EditDraft;
-  isLatex: boolean;
+  /** True only while editing a division that hasn't been saved yet — only then is `sourceFormat` choosable. */
+  isNew?: boolean;
   /** The root division's type (book/article/slideshow) is structural and not user-editable. */
   isRoot?: boolean;
   onDraftChange: (draft: EditDraft) => void;
@@ -17,12 +20,13 @@ interface SectionEditFormProps {
 
 const SectionEditForm = ({
   draft,
-  isLatex,
+  isNew = false,
   isRoot = false,
   onDraftChange,
   onCommit,
   onCancel,
-}: SectionEditFormProps) => (
+}: SectionEditFormProps) => {
+  return (
   <div className="pretext-plus-editor__toc-edit-form">
     <label className="pretext-plus-editor__toc-edit-field">
       <span>Title</span>
@@ -37,6 +41,36 @@ const SectionEditForm = ({
         autoFocus
       />
     </label>
+    {/* Source format can only be chosen while the division is new (unsaved) —
+        an existing division's source can't be losslessly translated between
+        formats, so it's shown read-only once saved. */}
+    {isNew ? (
+      <label className="pretext-plus-editor__toc-edit-field">
+        <span>Format</span>
+        <select
+          value={draft.sourceFormat}
+          onChange={(e) =>
+            onDraftChange({
+              ...draft,
+              sourceFormat: e.target.value as SourceFormat,
+            })
+          }
+        >
+          {(Object.keys(SOURCE_FORMAT_LABELS) as SourceFormat[]).map((f) => (
+            <option key={f} value={f}>
+              {SOURCE_FORMAT_LABELS[f]}
+            </option>
+          ))}
+        </select>
+      </label>
+    ) : (
+      <div className="pretext-plus-editor__toc-edit-field">
+        <span>Format</span>
+        <span className="pretext-plus-editor__toc-edit-readonly">
+          {SOURCE_FORMAT_LABELS[draft.sourceFormat]}
+        </span>
+      </div>
+    )}
     {/* Type applies to every format: a LaTeX `\section` can still be authored
         as any division type — the type is applied when its conversion is
         tagged, not stored in the LaTeX source. */}
@@ -63,7 +97,7 @@ const SectionEditForm = ({
     {/* xml:id applies to every format — for LaTeX it's written as the
         `\section`'s `\label`. */}
     <label className="pretext-plus-editor__toc-edit-field">
-      <span>xml:id</span>
+      <span>id</span>
       <input
         type="text"
         value={draft.xmlId}
@@ -72,17 +106,6 @@ const SectionEditForm = ({
       />
     </label>
     {/* LaTeX has no representation for PreTeXt's separate `label` attribute. */}
-    {!isLatex && (
-      <label className="pretext-plus-editor__toc-edit-field">
-        <span>label</span>
-        <input
-          type="text"
-          value={draft.label}
-          placeholder="optional"
-          onChange={(e) => onDraftChange({ ...draft, label: e.target.value })}
-        />
-      </label>
-    )}
     <div className="pretext-plus-editor__toc-edit-actions">
       <button
         type="button"
@@ -100,6 +123,7 @@ const SectionEditForm = ({
       </button>
     </div>
   </div>
-);
+  );
+};
 
 export default SectionEditForm;

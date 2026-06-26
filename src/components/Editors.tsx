@@ -25,9 +25,11 @@ import type {
 import type { Division, DivisionType } from "../types/sections";
 import {
   createNewSection,
+  createDivisionContent,
   normalizeSelfClosingRefs,
   parseDivisionRefsWithTypes,
   createDivisionWithId,
+  insertDivisionRef,
   wrapDivisionForPreview,
   assembleProjectSource,
   assembleFullProjectSource,
@@ -426,7 +428,22 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
     // 1. Rewrite this division's own source so its metadata matches.
     let updated: Division;
-    if (division.sourceFormat === "markdown") {
+    if (changes.sourceFormat !== undefined && changes.sourceFormat !== division.sourceFormat) {
+      // Switching format is only offered for a brand-new, not-yet-saved
+      // division (see SectionEditForm's `isNew`), so there's no existing
+      // source to translate — start over from that format's blank template.
+      const type = changes.type ?? division.type;
+      const title = changes.title ?? division.title;
+      const newXmlId = changes.xmlId || division.xmlId;
+      updated = {
+        ...division,
+        sourceFormat: changes.sourceFormat,
+        type,
+        title,
+        xmlId: newXmlId,
+        content: createDivisionContent(type, changes.sourceFormat, title, newXmlId),
+      };
+    } else if (division.sourceFormat === "markdown") {
       updated = updateMarkdownDivisionMetadata(division, changes);
     } else if (division.sourceFormat === "latex") {
       // The header command is renamed to match the new type (`\section{` →
@@ -454,10 +471,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // Emit keyed on the OLD id — before the record is renamed in step 2.
       emitContentChange(
         division.xmlId,
-        division.sourceFormat === "pretext"
+        updated.sourceFormat === "pretext"
           ? normalizeSelfClosingRefs(updated.content)
           : updated.content,
-        division.sourceFormat,
+        updated.sourceFormat,
       );
     }
 
@@ -655,7 +672,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     applyDivisionSelect(xmlId);
   };
 
-  // Double-clicking the locked wrapper line in the code editor opens the active
+  // Clicking the locked wrapper line in the code editor opens the active
   // division's properties form in the TOC. Expand the TOC first so the form is
   // visible (it's collapsible, and collapsed in the narrow-screen drawer).
   const handleRequestWrapperEdit = () => {
@@ -664,10 +681,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
     startSectionEdit(activeDivision);
   };
 
-  const handleDivisionAdd = () => {
+  // Adds a new PreTeXt section as the last child of `parentXmlId` (or
+  // unplaced, if `null`), then immediately opens its properties form flagged
+  // `isNew` so the user can pick a different source format before the
+  // division's first real edit — see SectionEditForm.
+  const handleDivisionAdd = (parentXmlId: string | null) => {
     const newDiv = createNewSection();
     applyDivisionAdd(newDiv);
+    if (parentXmlId) {
+      const parent = divisions.find((d) => d.xmlId === parentXmlId);
+      if (parent) {
+        emitContentChange(
+          parent.xmlId,
+          normalizeSelfClosingRefs(
+            insertDivisionRef(parent.content, newDiv.xmlId, newDiv.type, null),
+          ),
+          parent.sourceFormat,
+        );
+      }
+    }
     setActiveDivisionId(newDiv.xmlId);
+    startSectionEdit(newDiv, { isNew: true });
   };
 
   // ── Asset insertion ─────────────────────────────────────────────────────
@@ -707,7 +741,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   useLayoutEffect(() => {
     bindCallbacks({
       selectDivision: handleDivisionSelect,
-      addDivision: () => handleDivisionAdd(),
+      addDivision: (parentXmlId) => handleDivisionAdd(parentXmlId),
       removeDivision: (xmlId) => applyDivisionRemove(xmlId),
       updateDivision: (xmlId, changes) => applyDivisionMetadataEdit(xmlId, changes),
       // Structural reorders rewrite a parent division's content; route them
@@ -999,11 +1033,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
           : undefined
       }
       onShowFullSource={() => openModal("isFullSourceOpen")}
-      // Every format now locks its structural lines (the PreTeXt wrapper tag,
-      // the Markdown frontmatter, the LaTeX `\section` header) and double-clicks
-      // them open the division's properties form in the TOC. The code editor
-      // only fires this when a locked leading line is actually present, so it's
-      // safe to wire up for all formats.
+      // Every format now locks its structural lines (the PreTeXt wrapper tag +
+      // title, the Markdown frontmatter, the LaTeX `\section` header) and a
+      // single click on them opens the division's properties form in the TOC.
+      // The code editor only fires this when a locked leading line is actually
+      // present, so it's safe to wire up for all formats.
       onRequestWrapperEdit={handleRequestWrapperEdit}
     />
   );

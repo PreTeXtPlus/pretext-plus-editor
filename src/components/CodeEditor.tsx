@@ -36,9 +36,10 @@ interface CodeEditorProps {
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
   /**
-   * Called when the user double-clicks the locked wrapper's first line (the
-   * opening tag). Hosts use this to open the division's properties editor in
-   * the Table of Contents, since the tag/xml:id aren't editable in-place.
+   * Called when the user clicks any locked leading line of the wrapper (the
+   * opening tag, and the title line right after it when present). Hosts use
+   * this to open the division's properties editor in the Table of Contents,
+   * since the tag/title/xml:id aren't editable in-place.
    */
   onRequestWrapperEdit?: () => void;
 }
@@ -50,11 +51,29 @@ export interface CodeEditorHandle {
 }
 
 /**
+ * Returns the line number where a PreTeXt division's locked header ends. The
+ * header is always at least the opening tag (line 1); if a `<title>` element
+ * immediately follows it on line 2, the header is extended through that
+ * element's closing `</title>` line, since titles are now only editable from
+ * the TOC. Divisions with no title line (introduction/conclusion) keep a
+ * one-line header.
+ */
+function findPretextHeaderEnd(model: any): number {
+  const lineCount = model.getLineCount();
+  if (lineCount < 2 || !/^\s*<title\b/.test(model.getLineContent(2))) return 1;
+  let end = 2;
+  while (end <= lineCount && !/<\/title\s*>/.test(model.getLineContent(end))) {
+    end++;
+  }
+  return end <= lineCount ? end : 1;
+}
+
+/**
  * Describes which lines of the model are structural (locked) for a given source
  * format.  `editableRange` is the single multiline region the user may edit
  * (Monaco `[startLine, startCol, endLine, endCol]`); every other line is
  * locked.  `leadingLockedLines` is how many lines at the very top are locked —
- * double-clicking any of them opens the division's properties form in the TOC.
+ * clicking any of them opens the division's properties form in the TOC.
  * Returns `null` when nothing should be locked (e.g. mid-edit or unsupported
  * format), leaving the whole document editable.
  */
@@ -68,19 +87,30 @@ function computeLockedRegion(
 } | null {
   const lineCount = model.getLineCount();
 
-  // PreTeXt: the wrapper element occupies its own first/last lines; lock both
-  // and keep the body in between editable.
+  // PreTeXt: lock the opening tag (plus the title line right after it, when
+  // present) and the closing tag, keeping the body in between editable.
   if (sourceFormat === "pretext") {
     if (lineCount < 3) return null;
+    const headerEnd = findPretextHeaderEnd(model);
+    if (headerEnd >= lineCount - 1) return null;
+    const lockedLines: number[] = [];
+    for (let ln = 1; ln <= headerEnd; ln++) lockedLines.push(ln);
+    lockedLines.push(lineCount);
     return {
-      editableRange: [2, 1, lineCount - 1, model.getLineMaxColumn(lineCount - 1)],
-      lockedLines: [1, lineCount],
-      leadingLockedLines: 1,
+      editableRange: [
+        headerEnd + 1,
+        1,
+        lineCount - 1,
+        model.getLineMaxColumn(lineCount - 1),
+      ],
+      lockedLines,
+      leadingLockedLines: headerEnd,
     };
   }
 
   // Markdown: lock a leading `---` ... `---` YAML frontmatter block (the
-  // division's type/xml:id/label), keeping the markdown body below it editable.
+  // division's type/xml:id/label) and the title's `# heading` right after it,
+  // keeping the markdown body below editable.
   if (sourceFormat === "markdown") {
     if (model.getLineContent(1).trim() !== "---") return null;
     let fence = -1;
@@ -90,15 +120,28 @@ function computeLockedRegion(
         break;
       }
     }
-    // Need a closing fence with at least one body line after it to leave an
-    // editable region; otherwise lock nothing (don't trap the user mid-edit).
-    if (fence === -1 || fence >= lineCount) return null;
+    if (fence === -1) return null;
+
+    // The title lives in the body as the leading `# heading`, possibly after
+    // some blank spacing lines; lock through it too, since it's now only
+    // editable from the TOC. Stop at the first non-blank line that isn't a
+    // heading — that's the body, and is left untouched.
+    let headerEnd = fence;
+    let scan = fence + 1;
+    while (scan <= lineCount && model.getLineContent(scan).trim() === "") scan++;
+    if (scan <= lineCount && /^#{1,6}[ \t]+\S/.test(model.getLineContent(scan))) {
+      headerEnd = scan;
+    }
+
+    // Need at least one body line after the locked header; otherwise lock
+    // nothing (don't trap the user mid-edit).
+    if (headerEnd >= lineCount) return null;
     const lockedLines: number[] = [];
-    for (let ln = 1; ln <= fence; ln++) lockedLines.push(ln);
+    for (let ln = 1; ln <= headerEnd; ln++) lockedLines.push(ln);
     return {
-      editableRange: [fence + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
+      editableRange: [headerEnd + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
       lockedLines,
-      leadingLockedLines: fence,
+      leadingLockedLines: headerEnd,
     };
   }
 
@@ -172,9 +215,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
-  // How many lines at the very top are locked (the wrapper tag for PreTeXt, the
-  // frontmatter block for Markdown). Double-clicking any of them opens the TOC
-  // properties form.
+  // How many lines at the very top are locked (the wrapper tag + title for
+  // PreTeXt, the frontmatter block + `# heading` for Markdown). Clicking any
+  // of them opens the TOC properties form.
   const leadingLockedLinesRef = useRef(0);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
@@ -235,25 +278,30 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     };
   }, []);
 
-  // When a PreTeXt division has collapsed to exactly its two wrapper-tag lines
-  // (`<section…>` directly above `</section>`), insert a blank line between them
-  // so the body always has at least one editable, non-locked line. The edit is
-  // flagged programmatic so it doesn't echo back to the host as a content change
-  // (it's a display normalization, not a user edit).
+  // When a PreTeXt division has collapsed to exactly its locked header
+  // (opening tag, plus a title line when present) directly above its closing
+  // tag, insert a blank line between them so the body always has at least one
+  // editable, non-locked line. The edit is flagged programmatic so it doesn't
+  // echo back to the host as a content change (it's a display normalization,
+  // not a user edit).
   const ensurePretextBodyLine = (editor: any, model: any, monaco: any) => {
-    if (sourceFormat !== "pretext" || model.getLineCount() !== 2) return;
+    if (sourceFormat !== "pretext") return;
+    const lineCount = model.getLineCount();
+    if (lineCount < 2) return;
     const open = model.getLineContent(1).trim();
-    const close = model.getLineContent(2).trim();
     if (!open.startsWith("<") || open.startsWith("</") || open.endsWith("/>")) {
       return;
     }
+    const headerEnd = findPretextHeaderEnd(model);
+    if (lineCount !== headerEnd + 1) return;
+    const close = model.getLineContent(lineCount).trim();
     if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(close)) return;
 
     isProgrammaticUpdateRef.current = true;
-    const endCol = model.getLineMaxColumn(1);
+    const endCol = model.getLineMaxColumn(headerEnd);
     editor.executeEdits("ensure-body-line", [
       {
-        range: new monaco.Range(1, endCol, 1, endCol),
+        range: new monaco.Range(headerEnd, endCol, headerEnd, endCol),
         text: "\n",
         forceMoveMarkers: true,
       },
@@ -392,16 +440,15 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
     updateUndoRedoState();
 
-    // Double-clicking any locked leading line (the PreTeXt opening tag or the
-    // Markdown frontmatter block) opens the division's properties editor in the
-    // TOC, since the type/xml:id/label can't be edited in place.
-    // `event.detail === 2` marks the dblclick mousedown.
+    // Clicking any locked leading line (the PreTeXt opening tag/title, or the
+    // Markdown frontmatter block + title heading) opens the division's
+    // properties editor in the TOC, since the type/title/xml:id/label can't
+    // be edited in place.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {
       const line = e?.target?.position?.lineNumber;
       if (
         lockedRef.current &&
-        e?.event?.detail === 2 &&
         typeof line === "number" &&
         line <= leadingLockedLinesRef.current
       ) {

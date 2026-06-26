@@ -1496,6 +1496,32 @@ export function createDivisionWithId(
 }
 
 /**
+ * Create blank content for a division of the given type and source format.
+ * Used when adding a new division — the format is chosen via the TOC's
+ * properties form before the division is first saved, so unlike editing an
+ * existing division there's no prior source to translate: switching format
+ * just starts over from this format's template.
+ */
+export function createDivisionContent(
+  type: DivisionType,
+  sourceFormat: SourceFormat,
+  title: string,
+  xmlId: string,
+): string {
+  if (sourceFormat === "latex") {
+    if (type === "introduction" || type === "conclusion") return `% ${title}\n\n`;
+    return `\\${type}{${title}}\n\n`;
+  }
+  if (sourceFormat === "markdown") {
+    return `${buildMarkdownFrontmatter({ type, xmlId, label: "" })}\n# ${title}\n\n`;
+  }
+  if (type === "introduction" || type === "conclusion") {
+    return `<${type} xml:id="${xmlId}">\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
+  }
+  return `<${type} xml:id="${xmlId}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
+}
+
+/**
  * Insert a `<plus:TYPE ref="xmlId"/>` placeholder into `content`.
  *
  * - When `afterXmlId` is `null` the ref is appended just before the closing

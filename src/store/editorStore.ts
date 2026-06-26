@@ -88,7 +88,8 @@ type ModalKey =
  */
 export interface EditorCallbacks {
   selectDivision: (id: string) => void;
-  addDivision: (afterId: string | null) => void;
+  /** Add a new division as the last child of `parentXmlId` (or unplaced if `null`). */
+  addDivision: (parentXmlId: string | null) => void;
   removeDivision: (id: string) => void;
   updateDivision: (id: string, changes: DivisionChanges) => void;
   /** Emit a content change for a specific division (edit or structural reorder). */
@@ -158,6 +159,8 @@ export interface EditorStoreState {
   // TOC inline edit form
   editingId: string | null;
   editDraft: EditDraft | null;
+  /** True while `editDraft` belongs to a just-created, not-yet-saved division. */
+  editingIsNew: boolean;
 
   /** The asset currently open in the asset edit modal, identified by kind+ref. */
   editingAssetRef: { kind: AssetKind; ref: string } | null;
@@ -199,14 +202,14 @@ export interface EditorStoreState {
 
   // TOC section / division actions (stable — delegate to bag.cbs)
   selectSection: (id: string) => void;
-  addSection: (afterId: string | null) => void;
+  addSection: (parentXmlId: string | null) => void;
   removeSection: (id: string) => void;
   updateSection: (id: string, changes: DivisionChanges) => void;
   /** Update a parent division's content after a structural DnD change. */
   divisionContentChange: (xmlId: string, content: string) => void;
 
   // TOC inline edit form
-  startSectionEdit: (section: Division) => void;
+  startSectionEdit: (section: Division, options?: { isNew?: boolean }) => void;
   setEditDraft: (draft: EditDraft) => void;
   commitSectionEdit: () => void;
   cancelSectionEdit: () => void;
@@ -339,6 +342,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     isFullSourceOpen: false,
     editingId: null,
     editDraft: null,
+    editingIsNew: false,
     editingAssetRef: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
@@ -406,14 +410,14 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     // TOC section / division actions — stable closures that read through bag.cbs
     selectSection: (id) => bag.cbs.selectDivision(id),
-    addSection: (afterId) => bag.cbs.addDivision(afterId),
+    addSection: (parentXmlId) => bag.cbs.addDivision(parentXmlId),
     removeSection: (id) => bag.cbs.removeDivision(id),
     updateSection: (id, changes) => bag.cbs.updateDivision(id, changes),
     divisionContentChange: (xmlId, content) =>
       bag.cbs.divisionContentChange?.(xmlId, content),
 
     // TOC inline edit form
-    startSectionEdit: (section) => {
+    startSectionEdit: (section, options) => {
       // Each format stores its xml:id/label differently: Markdown in YAML
       // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
       // PreTeXt `label` attribute), and PreTeXt as the wrapper element's
@@ -438,7 +442,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           type: section.type as DivisionType,
           xmlId,
           label,
+          sourceFormat: section.sourceFormat,
         },
+        editingIsNew: options?.isNew ?? false,
       });
     },
     setEditDraft: (editDraft) => set({ editDraft }),
@@ -479,11 +485,16 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           type: editDraft.type,
           xmlId,
           label: editDraft.label.trim() || null,
+          // Only meaningfully different from the division's current format
+          // while `editingIsNew` — the form keeps this field read-only
+          // otherwise, so it's always a no-op patch for existing divisions.
+          sourceFormat: editDraft.sourceFormat,
         });
       }
-      set({ editingId: null, editDraft: null });
+      set({ editingId: null, editDraft: null, editingIsNew: false });
     },
-    cancelSectionEdit: () => set({ editingId: null, editDraft: null }),
+    cancelSectionEdit: () =>
+      set({ editingId: null, editDraft: null, editingIsNew: false }),
 
     insertAsset: (asset) => bag.cbs.assetInsert(asset),
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),

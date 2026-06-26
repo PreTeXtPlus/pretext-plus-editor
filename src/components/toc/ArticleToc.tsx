@@ -13,6 +13,7 @@ import {
 } from "../../sectionUtils";
 import { useEditorStore } from "../../store/hooks";
 import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
+//import DivisionMenu from "./DivisionMenu";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: () => void;
@@ -25,6 +26,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
 
   const selectSection = useEditorStore((s) => s.selectSection);
+  const addSection = useEditorStore((s) => s.addSection);
   const removeSection = useEditorStore((s) => s.removeSection);
   const divisionContentChange = useEditorStore((s) => s.divisionContentChange);
   const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
@@ -37,6 +39,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const cancelSectionEdit = useEditorStore((s) => s.cancelSectionEdit);
   const editingId = useEditorStore((s) => s.editingId);
   const editDraft = useEditorStore((s) => s.editDraft);
+  const editingIsNew = useEditorStore((s) => s.editingIsNew);
 
   // ── Tree structure ──────────────────────────────────────────────────────────
   const rootDivision = divisions
@@ -217,8 +220,18 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                 label: "Edit properties",
                 onClick: () => startSectionEdit(rootDivision),
               },
+              // LaTeX/Markdown divisions are leaves — see types/sections.ts —
+              // so they can't hold a `<plus:* ref="..."/>` child placeholder.
+              ...(rootDivision.sourceFormat === "pretext"
+                ? [
+                    {
+                      label: "Add new division",
+                      onClick: () => addSection(rootDivision.xmlId),
+                    },
+                  ]
+                : []),
             ]}
-            isLatex={rootDivision.sourceFormat === "latex"}
+            isNew={editingId === rootDivision.xmlId && editingIsNew}
             isRoot
           />
         )}
@@ -248,6 +261,15 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                 label: "Edit properties",
                 onClick: () => startSectionEdit(node.division),
               },
+              // Add division, but only if division is pretext format:
+              ...(node.division.sourceFormat === "pretext"
+                ? [
+                    {
+                      label: "Add new division",
+                      onClick: () => addSection(node.division.xmlId),
+                    },
+                  ]
+                : []),
               {
                 label: "Remove from document",
                 onClick: () => handleUnplace(node.division.xmlId, node.parentXmlId!),
@@ -258,7 +280,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                 danger: true,
               },
             ]}
-            isLatex={node.division.sourceFormat === "latex"}
+            isNew={editingId === node.division.xmlId && editingIsNew}
           />
         ))}
       </ul>
@@ -310,7 +332,6 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                         danger: true,
                       },
                     ]}
-                    isLatex={orphan.sourceFormat === "latex"}
                   />
                   {isExpanded(orphan.xmlId) &&
                     subtree.map((node) => (
@@ -342,7 +363,6 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                             danger: true,
                           },
                         ]}
-                        isLatex={node.division.sourceFormat === "latex"}
                       />
                     ))}
                 </Fragment>

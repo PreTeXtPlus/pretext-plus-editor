@@ -1,4 +1,5 @@
 import type { Division, DivisionType } from "../../types/sections";
+import type { SourceFormat } from "../../types/editor";
 
 /** Draft state for the inline division edit form. */
 export interface EditDraft {
@@ -6,7 +7,14 @@ export interface EditDraft {
   type: DivisionType;
   xmlId: string;
   label: string;
+  sourceFormat: SourceFormat;
 }
+
+export const SOURCE_FORMAT_LABELS: Record<SourceFormat, string> = {
+  pretext: "PreTeXt",
+  latex: "LaTeX",
+  markdown: "Markdown",
+};
 
 export const TYPE_LABELS: Record<string, string> = {
   book: "Book",

@@ -16,7 +16,8 @@ interface SectionItemProps {
   onEditCommit: () => void;
   onEditCancel: () => void;
   menuItems: DivisionMenuItem[];
-  isLatex: boolean;
+  /** True while `editDraft` belongs to a division that hasn't been saved yet. */
+  isNew?: boolean;
   isRoot?: boolean;
 }
 
@@ -33,7 +34,7 @@ const SectionItem = ({
   onEditCommit,
   onEditCancel,
   menuItems,
-  isLatex,
+  isNew = false,
   isRoot = false,
 }: SectionItemProps) => {
   const isEditing = editDraft !== null;
@@ -94,7 +95,7 @@ const SectionItem = ({
       {isEditing && editDraft && (
         <SectionEditForm
           draft={editDraft}
-          isLatex={isLatex}
+          isNew={isNew}
           isRoot={isRoot}
           onDraftChange={onDraftChange}
           onCommit={onEditCommit}
