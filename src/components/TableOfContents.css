@@ -578,6 +578,11 @@
   padding: 0 0 4px;
 }
 
+.pretext-plus-editor__toc-asset-img {
+  height: 30px;
+  cursor: pointer;
+}
+
 .pretext-plus-editor__toc-asset-item {
   display: flex;
   align-items: center;
