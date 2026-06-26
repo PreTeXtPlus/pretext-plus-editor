@@ -35,6 +35,7 @@ const DEMO_DIVISIONS: Division[] = [
   <plus:section ref="sec-latex"/>
   <plus:section ref="sec-markdown"/>
 </article>
+
 `,
   },
   {
@@ -260,7 +261,10 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
   <p>
     This section belongs to the unplaced appendix chapter, so it appears nested under it in the <q>Unplaced divisions</q> group. Use the <c>+</c> button on the appendix to attach the whole subtree to the book.
   </p>
-</section>`,
+</section>
+
+
+`,
   },
 ];
 
@@ -333,7 +337,8 @@ Theorem:
   Proof:
     This is the proof.
 
-More text.`,
+More text.
+`,
   },
 ];
 

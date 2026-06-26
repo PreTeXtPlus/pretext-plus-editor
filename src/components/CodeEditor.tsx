@@ -311,6 +311,42 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
   };
 
+  // An imported PreTeXt division can end with one or more trailing blank
+  // lines after its closing tag (e.g. carried over from a file that ended
+  // with a newline). `computeLockedRegion` always locks the model's last
+  // line as the closing tag, so a trailing blank line leaves the real
+  // closing tag sitting inside the "editable" region, unprotected. Strip
+  // any such trailing blank lines so the closing tag is truly last and gets
+  // locked correctly.
+  const trimPretextTrailingBlankLines = (editor: any, model: any, monaco: any) => {
+    if (sourceFormat !== "pretext") return;
+    const lineCount = model.getLineCount();
+    if (lineCount < 2 || model.getLineContent(lineCount).trim() !== "") return;
+    let lastContentLine = lineCount - 1;
+    while (lastContentLine > 1 && model.getLineContent(lastContentLine).trim() === "") {
+      lastContentLine--;
+    }
+    const closing = model.getLineContent(lastContentLine).trim();
+    if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(closing)) return;
+
+    isProgrammaticUpdateRef.current = true;
+    editor.executeEdits("trim-trailing-blank-lines", [
+      {
+        range: new monaco.Range(
+          lastContentLine,
+          model.getLineMaxColumn(lastContentLine),
+          lineCount,
+          model.getLineMaxColumn(lineCount),
+        ),
+        text: "",
+        forceMoveMarkers: true,
+      },
+    ]);
+    queueMicrotask(() => {
+      isProgrammaticUpdateRef.current = false;
+    });
+  };
+
   // Lock the division's structural metadata so it can't be edited in the code
   // editor: the body stays editable, but the type/xml:id/label are edited from
   // the Table of Contents instead. For PreTeXt this is the wrapper tag on the
@@ -329,6 +365,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (typeof model.disposeRestrictions === "function") {
       model.disposeRestrictions();
     }
+
+    trimPretextTrailingBlankLines(editor, model, monaco);
 
     // A PreTeXt division whose body is emptied collapses to just its locked
     // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line

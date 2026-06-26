@@ -63,14 +63,7 @@ const SectionEditForm = ({
           ))}
         </select>
       </label>
-    ) : (
-      <div className="pretext-plus-editor__toc-edit-field">
-        <span>Format</span>
-        <span className="pretext-plus-editor__toc-edit-readonly">
-          {SOURCE_FORMAT_LABELS[draft.sourceFormat]}
-        </span>
-      </div>
-    )}
+    ): undefined}
     {/* Type applies to every format: a LaTeX `\section` can still be authored
         as any division type — the type is applied when its conversion is
         tagged, not stored in the LaTeX source. */}
