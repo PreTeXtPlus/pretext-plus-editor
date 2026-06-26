@@ -402,6 +402,10 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                         );
                         return (
                           <li key={ref} className="pretext-plus-editor__toc-asset-item">
+                            {asset && (
+                              <img src={asset.url} className="pretext-plus-editor__toc-asset-img"
+                              onClick={() => openAssetEditor(kind, ref)}/>
+                            )}
                             <button
                               type="button"
                               className="pretext-plus-editor__toc-asset-name"
