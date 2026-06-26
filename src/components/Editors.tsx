@@ -449,20 +449,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // The header command is renamed to match the new type (`\section{` →
       // `\worksheet{`), and the title/xml:id are written into the header/`\label`.
       // LaTeX has no representation for PreTeXt's separate `label` attribute, so
-      // that change is tracked on the record only. The type is also tracked on
-      // the record so the parent's ref placeholder stays in sync.
-      const newContent = updateLatexDivisionMetadata(division.content, {
-        title: changes.title,
-        xmlId: changes.xmlId,
-        type: changes.type,
-      });
-      updated = {
-        ...division,
-        content: newContent,
-        title: changes.title ?? division.title,
-        type: changes.type ?? division.type,
-        xmlId: changes.xmlId || division.xmlId,
-      };
+      // that change is tracked on the record only.
+      updated = updateLatexDivisionMetadata(division, changes);
     } else {
       updated = updateSectionMetadata(division, changes);
     }
@@ -992,22 +980,34 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const handleConvertToPretext = () => {
     if (!activeDivision || !divisionConvertedPretext) return;
     const base = createNewSection();
-    // Both Markdown and LaTeX convert to a complete tagged element, so the
-    // conversion becomes the new PreTeXt division's content directly; reset its
-    // xml:id to a fresh one so the copy doesn't collide with the still-present
-    // source-format division.
-    const newDiv: Division = updateSectionMetadata(
-      {
-        id: base.xmlId,
-        xmlId: base.xmlId,
-        title: activeDivision.title,
-        type: activeDivision.type,
-        sourceFormat: "pretext",
-        content: normalizeSelfClosingRefs(divisionConvertedPretext),
-      },
-      { xmlId: base.xmlId },
-    );
+    // Orphan a copy of the original (still in its own source format) under a
+    // fresh xml:id so it doesn't collide with the division being converted.
+    // `updateSectionMetadata` only understands PreTeXt's XML wrapper, so the
+    // copy's embedded id has to be rewritten with the format-specific helper
+    // (the same ones `applyDivisionMetadataEdit` uses).
+    const orphanSeed: Division = {
+      id: base.xmlId,
+      xmlId: activeDivision.xmlId,
+      title: activeDivision.title,
+      type: activeDivision.type,
+      sourceFormat: activeDivisionFormat,
+      content: activeDivision.content,
+    };
+    const newDiv: Division =
+      activeDivisionFormat === "markdown"
+        ? updateMarkdownDivisionMetadata(orphanSeed, { xmlId: base.xmlId })
+        : updateLatexDivisionMetadata(orphanSeed, { xmlId: base.xmlId });
     applyDivisionAdd(newDiv);
+
+    // Replace the current division's own source with the converted PreTeXt,
+    // keeping its xml:id but flipping its format so the rest of the UI (code
+    // editor language, visual editor, TOC) treats it as PreTeXt going forward.
+    emitContentChange(
+      activeDivision.xmlId,
+      normalizeSelfClosingRefs(divisionConvertedPretext),
+      "pretext",
+    );
+    applyDivisionUpdate(activeDivision.xmlId, { sourceFormat: "pretext" });
   };
 
   // ── Code editor ──────────────────────────────────────────────────────────

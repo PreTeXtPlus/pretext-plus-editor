@@ -721,7 +721,7 @@ export function extractLatexSectionLabel(content: string): string {
 }
 
 /**
- * Update a LaTeX division header's type, title, and/or `xml:id` in place.
+ * Update a LaTeX division's header type, title, and/or `xml:id` in place.
  *
  * - `type` rewrites the header command name (`\section{` → `\worksheet{`) so the
  *   source reads as the division it represents.
@@ -732,25 +732,32 @@ export function extractLatexSectionLabel(content: string): string {
  * Omit a key (or pass `undefined`) to leave it unchanged.  Only the
  * command-style header is handled — the style the code editor freezes and the
  * TOC form exposes for editing.  This is the LaTeX analogue of
- * {@link updateSectionMetadata}, but LaTeX has no representation for PreTeXt's
- * separate `label` attribute, so only `xml:id` (the `\label`) is carried.
+ * {@link updateSectionMetadata} and {@link updateMarkdownDivisionMetadata} —
+ * same `(division, changes) => Division` shape — but LaTeX has no
+ * representation for PreTeXt's separate `label` attribute, so `label` is
+ * accepted (to keep the same `changes` shape) and ignored.
  */
 export function updateLatexDivisionMetadata(
-  content: string,
-  changes: { title?: string; xmlId?: string | null; type?: DivisionType },
-): string {
-  let out = content;
+  division: Division,
+  changes: {
+    title?: string;
+    type?: DivisionType;
+    xmlId?: string | null;
+    label?: string | null;
+  },
+): Division {
+  let content = division.content;
   if (changes.type !== undefined) {
-    out = out.replace(
+    content = content.replace(
       LEADING_LATEX_DIVISION_MACRO,
       `$1\\${changes.type}$2`,
     );
   }
   if (changes.title !== undefined) {
-    out = updateLatexSectionTitle(out, changes.title);
+    content = updateLatexSectionTitle(content, changes.title);
   }
   if (changes.xmlId !== undefined) {
-    out = out.replace(
+    content = content.replace(
       /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\})(\s*\\label\{[^}]*\})?/,
       (_full, header: string) =>
         changes.xmlId == null || changes.xmlId === ""
@@ -758,7 +765,13 @@ export function updateLatexDivisionMetadata(
           : `${header}\\label{${changes.xmlId}}`,
     );
   }
-  return out;
+  return {
+    ...division,
+    content,
+    title: changes.title ?? division.title,
+    type: changes.type ?? division.type,
+    xmlId: changes.xmlId || division.xmlId,
+  };
 }
 
 /**
