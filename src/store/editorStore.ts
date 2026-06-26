@@ -29,7 +29,12 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import type { Asset, AssetKind, FeedbackSubmission, SourceFormat } from "../types/editor";
 import type { Division, DivisionType } from "../types/sections";
 import type { EditDraft } from "../components/toc/types";
-import { getSectionAttributes, sanitizeXmlId } from "../sectionUtils";
+import {
+  getSectionAttributes,
+  extractLatexSectionLabel,
+  extractMarkdownDivisionMetadata,
+  sanitizeXmlId,
+} from "../sectionUtils";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -409,7 +414,23 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     // TOC inline edit form
     startSectionEdit: (section) => {
-      const { xmlId, label } = getSectionAttributes(section.content);
+      // Each format stores its xml:id/label differently: Markdown in YAML
+      // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
+      // PreTeXt `label` attribute), and PreTeXt as the wrapper element's
+      // attributes. Markdown/LaTeX fall back to the record id when their source
+      // carries none yet, so the field shows the division's current identity.
+      const { xmlId, label } =
+        section.sourceFormat === "markdown"
+          ? extractMarkdownDivisionMetadata(section.content) ?? {
+              xmlId: section.xmlId,
+              label: "",
+            }
+          : section.sourceFormat === "latex"
+          ? {
+              xmlId: extractLatexSectionLabel(section.content) || section.xmlId,
+              label: "",
+            }
+          : getSectionAttributes(section.content);
       set({
         editingId: section.xmlId,
         editDraft: {
@@ -426,13 +447,13 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       if (editingId && editDraft) {
         const division = (divisions ?? []).find((d) => d.xmlId === editingId);
 
-        // For PreTeXt divisions the `xml:id` is structural identity: it must be
-        // a non-empty, unique NCName because it's the target of every
-        // `<plus:* ref="..."/>` placeholder. Validate before committing so an
-        // empty or duplicate id can never break the project; keep the form open
-        // on failure. Non-PreTeXt divisions don't carry an editable id.
+        // A division's `xml:id` is structural identity: it must be a non-empty,
+        // unique NCName because it's the target of every `<plus:* ref="..."/>`
+        // placeholder. Validate before committing so an empty or duplicate id
+        // can never break the project; keep the form open on failure. Every
+        // format now carries it (LaTeX spells it as the `\section`'s `\label`).
         let xmlId: string | null = null;
-        if (division && division.sourceFormat === "pretext") {
+        if (division) {
           const sanitized = sanitizeXmlId(editDraft.xmlId);
           if (!sanitized) {
             window.alert(

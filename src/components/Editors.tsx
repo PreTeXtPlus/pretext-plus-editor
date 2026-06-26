@@ -25,7 +25,6 @@ import type {
 import type { Division, DivisionType } from "../types/sections";
 import {
   createNewSection,
-  rewrapSection,
   normalizeSelfClosingRefs,
   parseDivisionRefsWithTypes,
   createDivisionWithId,
@@ -34,6 +33,10 @@ import {
   assembleFullProjectSource,
   extractDivisionMetadata,
   extractLatexDivisionTitle,
+  updateLatexDivisionMetadata,
+  latexDivisionToTaggedPretext,
+  extractMarkdownDivisionMetadata,
+  updateMarkdownDivisionMetadata,
   findDivisionParent,
   renameDivisionRef,
   updateSectionMetadata,
@@ -412,22 +415,49 @@ const EditorsInner = (props: EditorsInnerProps) => {
     changes: DivisionChanges,
   ) => {
     const division = divisions.find((d) => d.xmlId === xmlId);
-    // Non-PreTeXt (or unknown) divisions don't represent xml:id/type in their
-    // source — just patch the record and notify the host.
-    if (!division || division.sourceFormat !== "pretext") {
+    // Every source format now carries its structural metadata in its own source
+    // — the PreTeXt wrapper element, the Markdown YAML frontmatter, or the LaTeX
+    // `\section`/`\label` commands — so they all share the rewrite/parent-sync
+    // path below. Only a missing division falls back to a bare record patch.
+    if (!division) {
       applyDivisionUpdate(xmlId, changes);
       return;
     }
 
-    // 1. Rewrite this division's own source so its wrapper attributes match.
-    const updated = updateSectionMetadata(division, changes);
+    // 1. Rewrite this division's own source so its metadata matches.
+    let updated: Division;
+    if (division.sourceFormat === "markdown") {
+      updated = updateMarkdownDivisionMetadata(division, changes);
+    } else if (division.sourceFormat === "latex") {
+      // The header command is renamed to match the new type (`\section{` →
+      // `\worksheet{`), and the title/xml:id are written into the header/`\label`.
+      // LaTeX has no representation for PreTeXt's separate `label` attribute, so
+      // that change is tracked on the record only. The type is also tracked on
+      // the record so the parent's ref placeholder stays in sync.
+      const newContent = updateLatexDivisionMetadata(division.content, {
+        title: changes.title,
+        xmlId: changes.xmlId,
+        type: changes.type,
+      });
+      updated = {
+        ...division,
+        content: newContent,
+        title: changes.title ?? division.title,
+        type: changes.type ?? division.type,
+        xmlId: changes.xmlId || division.xmlId,
+      };
+    } else {
+      updated = updateSectionMetadata(division, changes);
+    }
     const newXmlId = updated.xmlId;
     if (updated.content !== division.content) {
       // Emit keyed on the OLD id — before the record is renamed in step 2.
       emitContentChange(
         division.xmlId,
-        normalizeSelfClosingRefs(updated.content),
-        "pretext",
+        division.sourceFormat === "pretext"
+          ? normalizeSelfClosingRefs(updated.content)
+          : updated.content,
+        division.sourceFormat,
       );
     }
 
@@ -477,10 +507,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
     props.onDivisionSelect?.(xmlId);
   };
 
-  // Lazily convert the active division's source to PreTeXt for the convert
-  // dialog.  Only computed when the active division is non-PreTeXt.
+  // The active division's source converted to a complete, correctly-typed
+  // PreTeXt element. Markdown's frontmatter already yields a full element; LaTeX
+  // is converted and tagged with its authored type (latexDivisionToTaggedPretext).
+  // `undefined` when the division is PreTeXt (no conversion) or conversion fails
+  // (so the convert action is disabled and the preview falls back).
   const divisionConvertedPretext = useMemo(() => {
     if (!activeDivision || activeDivisionFormat === "pretext") return undefined;
+    if (activeDivisionFormat === "latex") {
+      return latexDivisionToTaggedPretext(activeDivision) ?? undefined;
+    }
     const result = derivePretextContent(divisionActiveSource, activeDivisionFormat);
     return result.pretextError ? undefined : result.pretextSource;
   }, [activeDivision, activeDivisionFormat, divisionActiveSource]);
@@ -516,6 +552,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
             { xmlId: activeDivision.xmlId, label: meta.label || null },
           ).content,
         );
+      }
+    } else if (activeDivisionFormat === "markdown") {
+      // The frontmatter is locked in the code editor, but re-assert the
+      // canonical xml:id back into it anyway so the division's identity can
+      // never be broken from here (e.g. by a paste over the locked region).
+      const meta = extractMarkdownDivisionMetadata(wrapped);
+      if (meta && meta.xmlId !== activeDivision.xmlId) {
+        wrapped = updateMarkdownDivisionMetadata(
+          { ...activeDivision, content: wrapped },
+          { xmlId: activeDivision.xmlId },
+        ).content;
       }
     }
 
@@ -554,7 +601,39 @@ const EditorsInner = (props: EditorsInnerProps) => {
           }
         }
       }
-    } else if (activeDivisionFormat === "latex" && activeDivision.type === "section") {
+    } else if (activeDivisionFormat === "markdown") {
+      // Markdown's structural metadata lives in its frontmatter and its title in
+      // the leading `# heading`; re-derive them so the TOC stays in sync. The
+      // frontmatter is locked, so in practice only the title changes from the
+      // editor, but a type change is kept in sync with the parent ref defensively.
+      const meta = extractMarkdownDivisionMetadata(wrapped);
+      if (meta) {
+        applyDivisionUpdate(activeDivision.xmlId, {
+          title: meta.title,
+          type: meta.type,
+          label: meta.label || null,
+        });
+
+        if (meta.type !== activeDivision.type) {
+          const parent = findDivisionParent(divisions, activeDivision.xmlId);
+          if (parent) {
+            const newParentContent = renameDivisionRef(
+              parent.content,
+              activeDivision.xmlId,
+              activeDivision.xmlId,
+              meta.type,
+            );
+            if (newParentContent !== parent.content) {
+              emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+            }
+          }
+        }
+      }
+    } else if (activeDivisionFormat === "latex") {
+      // The `\section` header (and thus the title) is locked in the code editor,
+      // so this normally only re-asserts the existing title; `\begin{section}`
+      // env-style divisions aren't locked, so it keeps their title in sync.
+      // Returns null for headerless intro/conclusion bodies, leaving title as-is.
       const latexTitle = extractLatexDivisionTitle(wrapped);
       if (latexTitle !== null) {
         applyDivisionUpdate(activeDivision.xmlId, { title: latexTitle });
@@ -839,13 +918,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // still contains unresolved refs to its children produces invalid PreTeXt
   // and a build failure. `divisionConvertedPretext` is already kept up to
   // date for non-PreTeXt divisions (which are leaves and never contain refs).
-  const divisionTaggedXml = activeDivision
-    ? activeDivisionFormat === "pretext"
-      ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
-      : divisionConvertedPretext !== undefined
-      ? `<${activeDivision.type} xml:id="${activeDivision.xmlId}">\n<title>${activeDivision.title}</title>\n\n${divisionConvertedPretext}\n</${activeDivision.type}>`
-      : undefined
-    : undefined;
+  const divisionTaggedXml = !activeDivision
+    ? undefined
+    : activeDivisionFormat === "pretext"
+    ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
+    : // Markdown and LaTeX both convert to a complete `<type xml:id="...">`
+      // element (see `divisionConvertedPretext`), so the conversion is used
+      // as-is; `undefined` when it failed.
+      divisionConvertedPretext;
 
   const previewContent =
     activeDivision && divisionTaggedXml !== undefined
@@ -878,17 +958,21 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const handleConvertToPretext = () => {
     if (!activeDivision || !divisionConvertedPretext) return;
     const base = createNewSection();
-    const wrappedContent = normalizeSelfClosingRefs(
-      rewrapSection(divisionConvertedPretext, activeDivision.type),
+    // Both Markdown and LaTeX convert to a complete tagged element, so the
+    // conversion becomes the new PreTeXt division's content directly; reset its
+    // xml:id to a fresh one so the copy doesn't collide with the still-present
+    // source-format division.
+    const newDiv: Division = updateSectionMetadata(
+      {
+        id: base.xmlId,
+        xmlId: base.xmlId,
+        title: activeDivision.title,
+        type: activeDivision.type,
+        sourceFormat: "pretext",
+        content: normalizeSelfClosingRefs(divisionConvertedPretext),
+      },
+      { xmlId: base.xmlId },
     );
-    const newDiv: Division = {
-      id: base.xmlId,
-      xmlId: base.xmlId,
-      title: activeDivision.title,
-      type: activeDivision.type,
-      sourceFormat: "pretext",
-      content: wrappedContent,
-    };
     applyDivisionAdd(newDiv);
   };
 
@@ -915,9 +999,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
           : undefined
       }
       onShowFullSource={() => openModal("isFullSourceOpen")}
-      onRequestWrapperEdit={
-        activeDivisionFormat === "pretext" ? handleRequestWrapperEdit : undefined
-      }
+      // Every format now locks its structural lines (the PreTeXt wrapper tag,
+      // the Markdown frontmatter, the LaTeX `\section` header) and double-clicks
+      // them open the division's properties form in the TOC. The code editor
+      // only fires this when a locked leading line is actually present, so it's
+      // safe to wire up for all formats.
+      onRequestWrapperEdit={handleRequestWrapperEdit}
     />
   );
 

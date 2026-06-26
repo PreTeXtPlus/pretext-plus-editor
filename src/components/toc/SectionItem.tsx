@@ -38,6 +38,13 @@ const SectionItem = ({
 }: SectionItemProps) => {
   const isEditing = editDraft !== null;
 
+  // Introduction/conclusion divisions never carry a `<title>` in source, so
+  // show their type name (e.g. "Introduction") rather than "Untitled".
+  const untitledFallback =
+    division.type === "introduction" || division.type === "conclusion"
+      ? TYPE_FULL_LABELS[division.type]
+      : null;
+
   return (
     <li
       className={[
@@ -70,9 +77,9 @@ const SectionItem = ({
           title={TYPE_FULL_LABELS[division.type] ?? division.type}
         >
           <span className="pretext-plus-editor__toc-title">
-            {division.title || <em>Untitled</em>}
+            {division.title || untitledFallback || <em>Untitled</em>}
           </span>
-          {!isLatex && division.xmlId && (
+          {division.xmlId && (
             <span className="pretext-plus-editor__toc-xmlid">
               {division.xmlId}
             </span>

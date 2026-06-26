@@ -643,20 +643,38 @@ export function ensureLatexSectionWrapper(
 }
 
 /**
+ * Matches a leading LaTeX division-header command — `\section{`, `\worksheet{`,
+ * `\reading-questions{`, etc. — at the very start of a division's source.
+ *
+ * The macro name mirrors the PreTeXt division type (so `\worksheet{…}` reads as,
+ * and is converted to, a `<worksheet>`), which is why hyphens are allowed even
+ * though they aren't valid in a raw LaTeX command name — the header is only ever
+ * rewritten from the TOC, never hand-typed. `\begin`/`\end` are excluded so the
+ * environment style (`\begin{section}…\end{section}`) isn't mistaken for a
+ * command-style header.
+ *
+ * Capture groups: 1 = leading whitespace, 2 = `*?{` (so the `*` of a starred
+ * variant and the opening brace are preserved on rewrite).
+ */
+const LEADING_LATEX_DIVISION_MACRO =
+  /^(\s*)\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*(\*?\{)/;
+
+/**
  * Replace (or insert) the section title in a LaTeX section string.
  *
- * - For `\section{…}` style: updates the command argument.
+ * - For command style (`\section{…}`, `\worksheet{…}`, …): updates the header
+ *   command's argument.
  * - For `\begin{section}` style: updates the `\title{…}` inside.
  */
 export function updateLatexSectionTitle(
   content: string,
   newTitle: string,
 ): string {
-  if (/\\section[*]?\{/.test(content)) {
-    return content.replace(
-      /^(\\section\*?\{)[^}]*/,
-      (_, prefix) => `${prefix}${newTitle}`,
-    );
+  // Group 1 captures the leading whitespace + `\macro*?{`; the title argument
+  // (`[^}]*`, up to the closing brace) is replaced.
+  const headerArg = /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{)[^}]*/;
+  if (headerArg.test(content)) {
+    return content.replace(headerArg, (_, prefix) => `${prefix}${newTitle}`);
   }
   if (content.includes("\\begin{section}")) {
     if (/\\title\{/.test(content)) {
@@ -671,19 +689,105 @@ export function updateLatexSectionTitle(
 }
 
 /**
- * Derive a LaTeX section's title directly from its header — the code
+ * Derive a LaTeX division's title directly from its header — the code
  * editor's source-of-truth content — mirroring the two header styles
  * {@link updateLatexSectionTitle} writes. Returns `null` when no header is
  * found (introduction/conclusion have none), so callers leave title as-is.
  */
 export function extractLatexDivisionTitle(content: string): string | null {
-  const sectionMatch = /^\\section\*?\{([^}]*)\}/.exec(content);
-  if (sectionMatch) return sectionMatch[1].trim();
+  const headerMatch =
+    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{([^}]*)\}/.exec(content);
+  if (headerMatch) return headerMatch[1].trim();
   if (content.includes("\\begin{section}")) {
     const titleMatch = /\\title\{([^}]*)\}/.exec(content);
     if (titleMatch) return titleMatch[1].trim();
   }
   return null;
+}
+
+/**
+ * Extract the `\label{…}` that immediately follows a LaTeX division's header
+ * command — the LaTeX spelling of a division's `xml:id`, since
+ * `@pretextbook/latex-pretext` maps `\label` → `xml:id`.  Only the header's
+ * label is read (a `\label` inside the body is ignored).  Returns `""` when no
+ * header label is present.
+ */
+export function extractLatexSectionLabel(content: string): string {
+  const m =
+    /^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\}\s*\\label\{([^}]*)\}/.exec(
+      content,
+    );
+  return m?.[1]?.trim() ?? "";
+}
+
+/**
+ * Update a LaTeX division header's type, title, and/or `xml:id` in place.
+ *
+ * - `type` rewrites the header command name (`\section{` → `\worksheet{`) so the
+ *   source reads as the division it represents.
+ * - `title` rewrites the header command's argument.
+ * - `xmlId` rewrites the `\label{…}` directly after the header — inserting it
+ *   when absent, removing it when `null`/empty.
+ *
+ * Omit a key (or pass `undefined`) to leave it unchanged.  Only the
+ * command-style header is handled — the style the code editor freezes and the
+ * TOC form exposes for editing.  This is the LaTeX analogue of
+ * {@link updateSectionMetadata}, but LaTeX has no representation for PreTeXt's
+ * separate `label` attribute, so only `xml:id` (the `\label`) is carried.
+ */
+export function updateLatexDivisionMetadata(
+  content: string,
+  changes: { title?: string; xmlId?: string | null; type?: DivisionType },
+): string {
+  let out = content;
+  if (changes.type !== undefined) {
+    out = out.replace(
+      LEADING_LATEX_DIVISION_MACRO,
+      `$1\\${changes.type}$2`,
+    );
+  }
+  if (changes.title !== undefined) {
+    out = updateLatexSectionTitle(out, changes.title);
+  }
+  if (changes.xmlId !== undefined) {
+    out = out.replace(
+      /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\})(\s*\\label\{[^}]*\})?/,
+      (_full, header: string) =>
+        changes.xmlId == null || changes.xmlId === ""
+          ? header
+          : `${header}\\label{${changes.xmlId}}`,
+    );
+  }
+  return out;
+}
+
+/**
+ * Convert a LaTeX division's source to PreTeXt by passing the visible LaTeX
+ * straight to `@pretextbook/latex-pretext` and using its output as-is.
+ *
+ * A content division's header (`\section{…}\label{…}`, `\worksheet{…}`, …)
+ * converts to its own complete `<type xml:id="…"><title>…>` element, so the
+ * conversion is used exactly as produced — if a header doesn't convert
+ * correctly, that surfaces here to be fixed in the converter rather than worked
+ * around. Root divisions (`book`/`article`/`slideshow`) hold a whole document
+ * body that converts to a sequence of elements, so it is wrapped in the root
+ * element (whose title/`xml:id` aren't expressed in the LaTeX body).
+ *
+ * Returns `null` when the conversion fails, so callers can disable the convert
+ * action / fall back.
+ */
+export function latexDivisionToTaggedPretext(
+  division: Pick<Division, "content" | "type" | "xmlId" | "title">,
+): string | null {
+  const { pretextSource, pretextError } = derivePretextContent(
+    division.content,
+    "latex",
+  );
+  if (pretextError || pretextSource === undefined) return null;
+  if (ROOT_DIVISION_TYPES.has(division.type)) {
+    return `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${pretextSource}\n</${division.type}>`;
+  }
+  return pretextSource;
 }
 
 /** Create a new blank LaTeX section as a `Division`. */
@@ -1014,6 +1118,150 @@ export function updateChapterMetadata(
   } catch {
     return chapterXml;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Markdown frontmatter utilities
+// ---------------------------------------------------------------------------
+
+/**
+ * Markdown divisions are stored as real markdown files: a leading YAML
+ * frontmatter block carrying the structural metadata followed by the markdown
+ * body.  The frontmatter keys are `division` (the PreTeXt element type),
+ * `xml:id`, and `label`.  `@pretextbook/remark-pretext` turns the whole file —
+ * frontmatter included — into the proper `<type xml:id="..." label="...">`
+ * element, so (unlike PreTeXt divisions) the wrapper element never appears in
+ * storage.  The division's title lives in the body as its leading `# heading`.
+ */
+
+/** Matches a leading `---` ... `---` YAML frontmatter block. */
+const MARKDOWN_FRONTMATTER_RE =
+  /^\uFEFF?[ \t]*---[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Parse the leading frontmatter block of a markdown division into its
+ * structural metadata and remaining body.  Returns `null` when no well-formed
+ * frontmatter block is present (common mid-edit), so callers can skip rather
+ * than clobber metadata with junk.
+ */
+export function parseMarkdownFrontmatter(content: string): {
+  type: DivisionType;
+  xmlId: string;
+  label: string;
+  body: string;
+} | null {
+  const match = MARKDOWN_FRONTMATTER_RE.exec(content);
+  if (!match) return null;
+  const body = content.slice(match[0].length);
+  let type = "section";
+  let xmlId = "";
+  let label = "";
+  for (const rawLine of match[1].split(/\r?\n/)) {
+    const kv = /^[ \t]*(xml:id|division|label)[ \t]*:[ \t]*(.*)$/.exec(rawLine);
+    if (!kv) continue;
+    const value = kv[2].trim().replace(/^["']|["']$/g, "");
+    if (kv[1] === "division") type = value;
+    else if (kv[1] === "xml:id") xmlId = value;
+    else label = value;
+  }
+  return { type: (type || "section") as DivisionType, xmlId, label, body };
+}
+
+/** Build a `---`-fenced frontmatter block for a markdown division. */
+export function buildMarkdownFrontmatter(meta: {
+  type: DivisionType;
+  xmlId: string;
+  label: string;
+}): string {
+  const lines = [`division: ${meta.type}`, `xml:id: ${meta.xmlId}`];
+  if (meta.label) lines.push(`label: ${meta.label}`);
+  return `---\n${lines.join("\n")}\n---`;
+}
+
+/** Extract a markdown division's leading `# heading` text, or `null` if none. */
+export function deriveMarkdownTitle(body: string): string | null {
+  const m = /^[ \t]*#[ \t]+(.*)$/m.exec(body);
+  return m ? m[1].trim() : null;
+}
+
+/** Replace (or insert) the leading `# heading` of a markdown body. */
+function setMarkdownHeading(body: string, title: string): string {
+  const m = /^[ \t]*#[ \t]+.*$/m.exec(body);
+  if (m) {
+    return body.slice(0, m.index) + `# ${title}` + body.slice(m.index + m[0].length);
+  }
+  return `# ${title}\n\n${body.replace(/^\s+/, "")}`;
+}
+
+/**
+ * Derive a markdown division's title, type, `xml:id`, and `label` directly from
+ * its source — the frontmatter for the structural metadata and the leading
+ * `# heading` for the title.  Markdown analogue of {@link extractDivisionMetadata};
+ * returns `null` when the frontmatter is absent/malformed (both common
+ * mid-edit), so callers can skip the update rather than clobber metadata.
+ */
+export function extractMarkdownDivisionMetadata(content: string): {
+  title: string;
+  type: DivisionType;
+  xmlId: string;
+  label: string;
+} | null {
+  const parsed = parseMarkdownFrontmatter(content);
+  if (!parsed) return null;
+  return {
+    title: deriveMarkdownTitle(parsed.body) ?? "",
+    type: parsed.type,
+    xmlId: parsed.xmlId,
+    label: parsed.label,
+  };
+}
+
+/**
+ * Update the title, type (`division`), `xml:id`, and `label` of a markdown
+ * division.  Structural metadata is rewritten in the frontmatter block; a title
+ * change rewrites the body's leading `# heading`.  Markdown analogue of
+ * {@link updateSectionMetadata} (which is XML-only and would wrongly inject a
+ * `<title>` element).  Pass `null`/empty for `label` to clear it; omit a key to
+ * leave it unchanged.  The `xml:id` is never cleared — it is the division's
+ * identity — so an empty value falls back to the record's existing id.
+ */
+export function updateMarkdownDivisionMetadata(
+  division: Division,
+  changes: {
+    title?: string;
+    type?: DocumentSectionType;
+    xmlId?: string | null;
+    label?: string | null;
+  },
+): Division {
+  const parsed = parseMarkdownFrontmatter(division.content);
+  const body0 = parsed ? parsed.body : division.content;
+  const curType = parsed?.type ?? division.type;
+  const curXmlId = parsed?.xmlId ?? division.xmlId;
+  const curLabel = parsed?.label ?? "";
+
+  const newType = (changes.type ?? curType) as DivisionType;
+  const effectiveXmlId =
+    (changes.xmlId === undefined ? curXmlId : changes.xmlId ?? "") ||
+    division.xmlId;
+  const newLabel = changes.label === undefined ? curLabel : changes.label ?? "";
+
+  const body =
+    changes.title !== undefined ? setMarkdownHeading(body0, changes.title) : body0;
+
+  const content = `${buildMarkdownFrontmatter({
+    type: newType,
+    xmlId: effectiveXmlId,
+    label: newLabel,
+  })}\n${body}`;
+
+  return {
+    ...division,
+    title: changes.title ?? division.title,
+    type: newType,
+    xmlId: effectiveXmlId,
+    content,
+  };
 }
 
 const PRETEXT_HEADER_TAGS: ReadonlySet<string> = new Set(["title", "docinfo"]);
@@ -1617,17 +1865,22 @@ function resolveDivisionXml(
   let xml: string;
   if (division.sourceFormat === "pretext") {
     xml = division.content;
-  } else {
-    const inner =
-      division.sourceFormat === "latex"
-        ? stripLatexSectionWrapper(division.content, division.type)
-        : stripSectionWrapper(division.content);
+  } else if (division.sourceFormat === "markdown") {
+    // A markdown division is a full markdown file (frontmatter + body); the
+    // converter emits the complete `<type xml:id="..." label="...">` element
+    // from the frontmatter, so the content is converted as-is with no wrapper
+    // to strip or re-add here.
     const { pretextSource, pretextError } = derivePretextContent(
-      inner,
-      division.sourceFormat,
+      division.content,
+      "markdown",
     );
-    const body = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
-    xml = `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${body}\n</${division.type}>`;
+    xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
+  } else {
+    // LaTeX: convert the source and tag it with the division's authored type
+    // (the `\label` becomes the `xml:id`) — see latexDivisionToTaggedPretext.
+    xml =
+      latexDivisionToTaggedPretext(division) ??
+      `<!-- conversion error: ${division.xmlId} -->`;
   }
 
   if (division.sourceFormat !== "pretext") return xml;
@@ -1793,6 +2046,16 @@ export function normalizeDivisionsOnLoad(
   const wrapperType: DivisionType = projectType === "book" ? "book" : "article";
 
   return divisions.map((division) => {
+    if (division.sourceFormat === "markdown") {
+      // Markdown divisions keep their structural metadata in frontmatter; only
+      // backfill a blank title from the body's leading `# heading` so the TOC
+      // doesn't show "Untitled" for content that already names itself.
+      if (!division.title) {
+        const mdTitle = extractMarkdownDivisionMetadata(division.content)?.title;
+        if (mdTitle) return { ...division, title: mdTitle };
+      }
+      return division;
+    }
     if (division.sourceFormat !== "pretext") return division;
 
     const meta = extractDivisionMetadata(division.content);

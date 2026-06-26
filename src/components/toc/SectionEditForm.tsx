@@ -37,47 +37,51 @@ const SectionEditForm = ({
         autoFocus
       />
     </label>
+    {/* Type applies to every format: a LaTeX `\section` can still be authored
+        as any division type — the type is applied when its conversion is
+        tagged, not stored in the LaTeX source. */}
+    {!isRoot && (
+      <label className="pretext-plus-editor__toc-edit-field">
+        <span>Type</span>
+        <select
+          value={draft.type}
+          onChange={(e) =>
+            onDraftChange({
+              ...draft,
+              type: e.target.value as DocumentSectionType,
+            })
+          }
+        >
+          {REGULAR_DIVISION_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {TYPE_FULL_LABELS[t]}
+            </option>
+          ))}
+        </select>
+      </label>
+    )}
+    {/* xml:id applies to every format — for LaTeX it's written as the
+        `\section`'s `\label`. */}
+    <label className="pretext-plus-editor__toc-edit-field">
+      <span>xml:id</span>
+      <input
+        type="text"
+        value={draft.xmlId}
+        placeholder="unique identifier"
+        onChange={(e) => onDraftChange({ ...draft, xmlId: e.target.value })}
+      />
+    </label>
+    {/* LaTeX has no representation for PreTeXt's separate `label` attribute. */}
     {!isLatex && (
-      <>
-        {!isRoot && (
-          <label className="pretext-plus-editor__toc-edit-field">
-            <span>Type</span>
-            <select
-              value={draft.type}
-              onChange={(e) =>
-                onDraftChange({
-                  ...draft,
-                  type: e.target.value as DocumentSectionType,
-                })
-              }
-            >
-              {REGULAR_DIVISION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_FULL_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label className="pretext-plus-editor__toc-edit-field">
-          <span>xml:id</span>
-          <input
-            type="text"
-            value={draft.xmlId}
-            placeholder="unique identifier"
-            onChange={(e) => onDraftChange({ ...draft, xmlId: e.target.value })}
-          />
-        </label>
-        <label className="pretext-plus-editor__toc-edit-field">
-          <span>label</span>
-          <input
-            type="text"
-            value={draft.label}
-            placeholder="optional"
-            onChange={(e) => onDraftChange({ ...draft, label: e.target.value })}
-          />
-        </label>
-      </>
+      <label className="pretext-plus-editor__toc-edit-field">
+        <span>label</span>
+        <input
+          type="text"
+          value={draft.label}
+          placeholder="optional"
+          onChange={(e) => onDraftChange({ ...draft, label: e.target.value })}
+        />
+      </label>
     )}
     <div className="pretext-plus-editor__toc-edit-actions">
       <button

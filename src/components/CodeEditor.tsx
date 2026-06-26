@@ -49,6 +49,85 @@ export interface CodeEditorHandle {
   insertAtCursor: (text: string) => void;
 }
 
+/**
+ * Describes which lines of the model are structural (locked) for a given source
+ * format.  `editableRange` is the single multiline region the user may edit
+ * (Monaco `[startLine, startCol, endLine, endCol]`); every other line is
+ * locked.  `leadingLockedLines` is how many lines at the very top are locked —
+ * double-clicking any of them opens the division's properties form in the TOC.
+ * Returns `null` when nothing should be locked (e.g. mid-edit or unsupported
+ * format), leaving the whole document editable.
+ */
+function computeLockedRegion(
+  model: any,
+  sourceFormat: SourceFormat,
+): {
+  editableRange: [number, number, number, number];
+  lockedLines: number[];
+  leadingLockedLines: number;
+} | null {
+  const lineCount = model.getLineCount();
+
+  // PreTeXt: the wrapper element occupies its own first/last lines; lock both
+  // and keep the body in between editable.
+  if (sourceFormat === "pretext") {
+    if (lineCount < 3) return null;
+    return {
+      editableRange: [2, 1, lineCount - 1, model.getLineMaxColumn(lineCount - 1)],
+      lockedLines: [1, lineCount],
+      leadingLockedLines: 1,
+    };
+  }
+
+  // Markdown: lock a leading `---` ... `---` YAML frontmatter block (the
+  // division's type/xml:id/label), keeping the markdown body below it editable.
+  if (sourceFormat === "markdown") {
+    if (model.getLineContent(1).trim() !== "---") return null;
+    let fence = -1;
+    for (let ln = 2; ln <= lineCount; ln++) {
+      if (model.getLineContent(ln).trim() === "---") {
+        fence = ln;
+        break;
+      }
+    }
+    // Need a closing fence with at least one body line after it to leave an
+    // editable region; otherwise lock nothing (don't trap the user mid-edit).
+    if (fence === -1 || fence >= lineCount) return null;
+    const lockedLines: number[] = [];
+    for (let ln = 1; ln <= fence; ln++) lockedLines.push(ln);
+    return {
+      editableRange: [fence + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
+      lockedLines,
+      leadingLockedLines: fence,
+    };
+  }
+
+  // LaTeX: a `\section{title}\label{ref}` header (or `\worksheet{…}` etc. — the
+  // command is named after the division type) occupies the first line; lock it
+  // and keep the body below editable, so the type/title/xml:id are edited from
+  // the TOC instead. Other LaTeX divisions (introduction/conclusion comments,
+  // `\begin{section}` environments, a multi-section document root that opens
+  // with prose) have no single header line to freeze, so nothing is locked.
+  if (sourceFormat === "latex") {
+    // Need a body line after the header; otherwise locking line 1 would leave
+    // no editable region and trap the user.
+    if (lineCount < 2) return null;
+    if (
+      !/^\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{/.test(
+        model.getLineContent(1),
+      )
+    )
+      return null;
+    return {
+      editableRange: [2, 1, lineCount, model.getLineMaxColumn(lineCount)],
+      lockedLines: [1],
+      leadingLockedLines: 1,
+    };
+  }
+
+  return null;
+}
+
 /** Static Monaco editor options shared across all instances of this component. */
 const options = {
   automaticLayout: true,
@@ -93,6 +172,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const constrainedRef = useRef<ReturnType<typeof constrainedEditor> | null>(null);
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
+  // How many lines at the very top are locked (the wrapper tag for PreTeXt, the
+  // frontmatter block for Markdown). Double-clicking any of them opens the TOC
+  // properties form.
+  const leadingLockedLinesRef = useRef(0);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
@@ -152,12 +235,40 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     };
   }, []);
 
-  // Lock the division wrapper so its tag/xml:id can't be edited in the code
-  // editor: only the body (lines 2 .. n-1) stays editable. xml:id and type are
-  // structural identity and are edited from the Table of Contents instead.
-  // Recomputed whenever the content or source format changes. Only PreTeXt
-  // divisions have a wrapper to protect, and only when it occupies its own
-  // first/last lines with a body in between.
+  // When a PreTeXt division has collapsed to exactly its two wrapper-tag lines
+  // (`<section…>` directly above `</section>`), insert a blank line between them
+  // so the body always has at least one editable, non-locked line. The edit is
+  // flagged programmatic so it doesn't echo back to the host as a content change
+  // (it's a display normalization, not a user edit).
+  const ensurePretextBodyLine = (editor: any, model: any, monaco: any) => {
+    if (sourceFormat !== "pretext" || model.getLineCount() !== 2) return;
+    const open = model.getLineContent(1).trim();
+    const close = model.getLineContent(2).trim();
+    if (!open.startsWith("<") || open.startsWith("</") || open.endsWith("/>")) {
+      return;
+    }
+    if (!/^<\/[A-Za-z][\w.:-]*\s*>$/.test(close)) return;
+
+    isProgrammaticUpdateRef.current = true;
+    const endCol = model.getLineMaxColumn(1);
+    editor.executeEdits("ensure-body-line", [
+      {
+        range: new monaco.Range(1, endCol, 1, endCol),
+        text: "\n",
+        forceMoveMarkers: true,
+      },
+    ]);
+    queueMicrotask(() => {
+      isProgrammaticUpdateRef.current = false;
+    });
+  };
+
+  // Lock the division's structural metadata so it can't be edited in the code
+  // editor: the body stays editable, but the type/xml:id/label are edited from
+  // the Table of Contents instead. For PreTeXt this is the wrapper tag on the
+  // first/last lines; for Markdown it's the leading YAML frontmatter block.
+  // Recomputed whenever the content or source format changes; see
+  // {@link computeLockedRegion} for the per-format geometry.
   const applyConstraints = () => {
     const editor = editorRef.current;
     const monaco = monacoRef.current;
@@ -171,30 +282,35 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       model.disposeRestrictions();
     }
 
-    const lineCount = model.getLineCount();
-    const lockable = sourceFormat === "pretext" && lineCount >= 3;
-    lockedRef.current = lockable;
+    // A PreTeXt division whose body is emptied collapses to just its locked
+    // wrapper tags (`<section…>` / `</section>`) on adjacent lines. With no line
+    // between them there's nowhere unlocked to type — and `computeLockedRegion`
+    // bails (`lineCount < 3`), dropping the wrapper protection entirely. Insert a
+    // blank middle line so the wrapper stays locked and there is always a clean,
+    // editable line in between to add content back into.
+    ensurePretextBodyLine(editor, model, monaco);
 
-    if (lockable) {
+    const region = computeLockedRegion(model, sourceFormat);
+    lockedRef.current = region !== null;
+    leadingLockedLinesRef.current = region?.leadingLockedLines ?? 0;
+
+    if (region) {
       instance.addRestrictionsTo(model, [
-        {
-          range: [2, 1, lineCount - 1, model.getLineMaxColumn(lineCount - 1)],
-          allowMultiline: true,
-        },
+        { range: region.editableRange, allowMultiline: true },
       ]);
     }
 
-    // Cosmetic: dim the locked first/last lines so they read as structural.
+    // Cosmetic: dim the locked lines so they read as structural.
     if (typeof editor.createDecorationsCollection === "function") {
       if (!lockedDecorationsRef.current) {
         lockedDecorationsRef.current = editor.createDecorationsCollection();
       }
-      if (!lockable) {
+      if (!region) {
         lockedDecorationsRef.current.clear();
       } else {
         const hoverMessage = {
           value:
-            "The wrapper tag and xml:id are structural — edit them from the Table of Contents.",
+            "These properties are structural — edit them from the Table of Contents.",
         };
         // `className` + `isWholeLine` paints a full-width tint *behind* the text;
         // `inlineClassName` is merged onto the token spans themselves so we can
@@ -204,23 +320,19 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
           isWholeLine: true,
           className: "pretext-plus-editor__locked-line",
           inlineClassName: "pretext-plus-editor__locked-line-text",
+          // Never let the gray inline style grow onto text typed at a locked
+          // line's edges — otherwise content re-added next to the wrapper tags
+          // inherits the structural styling and looks (and reads) as locked.
+          stickiness:
+            monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
           hoverMessage,
         };
-        lockedDecorationsRef.current.set([
-          {
-            range: new monaco.Range(1, 1, 1, model.getLineMaxColumn(1)),
+        lockedDecorationsRef.current.set(
+          region.lockedLines.map((ln) => ({
+            range: new monaco.Range(ln, 1, ln, model.getLineMaxColumn(ln)),
             options: lockedLineOptions,
-          },
-          {
-            range: new monaco.Range(
-              lineCount,
-              1,
-              lineCount,
-              model.getLineMaxColumn(lineCount),
-            ),
-            options: lockedLineOptions,
-          },
-        ]);
+          })),
+        );
       }
     }
   };
@@ -280,15 +392,18 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     });
     updateUndoRedoState();
 
-    // Double-clicking the locked wrapper's first line (the opening tag) opens
-    // the division's properties editor in the TOC, since the tag/xml:id can't
-    // be edited in place. `event.detail === 2` marks the dblclick mousedown.
+    // Double-clicking any locked leading line (the PreTeXt opening tag or the
+    // Markdown frontmatter block) opens the division's properties editor in the
+    // TOC, since the type/xml:id/label can't be edited in place.
+    // `event.detail === 2` marks the dblclick mousedown.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {
+      const line = e?.target?.position?.lineNumber;
       if (
         lockedRef.current &&
         e?.event?.detail === 2 &&
-        e?.target?.position?.lineNumber === 1
+        typeof line === "number" &&
+        line <= leadingLockedLinesRef.current
       ) {
         onRequestWrapperEditRef.current?.();
       }

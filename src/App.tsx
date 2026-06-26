@@ -79,14 +79,15 @@ const DEMO_DIVISIONS: Division[] = [
     title: "A LaTeX Section",
     type: "section",
     sourceFormat: "latex",
-    // LaTeX divisions are stored as raw LaTeX. The leading `\section{...}` line
-    // is the structural wrapper: the code editor strips it for editing and
-    // `rewrapLatexSection` restores it on save. Body content is converted to
-    // PreTeXt for the preview.
-    content: `\\section{A LaTeX Section}
+    // LaTeX divisions are stored as raw LaTeX. The leading
+    // `\section{title}\label{xml:id}` line is the structural header: the code
+    // editor locks it (double-click it to edit the title/xml:id from the TOC),
+    // and the `\label` becomes the division's `xml:id` on conversion. Body
+    // content is converted to PreTeXt for the preview.
+    content: `\\section{A LaTeX Section}\\label{sec-latex}
 
-This section is authored in \\LaTeX{} rather than PreTeXt. The editor strips the
-leading \\verb|\\section{...}| line while you edit and restores it on save.
+This section is authored in \\LaTeX{} rather than PreTeXt. The editor locks the
+leading \\verb|\\section{...}| line; edit its title and xml:id from the TOC.
 
 Inline math like $E = mc^2$ and display math both convert to PreTeXt:
 \\[
@@ -104,11 +105,15 @@ Inline math like $E = mc^2$ and display math both convert to PreTeXt:
     title: "A Markdown Section",
     type: "section",
     sourceFormat: "markdown",
-    // Markdown divisions reuse the PreTeXt strip/rewrap path, so the body is
-    // stored wrapped in <section>. stripSectionWrapper parses this XML and hands
-    // the raw Markdown to the converter. Keep the body free of < and & so it
-    // stays well-formed XML text.
-    content: `<section xml:id="sec-markdown">
+    // Markdown divisions are real markdown files: a YAML frontmatter block
+    // (division/xml:id/label — shown locked in the code editor) followed by the
+    // markdown body. The remark-pretext converter turns the whole file into the
+    // proper <section xml:id="...">…</section> element.
+    content: `---
+division: section
+xml:id: sec-markdown
+---
+
 # A Markdown Section
 
 This section is authored in **Markdown**, which is auto-converted to PreTeXt.
@@ -119,8 +124,7 @@ You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^
 - A second item to show structure.
 
 1. Ordered lists work too.
-2. And convert on preview.
-</section>`,
+2. And convert on preview.`,
   },
   {
     id: "demo-orphan",
@@ -276,7 +280,12 @@ const MARKDOWN_DEMO_DIVISIONS: Division[] = [
     title: "Testing Markdown Source Mode",
     type: "article",
     sourceFormat: "markdown",
-    content: `# Markdown Demo
+    content: `---
+division: article
+xml:id: markdown-demo
+---
+
+# Markdown Demo
 
 This demo lets you test the **markdown** source mode in the code editor.
 
