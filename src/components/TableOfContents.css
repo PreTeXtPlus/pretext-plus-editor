@@ -578,9 +578,23 @@
   padding: 0 0 4px;
 }
 
+.pretext-plus-editor__toc-asset-button {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  overflow: hidden;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .pretext-plus-editor__toc-asset-img {
   height: 30px;
-  cursor: pointer;
 }
 
 .pretext-plus-editor__toc-asset-item {

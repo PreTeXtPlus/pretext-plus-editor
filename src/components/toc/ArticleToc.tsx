@@ -402,21 +402,23 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                         );
                         return (
                           <li key={ref} className="pretext-plus-editor__toc-asset-item">
-                            {asset && (
-                              <img src={asset.url} className="pretext-plus-editor__toc-asset-img"
-                              onClick={() => openAssetEditor(kind, ref)}/>
-                            )}
                             <button
                               type="button"
-                              className="pretext-plus-editor__toc-asset-name"
+                              className="pretext-plus-editor__toc-asset-button"
                               onClick={() => openAssetEditor(kind, ref)}
                               title="Edit asset content"
                             >
-                              <span className="pretext-plus-editor__toc-asset-label">
-                                {asset?.name ?? ref}
-                              </span>
-                              <span className="pretext-plus-editor__toc-asset-filename">
-                                {ref}
+                              {asset && (
+                                <img src={asset.url} className="pretext-plus-editor__toc-asset-img"
+                                onClick={() => openAssetEditor(kind, ref)}/>
+                              )}
+                              <span className="pretext-plus-editor__toc-asset-name">
+                                <span className="pretext-plus-editor__toc-asset-label">
+                                  {asset?.name ?? ref}
+                                </span>
+                                <span className="pretext-plus-editor__toc-asset-filename">
+                                  {ref}
+                                </span>
                               </span>
                             </button>
                             <button
