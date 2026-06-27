@@ -374,9 +374,25 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
   const setDocinfo = useEditorStore((s) => s.setDocinfo);
+  const editingId = useEditorStore((s) => s.editingId);
+  const editingIsNew = useEditorStore((s) => s.editingIsNew);
 
   const fullPreviewRef = useRef<FullPreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
+
+  // A brand-new division's properties form (title/format/id) opens immediately
+  // after creation — see handleDivisionAdd. Once the author closes it (Save or
+  // Cancel), drop focus straight into the code editor so they can start typing
+  // the body without an extra click.
+  const wasEditingNewRef = useRef(false);
+  useEffect(() => {
+    if (editingId && editingIsNew) {
+      wasEditingNewRef.current = true;
+    } else if (wasEditingNewRef.current) {
+      wasEditingNewRef.current = false;
+      codeEditorRef.current?.focus();
+    }
+  }, [editingId, editingIsNew]);
 
   // ── Active division (derived from the store's authoritative pool) ─────────
   const rootDivision = findRootDivision(divisions, props.rootDivisionId);
@@ -751,7 +767,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const taken = new Set(buildProjectAssetView(divisions, projectAssets).map((r) => r.ref));
     const newRef = makeUniqueAssetRef(asset.ref, taken);
     const file = await props.onAssetFetchUrl(asset.url);
-    const uploaded = await props.onAssetUpload(file);
+    // `file.name` comes from the source URL (often an opaque, server-generated
+    // path segment, e.g. a storage key) rather than anything human-readable.
+    // Hosts commonly derive the asset's persisted name/ref from the uploaded
+    // file's name, so rename it to `newRef` before handing it to
+    // `onAssetUpload` — otherwise that opaque name leaks through as the
+    // duplicate's default name/ref instead of the friendly "-copy" we just
+    // computed.
+    const extension = /\.[^./\\]+$/.exec(file.name)?.[0] ?? "";
+    const renamedFile = new File([file], `${newRef}${extension}`, { type: file.type });
+    const uploaded = await props.onAssetUpload(renamedFile);
     const copy: Asset = {
       ...uploaded,
       ref: newRef,

@@ -1,13 +1,21 @@
-import { useEffect } from "react";
-import type { DocumentSectionType } from "../../types/sections";
+import { useEffect, useRef } from "react";
 import type { SourceFormat } from "../../types/editor";
 import type { DivisionType } from "../../types/sections";
+import { slugifyTitle } from "../../sectionUtils";
 import {
+  DIVISION_ID_PREFIXES,
   type EditDraft,
   getSelectableDivisionTypes,
   SOURCE_FORMAT_LABELS,
   TYPE_FULL_LABELS,
 } from "./types";
+
+/** `<type-abbrev>-<title-slug>`, e.g. "ws-my-title" for a new worksheet. */
+function deriveXmlId(type: DivisionType, title: string): string {
+  const prefix = DIVISION_ID_PREFIXES[type] ?? "sec";
+  const slug = slugifyTitle(title);
+  return slug ? `${prefix}-${slug}` : prefix;
+}
 
 interface SectionEditFormProps {
   draft: EditDraft;
@@ -33,6 +41,14 @@ const SectionEditForm = ({
 }: SectionEditFormProps) => {
   const selectableTypes = getSelectableDivisionTypes(parentType);
 
+  // A brand-new division starts with an opaque generated id (e.g.
+  // "sec-m5x2k9-a3f8z1"). Until the author edits the Id field directly, keep
+  // it in sync with the title they're typing instead — far more useful than
+  // a random string. Edit the Id field once and it's theirs: we stop
+  // overwriting it. Only relevant for `isNew`; an existing division's id is
+  // never auto-derived from its title.
+  const idFollowsTitle = useRef(isNew);
+
   // If the parent's type changed (or this is an existing division whose type
   // no longer fits its parent) the current draft type may not be one of the
   // options below — the <select> can't reflect that (there's no matching
@@ -53,7 +69,14 @@ const SectionEditForm = ({
       <input
         type="text"
         value={draft.title}
-        onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
+        onChange={(e) => {
+          const title = e.target.value;
+          onDraftChange(
+            idFollowsTitle.current
+              ? { ...draft, title, xmlId: deriveXmlId(draft.type, title) }
+              : { ...draft, title },
+          );
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") onCommit();
           if (e.key === "Escape") onCancel();
@@ -92,12 +115,14 @@ const SectionEditForm = ({
         <span>Type</span>
         <select
           value={draft.type}
-          onChange={(e) =>
-            onDraftChange({
-              ...draft,
-              type: e.target.value as DocumentSectionType,
-            })
-          }
+          onChange={(e) => {
+            const type = e.target.value as DivisionType;
+            onDraftChange(
+              idFollowsTitle.current
+                ? { ...draft, type, xmlId: deriveXmlId(type, draft.title) }
+                : { ...draft, type },
+            );
+          }}
         >
           {selectableTypes.map((t) => (
             <option key={t} value={t}>
@@ -115,7 +140,10 @@ const SectionEditForm = ({
         type="text"
         value={draft.xmlId}
         placeholder="unique identifier"
-        onChange={(e) => onDraftChange({ ...draft, xmlId: e.target.value })}
+        onChange={(e) => {
+          idFollowsTitle.current = false;
+          onDraftChange({ ...draft, xmlId: e.target.value });
+        }}
       />
     </label>
     {/* LaTeX has no representation for PreTeXt's separate `label` attribute. */}

@@ -959,6 +959,22 @@ export function sanitizeXmlId(raw: string): string {
 }
 
 /**
+ * Derive a slug-style `xml:id` from a division's title — lowercased, with
+ * whitespace/punctuation collapsed to single hyphens and trimmed from the
+ * ends. Used to keep a brand-new, not-yet-saved division's id in sync with
+ * its title as the author types, in place of the opaque generated id it
+ * starts with.
+ */
+export function slugifyTitle(title: string): string {
+  const slug = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return sanitizeXmlId(slug);
+}
+
+/**
  * Derive a division's title, type, `xml:id`, and `label` directly from its
  * full PreTeXt source — the code editor's content, wrapper tag included.
  * Used to keep the TOC in sync when the user edits these directly in the
@@ -1157,7 +1173,7 @@ export function updateChapterMetadata(
  * Markdown divisions are stored as real markdown files: a leading YAML
  * frontmatter block carrying the structural metadata followed by the markdown
  * body.  The frontmatter keys are `division` (the PreTeXt element type),
- * `xml:id`, and `label`.  `@pretextbook/remark-pretext` turns the whole file —
+ * `xmlid`, and `label`.  `@pretextbook/remark-pretext` turns the whole file —
  * frontmatter included — into the proper `<type xml:id="..." label="...">`
  * element, so (unlike PreTeXt divisions) the wrapper element never appears in
  * storage.  The division's title lives in the body as its leading `# heading`.
@@ -1186,11 +1202,16 @@ export function parseMarkdownFrontmatter(content: string): {
   let xmlId = "";
   let label = "";
   for (const rawLine of match[1].split(/\r?\n/)) {
-    const kv = /^[ \t]*(xml:id|division|label)[ \t]*:[ \t]*(.*)$/.exec(rawLine);
+    // `@pretextbook/remark-pretext` reads the id from a `xmlid` key (a YAML key
+    // can't contain a colon), but accept the legacy `xml:id` spelling too so
+    // divisions saved before the fix still parse.
+    const kv = /^[ \t]*(xmlid|xml:id|division|label)[ \t]*:[ \t]*(.*)$/.exec(
+      rawLine,
+    );
     if (!kv) continue;
     const value = kv[2].trim().replace(/^["']|["']$/g, "");
     if (kv[1] === "division") type = value;
-    else if (kv[1] === "xml:id") xmlId = value;
+    else if (kv[1] === "xmlid" || kv[1] === "xml:id") xmlId = value;
     else label = value;
   }
   return { type: (type || "section") as DivisionType, xmlId, label, body };
@@ -1202,7 +1223,7 @@ export function buildMarkdownFrontmatter(meta: {
   xmlId: string;
   label: string;
 }): string {
-  const lines = [`division: ${meta.type}`, `xml:id: ${meta.xmlId}`];
+  const lines = [`division: ${meta.type}`, `xmlid: ${meta.xmlId}`];
   if (meta.label) lines.push(`label: ${meta.label}`);
   return `---\n${lines.join("\n")}\n---`;
 }
@@ -1556,10 +1577,7 @@ export function createDivisionWithId(
 ): Division {
   const tag = type.charAt(0).toUpperCase() + type.slice(1);
   const title = `New ${tag}`;
-  const content =
-    sourceFormat === "pretext"
-      ? `<${type} xml:id="${xmlId}">\n<title>${title}</title>\n\n<p></p>\n\n</${type}>`
-      : `\\section{${title}}\n\n`;
+  const content = createDivisionContent(type, sourceFormat, title, xmlId);
   return { id: xmlId, xmlId, title, type, sourceFormat, content };
 }
 
@@ -1578,7 +1596,10 @@ export function createDivisionContent(
 ): string {
   if (sourceFormat === "latex") {
     if (type === "introduction" || type === "conclusion") return `% ${title}\n\n`;
-    return `\\${type}{${title}}\n\n`;
+    // Emit the `\label{…}` (LaTeX's spelling of `xml:id`) immediately after the
+    // header, matching updateLatexDivisionMetadata, so a freshly created
+    // division already carries its id rather than only gaining it on first edit.
+    return `\\${type}{${title}}\\label{${xmlId}}\n\n`;
   }
   if (sourceFormat === "markdown") {
     return `${buildMarkdownFrontmatter({ type, xmlId, label: "" })}\n# ${title}\n\n`;

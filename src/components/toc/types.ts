@@ -34,6 +34,32 @@ export const TYPE_LABELS: Record<string, string> = {
   "reading-questions": "RQ",
 };
 
+/**
+ * Short, lowercase, NCName-safe prefix for a division type, used to seed a
+ * brand-new division's `xml:id` (e.g. "ws-my-title" for a worksheet) — see
+ * SectionEditForm's title-to-id sync.
+ */
+export const DIVISION_ID_PREFIXES: Record<DivisionType, string> = {
+  book: "bk",
+  article: "art",
+  slideshow: "slides",
+  part: "pt",
+  chapter: "ch",
+  section: "sec",
+  subsection: "subsec",
+  subsubsection: "subsubsec",
+  introduction: "intro",
+  conclusion: "conc",
+  worksheet: "ws",
+  handout: "ho",
+  exercises: "ex",
+  references: "ref",
+  glossary: "gloss",
+  solutions: "sol",
+  "reading-questions": "rq",
+  paragraphs: "para",
+};
+
 export const TYPE_FULL_LABELS: Record<string, string> = {
   book: "Book",
   article: "Article",

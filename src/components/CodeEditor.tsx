@@ -48,6 +48,8 @@ interface CodeEditorProps {
 export interface CodeEditorHandle {
   /** Insert `text` at the current cursor position (or replace the selection). */
   insertAtCursor: (text: string) => void;
+  /** Move keyboard focus into the editor, ready for typing. */
+  focus: () => void;
 }
 
 /**
@@ -240,6 +242,9 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         { range: selection, text, forceMoveMarkers: true },
       ]);
       editor.focus();
+    },
+    focus: () => {
+      editorRef.current?.focus();
     },
   }), []);
 
