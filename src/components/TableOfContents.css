@@ -275,7 +275,8 @@
 
 .pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-actions,
 .pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions,
-.pretext-plus-editor__toc-asset-item:hover .pretext-plus-editor__toc-actions {
+.pretext-plus-editor__toc-asset-item:hover .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-asset-item--busy .pretext-plus-editor__toc-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -655,6 +656,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.pretext-plus-editor__toc-asset-item--busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Shown in place of the actions menu while an asset is being duplicated.
+   Reuses the shared `pretext-plus-editor-spin` keyframes (FullPreview.css). */
+.pretext-plus-editor__toc-asset-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #10b981;
+  border-radius: 50%;
+  animation: pretext-plus-editor-spin 0.8s linear infinite;
 }
 
 .pretext-plus-editor__toc-asset-item .pretext-plus-editor__toc-action-btn {

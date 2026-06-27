@@ -514,8 +514,47 @@
   margin-top: 0.25rem;
 }
 
+/* ── Asset editor layout ─────────────────────────── */
+/* The editor is sized to its content in JS (see AssetEditModal), so the whole
+   modal scrolls as one — no nested editor scrollbar. It must therefore keep its
+   explicit height instead of flex-filling like the base dialog editor. */
 .pretext-plus-editor__am-edit-editor {
-  min-height: 220px;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.pretext-plus-editor__am-edit-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Two-column header above the code editor */
+.pretext-plus-editor__am-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+  flex-shrink: 0;
+}
+
+.pretext-plus-editor__am-edit-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+/* Let the preview breathe in the edit modal's left column. */
+.pretext-plus-editor__am-edit-col .pretext-plus-editor__am-url-preview {
+  max-height: 200px;
+  margin-top: 0;
+}
+
+@media (max-width: 700px) {
+  .pretext-plus-editor__am-edit-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
 }
 
 .pretext-plus-editor__am-error {

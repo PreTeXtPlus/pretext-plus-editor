@@ -1356,6 +1356,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
+            onDuplicateAsset={canDuplicateAsset ? handleAssetDuplicate : undefined}
             onAssetAdded={handleAssetAdded}
             onResolveRef={renameAssetRefEverywhere}
             onReplaceAsset={handleAssetReplaceCommit}
@@ -1369,6 +1370,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
         ) : null}
         {editingAsset ? (
           <AssetEditModal
+            // Key by the edited asset so switching targets (e.g. opening the
+            // original right after Duplicate auto-opens the copy) remounts the
+            // modal and re-seeds its form fields from the new asset, instead of
+            // carrying the previous asset's edits over and writing them to the
+            // wrong record on Save.
+            key={`${editingAsset.kind}:${editingAsset.ref}`}
             asset={editingAsset}
             projectAssets={projectAssets ?? []}
             onClose={closeAssetEditor}
@@ -1378,8 +1385,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 : undefined
             }
             onDuplicate={
+              // Don't close first: keep the modal open (busy) through the
+              // re-fetch/upload round-trip, then handleAssetDuplicate re-opens
+              // it on the copy — the key above makes that a clean remount.
               canDuplicateAsset
-                ? (asset) => { closeAssetEditor(); handleAssetDuplicate(asset); }
+                ? (asset) => handleAssetDuplicate(asset)
                 : undefined
             }
             onSave={async (asset, prevRef) => {

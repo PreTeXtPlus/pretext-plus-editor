@@ -41,6 +41,13 @@ export interface AssetManagerModalProps {
   onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
   /** Remove an asset from the project. */
   onRemoveAsset?: (asset: Asset) => void;
+  /**
+   * Duplicate an asset under a fresh ref (same behaviour as Duplicate in the
+   * asset editor). May be async; the row shows a busy state until it settles,
+   * then the manager closes as the editor opens on the new copy. When omitted,
+   * the Duplicate control is hidden.
+   */
+  onDuplicateAsset?: (asset: Asset) => void | Promise<void>;
   /** Notify that an asset now exists in the project (optimistic pool add). */
   onAssetAdded: (asset: Asset) => void;
   /** Rewrite in-document `<plus:KIND ref="oldRef"/>` placeholders to `newRef`. */
@@ -72,6 +79,7 @@ const AssetManagerModal = ({
   onFetchUrl,
   onCreateDoenet,
   onRemoveAsset,
+  onDuplicateAsset,
   onAssetAdded,
   onResolveRef,
   onReplaceAsset,
@@ -121,6 +129,9 @@ const AssetManagerModal = ({
 
   // Copy feedback (keyed by `kind:ref`)
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  // Row whose Duplicate round-trip (fetch + re-upload) is in flight (keyed by `kind:ref`).
+  const [duplicatingKey, setDuplicatingKey] = useState<string | null>(null);
 
   // Success panel shown after a normal-mode add (asset added + embed copied).
   const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
@@ -353,6 +364,7 @@ const AssetManagerModal = ({
 
     const renderRow = (row: AssetRow) => {
       const ck = `${row.kind}:${row.ref}`;
+      const isDuplicating = duplicatingKey === ck;
       const onOpen = () => {
         if (row.status === "unlinked") {
           // Switches this same modal into resolve mode (resolveTarget wins in render).
@@ -399,8 +411,29 @@ const AssetManagerModal = ({
               onClick={() => handleCopy(row.kind, row.ref)}
               title={`Copy ${embedFor(row.kind, row.ref)}`}
             >
-              {copiedKey === ck ? "Copied!" : "Copy"}
+              {copiedKey === ck ? "Copied!" : "Copy embed code"}
             </button>
+            {onDuplicateAsset && row.asset?.url && (
+              <button
+                type="button"
+                className="pretext-plus-editor__am-action-btn"
+                disabled={isDuplicating}
+                onClick={async () => {
+                  setDuplicatingKey(ck);
+                  try {
+                    // On success the editor opens on the new copy; close the
+                    // manager so the two dialogs don't stack (mirrors Edit).
+                    await onDuplicateAsset(row.asset!);
+                    onClose();
+                  } catch {
+                    setDuplicatingKey(null);
+                  }
+                }}
+                title="Create a copy of this asset under a new reference"
+              >
+                {isDuplicating ? "Duplicating…" : "Duplicate"}
+              </button>
+            )}
             {onRemoveAsset && row.asset && (
               <button
                 type="button"

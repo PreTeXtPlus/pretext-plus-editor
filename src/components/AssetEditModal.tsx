@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Editor } from "@monaco-editor/react";
+import type { OnMount } from "@monaco-editor/react";
 import type { Asset } from "../types/editor";
 import "./dialog.css";
 import "./AssetManagerModal.css";
@@ -11,7 +12,13 @@ const editorOptions = {
   insertSpaces: true,
   tabSize: 2,
   padding: { top: 10, bottom: 10 },
+  // The editor grows to fit its content (see onMount) so it never shows its own
+  // scrollbar — the modal is the only thing that scrolls.
+  scrollBeyondLastLine: false,
 };
+
+/** Floor for the auto-sized editor so a short/empty asset still has room to type. */
+const MIN_EDITOR_HEIGHT = 160;
 
 export interface AssetEditModalProps {
   asset: Asset;
@@ -29,8 +36,11 @@ export interface AssetEditModalProps {
    * hidden.
    */
   onReplace?: (asset: Asset) => void;
-  /** Duplicate this asset under a fresh ref. When omitted, the button is hidden. */
-  onDuplicate?: (asset: Asset) => void;
+  /**
+   * Duplicate this asset under a fresh ref. When omitted, the button is hidden.
+   * May be async; the modal shows a busy state until it settles.
+   */
+  onDuplicate?: (asset: Asset) => void | Promise<void>;
 }
 
 const KIND_TAG: Record<Asset["kind"], string> = { image: "image", doenet: "interactive" };
@@ -48,8 +58,26 @@ const AssetEditModal = ({
   const [refValue, setRefValue] = useState(prevRef);
   const [sourceValue, setSourceValue] = useState(asset.source ?? "");
   const [isSaving, setIsSaving] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [editorHeight, setEditorHeight] = useState(MIN_EDITOR_HEIGHT);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  // When the modal opens, keep it scrolled to the top so the user sees the
+  // preview and fields first — not the code editor lower down.
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, []);
+
+  // Size the editor to its content so it never scrolls internally; the modal
+  // scrolls as a whole instead of nesting a second scrollbar.
+  const handleEditorMount: OnMount = (editor) => {
+    const sync = () =>
+      setEditorHeight(Math.max(MIN_EDITOR_HEIGHT, editor.getContentHeight()));
+    editor.onDidContentSizeChange(sync);
+    sync();
+  };
 
   const embedCode = `<plus:${asset.kind} ref="${refValue.trim() || prevRef}"/>`;
 
@@ -85,7 +113,22 @@ const AssetEditModal = ({
     }
   };
 
-  const busy = isSaving;
+  const handleDuplicate = async () => {
+    if (!onDuplicate) return;
+    setError(null);
+    setIsDuplicating(true);
+    try {
+      // On success the parent re-opens the editor on the new copy, which
+      // remounts this modal (see the `key` in Editors), so there's no need to
+      // clear the busy flag here — the instance is gone.
+      await onDuplicate(asset);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to duplicate asset.");
+      setIsDuplicating(false);
+    }
+  };
+
+  const busy = isSaving || isDuplicating;
   const showPreview = asset.kind === "image" && !!asset.url;
   const canReplace = asset.kind === "image" && !!onReplace;
 
@@ -112,65 +155,76 @@ const AssetEditModal = ({
           </button>
         </div>
 
-        <div className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single">
+        <div
+          ref={contentRef}
+          className="pretext-plus-editor__dialog-content pretext-plus-editor__dialog-content--single pretext-plus-editor__am-edit-content"
+        >
           <div className="pretext-plus-editor__dialog-section">
-            {showPreview && (
-              <img
-                src={asset.url}
-                alt={nameValue}
-                className="pretext-plus-editor__am-url-preview"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-              />
-            )}
+            <div className="pretext-plus-editor__am-edit-grid">
+              {/* Left column: preview, replace, embed code */}
+              <div className="pretext-plus-editor__am-edit-col">
+                {showPreview && (
+                  <img
+                    src={asset.url}
+                    alt={nameValue}
+                    className="pretext-plus-editor__am-url-preview"
+                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                  />
+                )}
 
-            {canReplace && (
-              <div className="pretext-plus-editor__am-replace-row">
-                <button
-                  type="button"
-                  className="pretext-plus-editor__am-action-btn"
-                  onClick={() => onReplace?.(asset)}
-                  disabled={busy}
-                  title="Choose or upload a different asset to use here"
-                >
-                  Replace image…
-                </button>
+                {canReplace && (
+                  <div className="pretext-plus-editor__am-replace-row">
+                    <button
+                      type="button"
+                      className="pretext-plus-editor__am-action-btn"
+                      onClick={() => onReplace?.(asset)}
+                      disabled={busy}
+                      title="Choose or upload a different asset to use here"
+                    >
+                      Replace image…
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
 
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-name">Name</label>
-            <input
-              id="am-edit-name"
-              type="text"
-              className="pretext-plus-editor__am-input"
-              value={nameValue}
-              onChange={(e) => setNameValue(e.target.value)}
-              disabled={busy}
-            />
+              {/* Right column: name and reference fields, then embed code */}
+              <div className="pretext-plus-editor__am-edit-col">
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-name">Name</label>
+                <input
+                  id="am-edit-name"
+                  type="text"
+                  className="pretext-plus-editor__am-input"
+                  value={nameValue}
+                  onChange={(e) => setNameValue(e.target.value)}
+                  disabled={busy}
+                />
 
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-ref">Reference</label>
-            <input
-              id="am-edit-ref"
-              type="text"
-              className="pretext-plus-editor__am-input"
-              value={refValue}
-              onChange={(e) => setRefValue(e.target.value)}
-              disabled={busy}
-            />
-            <p className="pretext-plus-editor__dialog-helper-copy">
-              Used in the embed code below. Changing it updates every reference to this
-              asset already in your document.
-            </p>
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-ref">Reference</label>
+                <input
+                  id="am-edit-ref"
+                  type="text"
+                  className="pretext-plus-editor__am-input"
+                  value={refValue}
+                  onChange={(e) => setRefValue(e.target.value)}
+                  disabled={busy}
+                />
+                <p className="pretext-plus-editor__dialog-helper-copy">
+                  Used in the embed code. Changing it updates every reference to this
+                  asset already in your document.
+                </p>
 
-            <div className="pretext-plus-editor__am-embed-row">
-              <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
-              <button
-                type="button"
-                className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
-                onClick={handleCopy}
-                title="Copy embed code to clipboard"
-              >
-                {copied ? "Copied!" : "Copy embed code"}
-              </button>
+                <div className="pretext-plus-editor__am-embed-row">
+                  <code className="pretext-plus-editor__am-embed-code">{embedCode}</code>
+                  <button
+                    type="button"
+                    className={`pretext-plus-editor__am-action-btn${copied ? " pretext-plus-editor__am-action-btn--done" : ""}`}
+                    onClick={handleCopy}
+                    title="Copy embed code to clipboard"
+                  >
+                    {copied ? "Copied!" : "Copy embed code"}
+                  </button>
+                </div>
+              </div>
             </div>
 
             <label className="pretext-plus-editor__dialog-label">Asset content</label>
@@ -178,13 +232,16 @@ const AssetEditModal = ({
               Inserted verbatim inside the generated <code>{`<${KIND_TAG[asset.kind]}>`}</code> element
               — e.g. <code>{"<shortdescription>...</shortdescription>"}</code>.
             </p>
-            <div className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor">
+            <div
+              className="pretext-plus-editor__dialog-editor pretext-plus-editor__am-edit-editor"
+              style={{ height: editorHeight }}
+            >
               <Editor
                 options={{ ...editorOptions, readOnly: busy }}
                 height="100%"
                 language="xml"
                 value={sourceValue}
-                onMount={(editor) => editor.focus()}
+                onMount={handleEditorMount}
                 onChange={(value) => setSourceValue(value ?? "")}
               />
             </div>
@@ -197,11 +254,11 @@ const AssetEditModal = ({
             <button
               type="button"
               className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary pretext-plus-editor__am-duplicate-btn"
-              onClick={() => onDuplicate(asset)}
+              onClick={handleDuplicate}
               disabled={busy}
               title="Create a copy of this asset under a new reference"
             >
-              Duplicate
+              {isDuplicating ? "Duplicating…" : "Duplicate"}
             </button>
           )}
           <button

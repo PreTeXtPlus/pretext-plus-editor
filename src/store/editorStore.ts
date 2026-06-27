@@ -101,7 +101,7 @@ export interface EditorCallbacks {
   /** Remove every `<plus:KIND ref/>` placeholder for an unresolved ref from source. */
   assetRefRemove?: (kind: AssetKind, ref: string) => void;
   /** Duplicate a project asset under a fresh ref (host persists + pool add). */
-  assetDuplicate?: (asset: Asset) => void;
+  assetDuplicate?: (asset: Asset) => void | Promise<void>;
   updateTitle: (title: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   insertContentAtCursor?: (content: string) => void;
@@ -243,8 +243,8 @@ export interface EditorStoreState {
   removeAsset: (asset: Asset) => void;
   /** Remove every placeholder for an unresolved `kind`+`ref` from the document. */
   removeAssetRefFromDocument: (kind: AssetKind, ref: string) => void;
-  /** Duplicate a project asset under a fresh ref. */
-  duplicateAsset: (asset: Asset) => void;
+  /** Duplicate a project asset under a fresh ref. Resolves when the host settles. */
+  duplicateAsset: (asset: Asset) => Promise<void>;
   /**
    * Replace the whole project-asset pool — e.g. after `onLoadAssets` resolves
    * with the server's fresh list. The server is authoritative at that point,
@@ -539,7 +539,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     closeAssetResolver: () => set({ assetResolveTarget: null }),
     removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
     removeAssetRefFromDocument: (kind, ref) => bag.cbs.assetRefRemove?.(kind, ref),
-    duplicateAsset: (asset) => bag.cbs.assetDuplicate?.(asset),
+    duplicateAsset: async (asset) => {
+      await bag.cbs.assetDuplicate?.(asset);
+    },
     setProjectAssets: (assets) => set({ projectAssets: assets }),
     addAssetToPool: (asset) =>
       set((s) => {

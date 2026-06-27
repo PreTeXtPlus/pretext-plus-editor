@@ -77,6 +77,22 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
 
   const [assetsExpanded, setAssetsExpanded] = useState(false);
 
+  // The ref of the asset currently being duplicated, so its row can show a
+  // spinner. Duplicate re-fetches and re-uploads the bytes (a network
+  // round-trip), and unlike the edit modal this sidebar action has no surface
+  // of its own to report progress on.
+  const [duplicatingRef, setDuplicatingRef] = useState<string | null>(null);
+
+  const handleDuplicateAsset = async (row: AssetRow) => {
+    if (!row.asset || duplicatingRef) return;
+    setDuplicatingRef(row.ref);
+    try {
+      await duplicateAsset(row.asset);
+    } finally {
+      setDuplicatingRef(null);
+    }
+  };
+
   // ── Expand/collapse: track which IDs are collapsed (empty = all open) ───────
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
 
@@ -211,7 +227,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     if (hasAssetDuplicate && row.asset) {
       items.push({
         label: "Duplicate asset",
-        onClick: () => duplicateAsset(row.asset!),
+        onClick: () => handleDuplicateAsset(row),
       });
     }
     if (row.status === "unlinked") {
@@ -477,6 +493,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                             "pretext-plus-editor__toc-asset-item",
                             row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
                             row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
+                            duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
                           ].filter(Boolean).join(" ")}
                         >
                           {row.asset?.url ? (
@@ -517,7 +534,16 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                             </span>
                           </button>
                           <div className="pretext-plus-editor__toc-actions">
-                            <DivisionMenu items={assetMenuItems(row)} />
+                            {duplicatingRef === row.ref ? (
+                              <span
+                                className="pretext-plus-editor__toc-asset-spinner"
+                                role="status"
+                                aria-label="Duplicating asset"
+                                title="Duplicating…"
+                              />
+                            ) : (
+                              <DivisionMenu items={assetMenuItems(row)} />
+                            )}
                           </div>
                         </li>
                       ))}
