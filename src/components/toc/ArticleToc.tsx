@@ -2,18 +2,18 @@ import { Fragment, useState } from "react";
 import type { Division } from "../../types/sections";
 import type { AssetKind } from "../../types/editor";
 import SectionItem from "./SectionItem";
+import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 
 import {
   buildDivisionTree,
   getOrphanRoots,
   insertDivisionRef,
   normalizeSelfClosingRefs,
-  parseAssetRefs,
   removeDivisionRef,
 } from "../../sectionUtils";
+import { buildProjectAssetView, type AssetRow } from "../../assetView";
 import { useEditorStore } from "../../store/hooks";
 import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
-//import DivisionMenu from "./DivisionMenu";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: () => void;
@@ -32,6 +32,11 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
   const insertAtCursor = useEditorStore((s) => s.insertAtCursor);
 
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
+  const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
+  const removeAsset = useEditorStore((s) => s.removeAsset);
+  const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
+  const duplicateAsset = useEditorStore((s) => s.duplicateAsset);
+  const hasAssetDuplicate = useEditorStore((s) => s.hasAssetDuplicate);
 
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setEditDraft = useEditorStore((s) => s.setEditDraft);
@@ -62,27 +67,13 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       ? getOrphanRoots(divisions, rootDivision.xmlId)
       : [];
 
-  // ── Asset refs — pooled across every division, deduplicated ────────────────
-  const assetRefs = (() => {
-    if (!divisions) return [] as ReturnType<typeof parseAssetRefs>;
-    const seen = new Set<string>();
-    const refs: ReturnType<typeof parseAssetRefs> = [];
-    for (const division of divisions) {
-      for (const ref of parseAssetRefs(division.content)) {
-        const key = `${ref.kind}:${ref.ref}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          refs.push(ref);
-        }
-      }
-    }
-    return refs;
-  })();
+  // ── Joined asset view — placeholders + project assets, with status ─────────
+  const assetView = buildProjectAssetView(divisions, projectAssets);
 
-  const groupedAssetRefs = VISIBLE_ASSET_KINDS.map((kind) => ({
+  const groupedAssetRows = VISIBLE_ASSET_KINDS.map((kind) => ({
     kind,
-    items: assetRefs.filter((a) => a.kind === kind),
-  })).filter((g) => g.items.length > 0);
+    rows: assetView.filter((r) => r.kind === kind),
+  })).filter((g) => g.rows.length > 0);
 
   const [assetsExpanded, setAssetsExpanded] = useState(false);
 
@@ -193,8 +184,68 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     );
   };
 
-  const handleInsertAsset = (kind: AssetKind, ref: string) => {
-    insertAtCursor(`<plus:${kind} ref="${ref}"/>`);
+  const getDivisionType = (xmlId: string | null) =>
+    (xmlId && divisions?.find((d) => d.xmlId === xmlId)?.type) || null;
+
+  // ── Asset row helpers ───────────────────────────────────────────────────────
+  const openAssetRow = (row: AssetRow) =>
+    row.status === "unlinked"
+      ? openAssetResolver(row.kind, row.ref)
+      : openAssetEditor(row.kind, row.ref);
+
+  const copyAssetEmbed = (kind: AssetKind, ref: string) => {
+    navigator.clipboard.writeText(`<plus:${kind} ref="${ref}"/>`).catch(() => {});
+  };
+
+  const assetMenuItems = (row: AssetRow): DivisionMenuItem[] => {
+    const items: DivisionMenuItem[] = [
+      {
+        label: row.status === "unlinked" ? "Link / create asset" : "Edit asset",
+        onClick: () => openAssetRow(row),
+      },
+      {
+        label: "Copy embed code",
+        onClick: () => copyAssetEmbed(row.kind, row.ref),
+      },
+    ];
+    if (hasAssetDuplicate && row.asset) {
+      items.push({
+        label: "Duplicate asset",
+        onClick: () => duplicateAsset(row.asset!),
+      });
+    }
+    if (row.status === "unlinked") {
+      items.push({
+        label: "Remove from document",
+        onClick: () => removeAssetRefFromDocument(row.kind, row.ref),
+        danger: true,
+      });
+    } else if (row.asset) {
+      items.push({
+        label: "Remove from project",
+        onClick: () => {
+          // Removing the asset alone would leave its placeholders behind (the
+          // row would just reappear as "needs asset"), so also strip every
+          // `<plus:KIND ref/>` for it from the document — mirroring how
+          // deleting a division also removes its references. Confirm first when
+          // it's actually placed, since that edits the source.
+          if (
+            row.inDocument &&
+            !window.confirm(
+              `Remove "${row.asset!.name}" from the project? This also deletes its ${
+                row.inDocument ? "reference(s)" : "reference"
+              } from the document.`,
+            )
+          ) {
+            return;
+          }
+          removeAsset(row.asset!);
+          removeAssetRefFromDocument(row.kind, row.ref);
+        },
+        danger: true,
+      });
+    }
+    return items;
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -281,6 +332,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
               },
             ]}
             isNew={editingId === node.division.xmlId && editingIsNew}
+            parentType={getDivisionType(node.parentXmlId)}
           />
         ))}
       </ul>
@@ -332,6 +384,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                         danger: true,
                       },
                     ]}
+                    parentType={null}
                   />
                   {isExpanded(orphan.xmlId) &&
                     subtree.map((node) => (
@@ -363,6 +416,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                             danger: true,
                           },
                         ]}
+                        parentType={getDivisionType(node.parentXmlId)}
                       />
                     ))}
                 </Fragment>
@@ -385,9 +439,9 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
               {assetsExpanded ? "▾" : "▸"}
             </span>
             <span>Assets</span>
-            {assetRefs.length > 0 && (
+            {assetView.length > 0 && (
               <span className="pretext-plus-editor__toc-assets-count">
-                {assetRefs.length}
+                {assetView.length}
               </span>
             )}
           </button>
@@ -395,9 +449,9 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
 
         {assetsExpanded && (
           <div className="pretext-plus-editor__toc-assets-body">
-            {assetRefs.length === 0 ? (
+            {assetView.length === 0 ? (
               <p className="pretext-plus-editor__toc-assets-empty">
-                No assets referenced in this document.{" "}
+                No assets in this project yet.{" "}
                 {onOpenAssetPicker && (
                   <button
                     type="button"
@@ -410,46 +464,63 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
               </p>
             ) : (
               <div className="pretext-plus-editor__toc-assets-groups">
-                {groupedAssetRefs.map(({ kind, items }) => (
+                {groupedAssetRows.map(({ kind, rows }) => (
                   <div key={kind}>
                     <div className="pretext-plus-editor__toc-assets-group-header">
                       {ASSET_KIND_LABELS[kind]}
                     </div>
                     <ul className="pretext-plus-editor__toc-assets-list">
-                      {items.map(({ ref }) => {
-                        const asset = projectAssets.find(
-                          (a) => a.kind === kind && a.ref === ref,
-                        );
-                        return (
-                          <li key={ref} className="pretext-plus-editor__toc-asset-item">
-                            {asset && (
-                              <img src={asset.url} className="pretext-plus-editor__toc-asset-img"
-                              onClick={() => openAssetEditor(kind, ref)}/>
-                            )}
-                            <button
-                              type="button"
-                              className="pretext-plus-editor__toc-asset-name"
-                              onClick={() => openAssetEditor(kind, ref)}
-                              title="Edit asset content"
+                      {rows.map((row) => (
+                        <li
+                          key={row.ref}
+                          className={[
+                            "pretext-plus-editor__toc-asset-item",
+                            row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
+                            row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
+                          ].filter(Boolean).join(" ")}
+                        >
+                          {row.asset?.url ? (
+                            <img
+                              src={row.asset.url}
+                              className="pretext-plus-editor__toc-asset-img"
+                              onClick={() => openAssetRow(row)}
+                            />
+                          ) : (
+                            <span
+                              className="pretext-plus-editor__toc-asset-img pretext-plus-editor__toc-asset-img--placeholder"
+                              onClick={() => openAssetRow(row)}
+                              title={row.status === "unlinked" ? "No asset — click to link" : undefined}
+                              aria-hidden="true"
                             >
-                              <span className="pretext-plus-editor__toc-asset-label">
-                                {asset?.name ?? ref}
-                              </span>
-                              <span className="pretext-plus-editor__toc-asset-filename">
-                                {ref}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              className="pretext-plus-editor__toc-action-btn"
-                              onClick={() => handleInsertAsset(kind, ref)}
-                              title={`Insert <plus:${kind} ref="${ref}"/> at cursor`}
-                            >
-                              Insert
-                            </button>
-                          </li>
-                        );
-                      })}
+                              {row.status === "unlinked" ? "⚠" : "🖼"}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="pretext-plus-editor__toc-asset-name"
+                            onClick={() => openAssetRow(row)}
+                            title={
+                              row.status === "unlinked"
+                                ? "No asset for this reference — click to link or create one"
+                                : "Edit asset"
+                            }
+                          >
+                            <span className="pretext-plus-editor__toc-asset-label">
+                              {row.asset?.name ?? row.ref}
+                            </span>
+                            <span className="pretext-plus-editor__toc-asset-filename">
+                              {row.status === "unlinked"
+                                ? `${row.ref} — needs asset`
+                                : row.status === "unused"
+                                  ? `${row.ref} — not placed`
+                                  : row.ref}
+                            </span>
+                          </button>
+                          <div className="pretext-plus-editor__toc-actions">
+                            <DivisionMenu items={assetMenuItems(row)} />
+                          </div>
+                        </li>
+                      ))}
                     </ul>
                   </div>
                 ))}

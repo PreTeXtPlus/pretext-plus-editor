@@ -96,6 +96,12 @@ export interface EditorCallbacks {
   divisionContentChange: (xmlId: string, content: string) => void;
   handleDivisionContentChange: (content: string | undefined) => void;
   assetInsert: (asset: Asset) => void;
+  /** Remove a project asset (optimistic pool drop + host persistence). */
+  assetRemove?: (asset: Asset) => void;
+  /** Remove every `<plus:KIND ref/>` placeholder for an unresolved ref from source. */
+  assetRefRemove?: (kind: AssetKind, ref: string) => void;
+  /** Duplicate a project asset under a fresh ref (host persists + pool add). */
+  assetDuplicate?: (asset: Asset) => void;
   updateTitle: (title: string) => void;
   feedbackSubmit?: (feedback: FeedbackSubmission) => void | Promise<void>;
   insertContentAtCursor?: (content: string) => void;
@@ -144,6 +150,9 @@ export interface EditorStoreState {
   /** True when the host passed `onFeedbackSubmit`. Controls whether feedback UI is shown. */
   hasFeedback: boolean;
 
+  /** True when the host passed `onAssetDuplicate`. Controls whether Duplicate is offered. */
+  hasAssetDuplicate: boolean;
+
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
@@ -164,6 +173,13 @@ export interface EditorStoreState {
 
   /** The asset currently open in the asset edit modal, identified by kind+ref. */
   editingAssetRef: { kind: AssetKind; ref: string } | null;
+
+  /**
+   * An unresolved placeholder the user is resolving — opens the asset manager
+   * in "resolve this ref" mode, where picking/uploading binds the result to
+   * this `kind`+`ref` instead of copying an embed code.
+   */
+  assetResolveTarget: { kind: AssetKind; ref: string } | null;
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -220,6 +236,15 @@ export interface EditorStoreState {
   /** Open the asset edit modal for the asset identified by `kind`+`ref`. */
   openAssetEditor: (kind: AssetKind, ref: string) => void;
   closeAssetEditor: () => void;
+  /** Open the asset manager in resolve mode for an unresolved `kind`+`ref`. */
+  openAssetResolver: (kind: AssetKind, ref: string) => void;
+  closeAssetResolver: () => void;
+  /** Remove a project asset (pool + host persistence). */
+  removeAsset: (asset: Asset) => void;
+  /** Remove every placeholder for an unresolved `kind`+`ref` from the document. */
+  removeAssetRefFromDocument: (kind: AssetKind, ref: string) => void;
+  /** Duplicate a project asset under a fresh ref. */
+  duplicateAsset: (asset: Asset) => void;
   /**
    * Replace the whole project-asset pool — e.g. after `onLoadAssets` resolves
    * with the server's fresh list. The server is authoritative at that point,
@@ -238,6 +263,13 @@ export interface EditorStoreState {
    * it if absent). Used when an asset's content/source is edited.
    */
   updateAssetInPool: (asset: Asset) => void;
+  /**
+   * Optimistically rename an asset's `ref`: drop the pool entry matching
+   * `kind`+`oldRef` and insert `newAsset` (which carries the new ref). Used when
+   * an asset's `ref` is edited — a plain `updateAssetInPool` can't match it
+   * because the kind+ref key has changed.
+   */
+  renameAssetInPool: (kind: AssetKind, oldRef: string, newAsset: Asset) => void;
   /** Optimistically remove the asset matching `asset` by kind+ref from the pool. */
   removeAssetFromPool: (asset: Asset) => void;
   updateTitle: (title: string) => void;
@@ -262,6 +294,7 @@ export type EditorSyncableState = Pick<
   | "canConvertToPretext"
   | "activeEditorSource"
   | "hasFeedback"
+  | "hasAssetDuplicate"
 >;
 
 // ── Factory ─────────────────────────────────────────────────────────────────
@@ -328,6 +361,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     canConvertToPretext: true,
     activeEditorSource: init.source,
     hasFeedback: false,
+    hasAssetDuplicate: false,
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: false,
@@ -344,6 +378,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     editDraft: null,
     editingIsNew: false,
     editingAssetRef: null,
+    assetResolveTarget: null,
 
     // ── Actions ────────────────────────────────────────────────────────────
     syncState: (partial) => set(partial),
@@ -500,6 +535,11 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     insertAtCursor: (content) => bag.cbs.insertContentAtCursor?.(content),
     openAssetEditor: (kind, ref) => set({ editingAssetRef: { kind, ref } }),
     closeAssetEditor: () => set({ editingAssetRef: null }),
+    openAssetResolver: (kind, ref) => set({ assetResolveTarget: { kind, ref } }),
+    closeAssetResolver: () => set({ assetResolveTarget: null }),
+    removeAsset: (asset) => bag.cbs.assetRemove?.(asset),
+    removeAssetRefFromDocument: (kind, ref) => bag.cbs.assetRefRemove?.(kind, ref),
+    duplicateAsset: (asset) => bag.cbs.assetDuplicate?.(asset),
     setProjectAssets: (assets) => set({ projectAssets: assets }),
     addAssetToPool: (asset) =>
       set((s) => {
@@ -513,6 +553,14 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         return base.some((a) => sameAssetRef(a, asset))
           ? { projectAssets: base.map((a) => (sameAssetRef(a, asset) ? asset : a)) }
           : { projectAssets: [...base, asset] };
+      }),
+    renameAssetInPool: (kind, oldRef, newAsset) =>
+      set((s) => {
+        const base = s.projectAssets ?? [];
+        const filtered = base.filter(
+          (a) => !(a.kind === kind && a.ref === oldRef) && !sameAssetRef(a, newAsset),
+        );
+        return { projectAssets: [...filtered, newAsset] };
       }),
     removeAssetFromPool: (asset) =>
       set((s) => ({

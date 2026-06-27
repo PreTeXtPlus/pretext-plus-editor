@@ -50,14 +50,18 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
   "reading-questions": "Reading Questions",
   introduction: "Introduction",
   conclusion: "Conclusion",
+  subsection: "Subsection",
+  subsubsection: "Subsubsection",
+  paragraphs: "Paragraphs",
 };
 
 /** Division types that can be freely reordered (not positionally constrained). */
 export const REGULAR_DIVISION_TYPES: DivisionType[] = [
-  "introduction",
   "part",
   "chapter",
   "section",
+  "subsection",
+  "subsubsection",
   "worksheet",
   "handout",
   "exercises",
@@ -65,12 +69,58 @@ export const REGULAR_DIVISION_TYPES: DivisionType[] = [
   "glossary",
   "solutions",
   "reading-questions",
-  "conclusion",
+  "paragraphs",
 ];
 
 /** Returns true for division types that can be freely reordered. */
 export function isRegularDivision(type: string): boolean {
   return type !== "introduction" && type !== "conclusion";
+}
+
+const FLEXIBLE_DIVISION_TYPES: DivisionType[] = [
+  "worksheet",
+  "handout",
+  "exercises",
+  "references",
+  "glossary",
+  "solutions",
+  "reading-questions",
+  "paragraphs",
+];
+
+/**
+ * Which division types may be placed as a direct child of a given parent
+ * division type. Not yet populated — add entries here as the nesting rules
+ * are defined (e.g. `book: ["part", "chapter"]`).
+ * A parent type with no entry falls back to every regular division type
+ * being selectable, so the dropdown is unrestricted until a rule exists.
+ */
+export const ALLOWED_CHILD_DIVISION_TYPES: Partial<
+  Record<DivisionType, DivisionType[]>
+> = {
+  book: ["part", "chapter"],
+  article: ["section", ...FLEXIBLE_DIVISION_TYPES],
+  slideshow: ["section"],
+  part: ["chapter"],
+  chapter: ["section", ...FLEXIBLE_DIVISION_TYPES],
+  section: ["subsection", ...FLEXIBLE_DIVISION_TYPES],
+  subsection: ["subsubsection", ...FLEXIBLE_DIVISION_TYPES],
+  subsubsection: [...FLEXIBLE_DIVISION_TYPES],
+  worksheet: ["paragraphs"],
+  handout: ["paragraphs"],
+};
+
+/**
+ * Returns the division types that should be offered in the "Type" dropdown
+ * for a division nested under `parentType`. `parentType` is `null` for
+ * divisions that aren't currently placed under any parent (e.g. unplaced
+ * orphans), in which case every regular type remains selectable.
+ */
+export function getSelectableDivisionTypes(
+  parentType: DivisionType | null,
+): DivisionType[] {
+  if (!parentType) return REGULAR_DIVISION_TYPES;
+  return ALLOWED_CHILD_DIVISION_TYPES[parentType] ?? REGULAR_DIVISION_TYPES;
 }
 
 /** Introduction must be first, conclusion must be last within a parent. */

@@ -177,6 +177,99 @@
   border-color: #f87171;
 }
 
+/* Clickable row-info button (opens the asset editor / resolver) */
+.pretext-plus-editor__am-row-info--btn {
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.pretext-plus-editor__am-row-info--btn:hover .pretext-plus-editor__am-row-name {
+  text-decoration: underline;
+}
+
+/* Status pill on a joined-view row */
+.pretext-plus-editor__am-status {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  background: #e2e8f0;
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.pretext-plus-editor__am-status--warn {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+/* Embed-code row (asset editor + add-success panel) */
+.pretext-plus-editor__am-embed-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.pretext-plus-editor__am-embed-code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #0f172a;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 4px 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+/* Add-success panel */
+.pretext-plus-editor__am-success {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.pretext-plus-editor__am-success-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #047857;
+  margin: 0 0 0.35rem;
+}
+
+.pretext-plus-editor__am-success-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Resolve-mode hint */
+.pretext-plus-editor__am-resolve-hint {
+  padding: 0 0.5rem 0.5rem;
+}
+
+/* Replace-image control in the asset editor */
+.pretext-plus-editor__am-replace-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.5rem;
+}
+
+/* Duplicate button sits on the left of the footer, away from Cancel/Save */
+.pretext-plus-editor__am-duplicate-btn {
+  margin-right: auto;
+}
+
 /* ── Kind picker (step 1 of Add Asset) ───────────── */
 .pretext-plus-editor__am-kind-picker {
   display: flex;

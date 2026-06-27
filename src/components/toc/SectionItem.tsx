@@ -1,4 +1,4 @@
-import type { Division } from "../../types/sections";
+import type { Division, DivisionType } from "../../types/sections";
 import SectionEditForm from "./SectionEditForm";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 import { type EditDraft, TYPE_FULL_LABELS } from "./types";
@@ -19,6 +19,8 @@ interface SectionItemProps {
   /** True while `editDraft` belongs to a division that hasn't been saved yet. */
   isNew?: boolean;
   isRoot?: boolean;
+  /** Type of the division this one is (or would be) nested under; `null` if unplaced. */
+  parentType?: DivisionType | null;
 }
 
 const SectionItem = ({
@@ -36,6 +38,7 @@ const SectionItem = ({
   menuItems,
   isNew = false,
   isRoot = false,
+  parentType = null,
 }: SectionItemProps) => {
   const isEditing = editDraft !== null;
 
@@ -97,6 +100,7 @@ const SectionItem = ({
           draft={editDraft}
           isNew={isNew}
           isRoot={isRoot}
+          parentType={parentType}
           onDraftChange={onDraftChange}
           onCommit={onEditCommit}
           onCancel={onEditCancel}

@@ -274,7 +274,8 @@
 }
 
 .pretext-plus-editor__toc-item:hover .pretext-plus-editor__toc-actions,
-.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions {
+.pretext-plus-editor__toc-item--active .pretext-plus-editor__toc-actions,
+.pretext-plus-editor__toc-asset-item:hover .pretext-plus-editor__toc-actions {
   opacity: 1;
   pointer-events: auto;
 }
@@ -323,6 +324,13 @@
 
 .pretext-plus-editor__toc-div-menu-popup--above {
   bottom: calc(100% + 3px);
+}
+
+/* Portalled to <body> and positioned in viewport coordinates so it escapes any
+   `overflow` scroll container (e.g. the assets list) that would clip it. */
+.pretext-plus-editor__toc-div-menu-popup--portal {
+  position: fixed;
+  z-index: 1000;
 }
 
 .pretext-plus-editor__toc-div-menu-item {
@@ -581,6 +589,27 @@
 .pretext-plus-editor__toc-asset-img {
   height: 30px;
   cursor: pointer;
+}
+
+.pretext-plus-editor__toc-asset-img--placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  font-size: 0.85rem;
+  border-radius: 4px;
+  background: #eef2f7;
+  color: #94a3b8;
+}
+
+.pretext-plus-editor__toc-asset-item--unlinked .pretext-plus-editor__toc-asset-img--placeholder {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.pretext-plus-editor__toc-asset-item--unlinked .pretext-plus-editor__toc-asset-filename {
+  color: #b45309;
 }
 
 .pretext-plus-editor__toc-asset-item {

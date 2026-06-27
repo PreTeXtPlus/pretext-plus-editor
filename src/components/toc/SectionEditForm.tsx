@@ -1,8 +1,10 @@
+import { useEffect } from "react";
 import type { DocumentSectionType } from "../../types/sections";
 import type { SourceFormat } from "../../types/editor";
+import type { DivisionType } from "../../types/sections";
 import {
   type EditDraft,
-  REGULAR_DIVISION_TYPES,
+  getSelectableDivisionTypes,
   SOURCE_FORMAT_LABELS,
   TYPE_FULL_LABELS,
 } from "./types";
@@ -13,6 +15,8 @@ interface SectionEditFormProps {
   isNew?: boolean;
   /** The root division's type (book/article/slideshow) is structural and not user-editable. */
   isRoot?: boolean;
+  /** The type of the division this one is (or would be) nested under; `null` if unplaced. Determines which types are offered below. */
+  parentType?: DivisionType | null;
   onDraftChange: (draft: EditDraft) => void;
   onCommit: () => void;
   onCancel: () => void;
@@ -22,10 +26,26 @@ const SectionEditForm = ({
   draft,
   isNew = false,
   isRoot = false,
+  parentType = null,
   onDraftChange,
   onCommit,
   onCancel,
 }: SectionEditFormProps) => {
+  const selectableTypes = getSelectableDivisionTypes(parentType);
+
+  // If the parent's type changed (or this is an existing division whose type
+  // no longer fits its parent) the current draft type may not be one of the
+  // options below — the <select> can't reflect that (there's no matching
+  // <option>), so the browser silently displays the first option while
+  // `draft.type` is left stale. Snap the draft to a valid type so what's
+  // displayed always matches what Save will persist.
+  useEffect(() => {
+    if (isRoot) return;
+    if (selectableTypes.length > 0 && !selectableTypes.includes(draft.type)) {
+      onDraftChange({ ...draft, type: selectableTypes[0] });
+    }
+  }, [draft, isRoot, onDraftChange, selectableTypes]);
+
   return (
   <div className="pretext-plus-editor__toc-edit-form">
     <label className="pretext-plus-editor__toc-edit-field">
@@ -79,7 +99,7 @@ const SectionEditForm = ({
             })
           }
         >
-          {REGULAR_DIVISION_TYPES.map((t) => (
+          {selectableTypes.map((t) => (
             <option key={t} value={t}>
               {TYPE_FULL_LABELS[t]}
             </option>
@@ -90,7 +110,7 @@ const SectionEditForm = ({
     {/* xml:id applies to every format — for LaTeX it's written as the
         `\section`'s `\label`. */}
     <label className="pretext-plus-editor__toc-edit-field">
-      <span>id</span>
+      <span>Id</span>
       <input
         type="text"
         value={draft.xmlId}

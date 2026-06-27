@@ -19,6 +19,7 @@ import { derivePretextContent } from "../contentConversion";
 import type {
   EditorContentChange,
   Asset,
+  AssetKind,
   FeedbackSubmission,
   SourceFormat,
 } from "../types/editor";
@@ -41,9 +42,12 @@ import {
   updateMarkdownDivisionMetadata,
   findDivisionParent,
   renameDivisionRef,
+  renameAssetRef,
+  removeAssetRef,
   updateSectionMetadata,
   normalizeDivisionsOnLoad,
 } from "../sectionUtils";
+import { buildProjectAssetView, makeUniqueAssetRef } from "../assetView";
 import {
   createEditorStore,
   type DivisionChanges,
@@ -202,7 +206,13 @@ export interface editorProps {
    * All assets available in the user's library (across all projects).
    */
   libraryAssets?: Asset[];
-  /** Called after an asset tag is inserted at the cursor. */
+  /**
+   * @deprecated Assets are no longer inserted at the cursor — adding an asset
+   * now copies its embed code to the clipboard. Retained for backward
+   * compatibility; it is no longer called. Use the creation hooks
+   * (`onAssetUpload`/`onAssetAddFromLibrary`/`onCreateDoenet`) to learn when an
+   * asset enters the project.
+   */
   onAssetInsert?: (asset: Asset) => void;
   /** Called when the user picks a library asset not yet in this project. */
   onAssetAddFromLibrary?: (asset: Asset) => Promise<void> | void;
@@ -317,7 +327,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const isAssetPickerOpen = useEditorStore((s) => s.isAssetPickerOpen);
   const isFullSourceOpen = useEditorStore((s) => s.isFullSourceOpen);
   const editingAssetRef = useEditorStore((s) => s.editingAssetRef);
+  const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const closeAssetEditor = useEditorStore((s) => s.closeAssetEditor);
+  const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
+  const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
+  // Replace target is local UI state (only Editors + the asset manager need it).
+  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(null);
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
@@ -328,6 +343,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const projectAssets = useEditorStore((s) => s.projectAssets);
   const addAssetToPool = useEditorStore((s) => s.addAssetToPool);
   const updateAssetInPool = useEditorStore((s) => s.updateAssetInPool);
+  const renameAssetInPool = useEditorStore((s) => s.renameAssetInPool);
   const removeAssetFromPool = useEditorStore((s) => s.removeAssetFromPool);
 
   const editingAsset = editingAssetRef
@@ -692,25 +708,123 @@ const EditorsInner = (props: EditorsInnerProps) => {
     startSectionEdit(newDiv, { isNew: true });
   };
 
-  // ── Asset insertion ─────────────────────────────────────────────────────
-  const buildAssetSnippet = (asset: Asset): string => {
-    if (!asset.ref) return "";
-    return `<plus:${asset.kind} ref="${asset.ref}"/>`;
-  };
-
-  const handleAssetInsert = (asset: Asset) => {
-    const snippet = buildAssetSnippet(asset);
-    if (snippet) codeEditorRef.current?.insertAtCursor(snippet);
+  // ── Asset embedding ─────────────────────────────────────────────────────
+  // Assets are no longer inserted at the Monaco cursor (which silently fails
+  // inside a division's locked header). Instead a newly added asset is dropped
+  // into the project pool and its embed code copied to the clipboard (by the
+  // asset manager), so the author pastes it wherever it belongs.
+  const handleAssetAdded = (asset: Asset) => {
     // Add to the authoritative pool optimistically so it's editable immediately,
     // even before the host echoes it back as an updated `projectAssets` prop.
+    // The host already learns of the asset through the creation hook that
+    // produced it (`onAssetUpload`/`onAssetAddFromLibrary`/`onCreateDoenet`),
+    // so the deprecated `onAssetInsert` is no longer fired here.
     addAssetToPool(asset);
-    props.onAssetInsert?.(asset);
   };
 
   const handleAssetRemove = (asset: Asset) => {
     // Optimistically drop it from the pool, then notify the host to persist.
     removeAssetFromPool(asset);
     props.onAssetRemove?.(asset);
+  };
+
+  // Duplicate and Replace don't need bespoke host hooks — they compose the
+  // asset operations the host already provides. Duplicate re-fetches the
+  // original's bytes and re-uploads them as an independent asset; Replace
+  // uploads the new image, hands it the old ref, and drops the old asset.
+  const canDuplicateAsset = !!(props.onAssetUpload && props.onAssetFetchUrl && props.onAssetUpdate);
+  // Replace swaps in a chosen/created asset and drops the old one, so it needs
+  // a removal hook plus at least one source (upload or library).
+  const canReplaceAsset = !!(
+    props.onAssetRemove && (props.onAssetUpload || props.onAssetAddFromLibrary)
+  );
+
+  /**
+   * Duplicate an asset under a fresh, non-colliding ref by re-fetching its bytes
+   * (`onAssetFetchUrl`) and re-uploading them (`onAssetUpload`) as a new asset,
+   * then giving that asset the new ref and the original's source
+   * (`onAssetUpdate`). The copy is "unused" (no placeholder yet) until its embed
+   * code is pasted; we open it in the editor so the user can tweak it.
+   */
+  const handleAssetDuplicate = async (asset: Asset) => {
+    if (!props.onAssetUpload || !props.onAssetFetchUrl || !asset.ref || !asset.url) return;
+    const taken = new Set(buildProjectAssetView(divisions, projectAssets).map((r) => r.ref));
+    const newRef = makeUniqueAssetRef(asset.ref, taken);
+    const file = await props.onAssetFetchUrl(asset.url);
+    const uploaded = await props.onAssetUpload(file);
+    const copy: Asset = {
+      ...uploaded,
+      ref: newRef,
+      name: `${asset.name} (copy)`,
+      source: asset.source,
+    };
+    await props.onAssetUpdate?.(copy);
+    addAssetToPool(copy);
+    openAssetEditor(copy.kind, newRef);
+  };
+
+  /**
+   * Replace an asset with the user's chosen `newAsset` (from the asset manager's
+   * replace mode), then drop the old one. Two cases, both safe because each asset
+   * owns its own file:
+   *   • freshly created (upload/URL) — `newAsset` adopts the old ref/name/source
+   *     (`onAssetUpdate`) so the document's references don't move; or
+   *   • picked from the library — `newAsset` keeps its own ref and the document
+   *     placeholders are re-pointed to it (`renameAssetRefEverywhere`).
+   */
+  const handleAssetReplaceCommit = async (
+    oldAsset: Asset,
+    newAsset: Asset,
+    fromLibrary: boolean,
+  ) => {
+    if (fromLibrary) {
+      if (newAsset.ref && oldAsset.ref) {
+        renameAssetRefEverywhere(oldAsset.kind, oldAsset.ref, newAsset.ref);
+      }
+      addAssetToPool(newAsset);
+    } else {
+      const replaced: Asset = {
+        ...newAsset,
+        ref: oldAsset.ref,
+        name: oldAsset.name,
+        source: oldAsset.source,
+      };
+      await props.onAssetUpdate?.(replaced);
+      updateAssetInPool(replaced);
+    }
+    props.onAssetRemove?.(oldAsset);
+    removeAssetFromPool(oldAsset);
+  };
+
+  /**
+   * Rewrite every `<plus:KIND ref="oldRef"/>` placeholder across all divisions
+   * to `newRef`, routing each affected division through the unified
+   * content-change channel so the edit is persisted and survives locked
+   * regions. Used when an asset's ref is renamed or an unresolved placeholder
+   * is linked to an asset whose ref differs.
+   */
+  const renameAssetRefEverywhere = (
+    kind: AssetKind,
+    oldRef: string,
+    newRef: string,
+  ) => {
+    if (oldRef === newRef) return;
+    for (const division of divisions) {
+      const next = renameAssetRef(division.content, kind, oldRef, newRef);
+      if (next !== division.content) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
+  };
+
+  /** Delete every `<plus:KIND ref="ref"/>` placeholder for an unresolved ref. */
+  const removeAssetRefEverywhere = (kind: AssetKind, ref: string) => {
+    for (const division of divisions) {
+      const next = removeAssetRef(division.content, kind, ref);
+      if (next !== division.content) {
+        emitContentChange(division.xmlId, next, division.sourceFormat);
+      }
+    }
   };
 
   // ── Resize listener ──────────────────────────────────────────────────────
@@ -739,7 +853,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
         emitContentChange(xmlId, content, division?.sourceFormat ?? "pretext");
       },
       handleDivisionContentChange,
-      assetInsert: handleAssetInsert,
+      assetInsert: handleAssetAdded,
+      assetRemove: handleAssetRemove,
+      assetRefRemove: removeAssetRefEverywhere,
+      assetDuplicate: canDuplicateAsset ? handleAssetDuplicate : undefined,
       insertContentAtCursor: (content) => codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
         setTitle(value);
@@ -766,6 +883,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       canConvertToPretext: divisionConvertedPretext !== undefined,
       activeEditorSource: divisionActiveSource,
       hasFeedback: props.onFeedbackSubmit !== undefined,
+      hasAssetDuplicate: canDuplicateAsset,
     });
   });
 
@@ -1221,10 +1339,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }}
           />
         ) : null}
-        {isAssetPickerOpen && props.projectAssets !== undefined ? (
+        {(isAssetPickerOpen || assetResolveTarget || assetReplaceTarget) && props.projectAssets !== undefined ? (
           <AssetManagerModal
-            open={isAssetPickerOpen}
-            onClose={() => closeModal("isAssetPickerOpen")}
+            open={isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget}
+            resolveTarget={assetResolveTarget}
+            replaceTarget={assetReplaceTarget}
+            onClose={() => {
+              closeModal("isAssetPickerOpen");
+              closeAssetResolver();
+              setAssetReplaceTarget(null);
+            }}
             onLoadAssets={props.onLoadAssets}
             onLoadLibraryAssets={props.onLoadLibraryAssets}
             onAddFromLibrary={props.onAssetAddFromLibrary}
@@ -1232,7 +1356,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
-            onInsert={handleAssetInsert}
+            onAssetAdded={handleAssetAdded}
+            onResolveRef={renameAssetRefEverywhere}
+            onReplaceAsset={handleAssetReplaceCommit}
           />
         ) : null}
         {isFullSourceOpen ? (
@@ -1244,11 +1370,27 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {editingAsset ? (
           <AssetEditModal
             asset={editingAsset}
+            projectAssets={projectAssets ?? []}
             onClose={closeAssetEditor}
-            onSave={async (asset) => {
+            onReplace={
+              canReplaceAsset
+                ? (asset) => { closeAssetEditor(); setAssetReplaceTarget(asset); }
+                : undefined
+            }
+            onDuplicate={
+              canDuplicateAsset
+                ? (asset) => { closeAssetEditor(); handleAssetDuplicate(asset); }
+                : undefined
+            }
+            onSave={async (asset, prevRef) => {
               // Optimistic: reflect the edit in the authoritative pool first so
               // the change shows immediately, then notify the host to persist.
-              updateAssetInPool(asset);
+              if (asset.ref && asset.ref !== prevRef) {
+                renameAssetRefEverywhere(asset.kind, prevRef, asset.ref);
+                renameAssetInPool(asset.kind, prevRef, asset);
+              } else {
+                updateAssetInPool(asset);
+              }
               await props.onAssetUpdate?.(asset);
             }}
           />

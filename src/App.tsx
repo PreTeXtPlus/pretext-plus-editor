@@ -572,12 +572,20 @@ function App() {
 
   const handleAssetFetchUrl = async (url: string): Promise<File> => {
     console.log("Fetching URL on the user's behalf (demo stand-in for a server-side proxy):", url);
-    await new Promise((resolve) => setTimeout(resolve, 600));
     const filename = url.split("/").pop()?.split("?")[0] ?? "image.png";
     // A real host fetches `url` server-side (avoiding CORS) and streams the
     // bytes back; it must not persist anything here — persistence happens
-    // when the returned file is passed to onAssetUpload.
-    return new File([], filename, { type: "image/png" });
+    // when the returned file is passed to onAssetUpload. As a demo stand-in we
+    // fetch client-side, which works for the blob:/same-origin URLs uploads
+    // produce here (so Duplicate yields a real image); fall back to an empty
+    // file when a cross-origin fetch is blocked.
+    try {
+      const blob = await (await fetch(url)).blob();
+      return new File([blob], filename, { type: blob.type || "image/png" });
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return new File([], filename, { type: "image/png" });
+    }
   };
 
   const handleAssetAddFromLibrary = async (asset: Asset) => {

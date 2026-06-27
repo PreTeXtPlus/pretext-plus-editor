@@ -8,7 +8,7 @@
 
 import { fromXml } from "xast-util-from-xml";
 import { toXml } from "xast-util-to-xml";
-import type { Element, Root } from "xast";
+import type { Element, ElementContent, Root } from "xast";
 import type { Asset, AssetKind, SourceFormat } from "./types/editor";
 import type {
   Division,
@@ -140,6 +140,22 @@ function safeFromXml(xml: string): Root | null {
 }
 
 /**
+ * Parse `titleText` as the content of a `<title>` element so that PreTeXt
+ * inline markup the user types directly into the title field (e.g.
+ * `<term>Foo</term>`) is inserted as real XML elements rather than escaped
+ * as literal text on serialization. Falls back to a single text node verbatim
+ * when `titleText` isn't well-formed XML on its own (e.g. a `<` typed mid-edit
+ * before its matching tag is closed).
+ */
+function parseTitleChildren(titleText: string): ElementContent[] {
+  const tree = safeFromXml(`<__title__>${titleText}</__title__>`);
+  const wrapper = tree?.children.find((n) => n.type === "element") as
+    | Element
+    | undefined;
+  return wrapper ? wrapper.children : [{ type: "text", value: titleText }];
+}
+
+/**
  * Strip the outer element from `xml` using string matching only — a fallback
  * for when the content cannot be parsed as well-formed XML.  Removes the first
  * opening tag and its matching trailing closing tag; returns the input
@@ -183,7 +199,7 @@ export function updateDivisionTitle(
     type: "element",
     name: "title",
     attributes: {},
-    children: [{ type: "text", value: newTitle }],
+    children: parseTitleChildren(newTitle),
   };
 
   if (titleIndex === -1) {
@@ -1036,7 +1052,7 @@ export function updateSectionMetadata(
       type: "element",
       name: "title",
       attributes: {},
-      children: [{ type: "text", value: newTitle }],
+      children: parseTitleChildren(newTitle),
     };
     if (titleIndex === -1) {
       newEl.children = [titleNode, ...newEl.children];
@@ -1114,7 +1130,7 @@ export function updateChapterMetadata(
         type: "element",
         name: "title",
         attributes: {},
-        children: [{ type: "text", value: changes.title }],
+        children: parseTitleChildren(changes.title),
       };
       if (titleIndex === -1) {
         newEl.children = [titleNode, ...newEl.children];
@@ -1487,6 +1503,45 @@ export function parseAssetRefs(content: string): AssetRef[] {
     refs.push({ kind: m[1] as AssetRef["kind"], ref: m[2] });
   }
   return refs;
+}
+
+/**
+ * Rewrite every `<plus:KIND ... ref="oldRef" ...>` placeholder in `content` to
+ * use `newRef` instead, leaving any other attributes (e.g. `width="50%"`)
+ * untouched. Used when an asset's `ref` is renamed, or when an unresolved
+ * placeholder is linked to an existing asset whose ref differs — so the source
+ * stays in sync with the project-asset pool across every division.
+ */
+export function renameAssetRef(
+  content: string,
+  kind: AssetRef["kind"],
+  oldRef: string,
+  newRef: string,
+): string {
+  // Match the opening `<plus:KIND` and the specific `ref="oldRef"` separately so
+  // other attributes between/around them are preserved verbatim.
+  const re = new RegExp(
+    `(<plus:${escapeRegex(kind)}\\b[^>]*?\\bref=")${escapeRegex(oldRef)}(")`,
+    "g",
+  );
+  return content.replace(re, `$1${newRef}$2`);
+}
+
+/**
+ * Remove every `<plus:KIND ref="ref"/>` placeholder for the given kind+ref from
+ * `content`. Used when removing an unresolved placeholder (one with no backing
+ * asset) directly from the source.
+ */
+export function removeAssetRef(
+  content: string,
+  kind: AssetRef["kind"],
+  ref: string,
+): string {
+  const re = new RegExp(
+    `<plus:${escapeRegex(kind)}\\b[^>]*?\\bref="${escapeRegex(ref)}"[^>]*/?>`,
+    "g",
+  );
+  return content.replace(re, "");
 }
 
 /**

@@ -34,6 +34,8 @@ export type DivisionType =
   | "chapter"
   // Article / chapter content divisions
   | "section"
+  | "subsection"
+  | "subsubsection"
   | "introduction"
   | "conclusion"
   | "worksheet"
@@ -42,7 +44,8 @@ export type DivisionType =
   | "references"
   | "glossary"
   | "solutions"
-  | "reading-questions";
+  | "reading-questions"
+  | "paragraphs";
 
 /**
  * A single division record, as stored in the host database and passed to
