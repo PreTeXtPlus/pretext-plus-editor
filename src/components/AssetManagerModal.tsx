@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import type { Asset, AssetKind } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
+import { assetEmbedCode } from "../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../assetView";
 import { ASSET_KIND_LABELS, SHOW_DOENET, VISIBLE_ASSET_KINDS } from "../assetKinds";
 import "./dialog.css";
@@ -65,7 +66,16 @@ type MainTab = "in-document" | "add";
 type ImageSourceTab = "library" | "upload" | "url";
 type DoenetSourceTab = "library" | "create";
 
-const embedFor = (kind: AssetKind, ref: string) => `<plus:${kind} ref="${ref}"/>`;
+/**
+ * A throwaway client-side id for a locally-created asset, used only in the
+ * demo/no-host fallback branches where the host provides no persistence
+ * callback to mint a real id. Kept at module scope (not inline in the
+ * component) so its impure `Date.now()` isn't flagged by the React Compiler's
+ * purity check for component-body code.
+ */
+function localAssetId(prefix: string): string {
+  return `${prefix}-${Date.now()}`;
+}
 
 const AssetManagerModal = ({
   open,
@@ -85,6 +95,15 @@ const AssetManagerModal = ({
   onReplaceAsset,
 }: AssetManagerModalProps) => {
   const divisions = useEditorStore((s) => s.divisions);
+  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  // The embed code the user copies is matched to the division they're editing:
+  // a Markdown division needs `::image{ref="x"}`, since raw `<plus:.../>` XML
+  // pasted into Markdown doesn't survive conversion. Falls back to PreTeXt.
+  const activeFormat =
+    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    "pretext";
+  const embedFor = (kind: AssetKind, ref: string) =>
+    assetEmbedCode(kind, ref, activeFormat);
   // Authoritative project-asset pool, owned by the store. A fresh server list
   // from `onLoadAssets` is written straight back into it via `setProjectAssets`.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
@@ -255,7 +274,7 @@ const AssetManagerModal = ({
       }
     } else {
       commitAsset({
-        id: `url-${Date.now()}`,
+        id: localAssetId("url"),
         name: name || url,
         ref: url.split("/").pop() ?? "image",
         kind: "image",
@@ -280,7 +299,7 @@ const AssetManagerModal = ({
         setIsCreatingDoenet(false);
       }
     } else {
-      commitAsset({ id: `doenet-${Date.now()}`, name, ref, kind: "doenet" });
+      commitAsset({ id: localAssetId("doenet"), name, ref, kind: "doenet" });
     }
   };
 

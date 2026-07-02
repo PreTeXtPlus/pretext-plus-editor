@@ -27,7 +27,6 @@ import type { Division, DivisionType } from "../types/sections";
 import {
   createNewSection,
   createDivisionContent,
-  normalizeSelfClosingRefs,
   parseDivisionRefsWithTypes,
   createDivisionWithId,
   insertDivisionRef,
@@ -491,9 +490,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // Emit keyed on the OLD id — before the record is renamed in step 2.
       emitContentChange(
         division.xmlId,
-        updated.sourceFormat === "pretext"
-          ? normalizeSelfClosingRefs(updated.content)
-          : updated.content,
+        updated.content,
         updated.sourceFormat,
       );
     }
@@ -561,12 +558,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const handleDivisionContentChange = (newContent: string | undefined) => {
     if (!activeDivision) return;
     // The user now edits the division's full source (wrapper tag included),
-    // so it's stored as-is — only the `<plus:* ref="..."/>` placeholder form
-    // is normalized, matching what an XML round-trip would otherwise produce.
-    let wrapped =
-      activeDivisionFormat === "pretext"
-        ? normalizeSelfClosingRefs(newContent || "")
-        : newContent || "";
+    // so it's stored as-is.
+    let wrapped = newContent || "";
 
     // `xml:id` is structural identity and is NOT editable from the code editor:
     // it's renamed only via the TOC (validated + atomic). If the user edited or
@@ -578,17 +571,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
         // Rewrite only the xml:id back to canonical; pass the content's own
         // title/type/label (via `meta`) so a simultaneous title or type edit in
         // the same change isn't clobbered by stale record values.
-        wrapped = normalizeSelfClosingRefs(
-          updateSectionMetadata(
-            {
-              ...activeDivision,
-              content: wrapped,
-              title: meta.title,
-              type: meta.type,
-            },
-            { xmlId: activeDivision.xmlId, label: meta.label || null },
-          ).content,
-        );
+        wrapped = updateSectionMetadata(
+          {
+            ...activeDivision,
+            content: wrapped,
+            title: meta.title,
+            type: meta.type,
+          },
+          { xmlId: activeDivision.xmlId, label: meta.label || null },
+        ).content;
       }
     } else if (activeDivisionFormat === "markdown") {
       // The frontmatter is locked in the code editor, but re-assert the
@@ -713,8 +704,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
       if (parent) {
         emitContentChange(
           parent.xmlId,
-          normalizeSelfClosingRefs(
-            insertDivisionRef(parent.content, newDiv.xmlId, newDiv.type, null),
+          insertDivisionRef(
+            parent.content,
+            newDiv.xmlId,
+            newDiv.type,
+            null,
+            parent.sourceFormat,
           ),
           parent.sourceFormat,
         );
@@ -1147,7 +1142,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // editor language, visual editor, TOC) treats it as PreTeXt going forward.
     emitContentChange(
       activeDivision.xmlId,
-      normalizeSelfClosingRefs(divisionConvertedPretext),
+      divisionConvertedPretext,
       "pretext",
     );
     applyDivisionUpdate(activeDivision.xmlId, { sourceFormat: "pretext" });

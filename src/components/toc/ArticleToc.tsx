@@ -5,10 +5,11 @@ import SectionItem from "./SectionItem";
 import DivisionMenu, { type DivisionMenuItem } from "./DivisionMenu";
 
 import {
+  assetEmbedCode,
   buildDivisionTree,
+  canEmbedDivisionRefs,
   getOrphanRoots,
   insertDivisionRef,
-  normalizeSelfClosingRefs,
   removeDivisionRef,
 } from "../../sectionUtils";
 import { buildProjectAssetView, type AssetRow } from "../../assetView";
@@ -161,10 +162,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     if (!divisions) return;
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    divisionContentChange(
-      parent.xmlId,
-      normalizeSelfClosingRefs(removeDivisionRef(parent.content, xmlId)),
-    );
+    divisionContentChange(parent.xmlId, removeDivisionRef(parent.content, xmlId));
   };
 
   const handleDelete = (division: Division, parentXmlId: string | null) => {
@@ -179,23 +177,42 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       if (parent) {
         divisionContentChange(
           parent.xmlId,
-          normalizeSelfClosingRefs(removeDivisionRef(parent.content, division.xmlId)),
+          removeDivisionRef(parent.content, division.xmlId),
         );
       }
     }
     removeSection(division.xmlId);
   };
 
+  // The source format of the division currently being edited. Includes the user
+  // inserts/copies must match it: a Markdown division needs the `::type{ref}`
+  // leaf-directive form and a LaTeX division the `\plus{type}{ref}` macro, since
+  // raw `<plus:.../>` XML doesn't survive their conversion. Defaults to PreTeXt
+  // when nothing is active.
+  const activeFormat =
+    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    "pretext";
+
   const handleInsertAtCursor = (division: Division) => {
-    insertAtCursor(`<plus:${division.type} ref="${division.xmlId}"/>`);
+    insertAtCursor(
+      activeFormat === "markdown"
+        ? `::${division.type}{ref="${division.xmlId}"}`
+        : activeFormat === "latex"
+          ? `\\plus{${division.type}}{${division.xmlId}}`
+          : `<plus:${division.type} ref="${division.xmlId}"/>`,
+    );
   };
 
   const handlePlaceOrphan = (orphan: Division) => {
     if (!rootDivision) return;
     divisionContentChange(
       rootDivision.xmlId,
-      normalizeSelfClosingRefs(
-        insertDivisionRef(rootDivision.content, orphan.xmlId, orphan.type, null),
+      insertDivisionRef(
+        rootDivision.content,
+        orphan.xmlId,
+        orphan.type,
+        null,
+        rootDivision.sourceFormat,
       ),
     );
   };
@@ -210,7 +227,9 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       : openAssetEditor(row.kind, row.ref);
 
   const copyAssetEmbed = (kind: AssetKind, ref: string) => {
-    navigator.clipboard.writeText(`<plus:${kind} ref="${ref}"/>`).catch(() => {});
+    navigator.clipboard
+      .writeText(assetEmbedCode(kind, ref, activeFormat))
+      .catch(() => {});
   };
 
   const assetMenuItems = (row: AssetRow): DivisionMenuItem[] => {
@@ -287,9 +306,10 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                 label: "Edit properties",
                 onClick: () => startSectionEdit(rootDivision),
               },
-              // LaTeX/Markdown divisions are leaves — see types/sections.ts —
-              // so they can't hold a `<plus:* ref="..."/>` child placeholder.
-              ...(rootDivision.sourceFormat === "pretext"
+              // All three source formats can hold a child ref placeholder — see
+              // canEmbedDivisionRefs / types/sections.ts — so this is always
+              // shown today, but stays gated for a future leaf-only format.
+              ...(canEmbedDivisionRefs(rootDivision.sourceFormat)
                 ? [
                     {
                       label: "Add new division",
@@ -328,8 +348,10 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                 label: "Edit properties",
                 onClick: () => startSectionEdit(node.division),
               },
-              // Add division, but only if division is pretext format:
-              ...(node.division.sourceFormat === "pretext"
+              // Add division, but only if the format can embed child refs —
+              // all three (PreTeXt/Markdown/LaTeX) do today; gated for a future
+              // leaf-only format.
+              ...(canEmbedDivisionRefs(node.division.sourceFormat)
                 ? [
                     {
                       label: "Add new division",

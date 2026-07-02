@@ -25,6 +25,9 @@ import { escapeAttribute } from "./xmlUtils";
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/** Serialize empty elements as self-closing (`<x/>` rather than `<x></x>`). */
+const XML_SERIALIZE_OPTIONS = { closeEmptyElements: true, tightClose: true };
+
 /** Generate a simple unique ID (not RFC-4122, but collision-resistant enough for in-memory use). */
 function generateId(): string {
   return `sec-${Date.now().toString(36)}-${Math.random()
@@ -208,7 +211,7 @@ export function updateDivisionTitle(
     rootEl.children.splice(titleIndex, 1, titleNode);
   }
 
-  return toXml(tree);
+  return toXml(tree, XML_SERIALIZE_OPTIONS);
 }
 
 /** Create a new blank `<section>` as a `Division`. */
@@ -272,9 +275,7 @@ export function stripSectionWrapper(sectionXml: string): string {
     type: "root",
     children: trimBoundaryWhitespaceNodes(rootEl.children),
   };
-  // toXml expands empty elements: <plus:section ref="x"/> → <plus:section ref="x"></plus:section>.
-  // Normalize back so the editor always shows the canonical self-closing form.
-  return normalizeSelfClosingRefs(toXml(inner));
+  return toXml(inner, XML_SERIALIZE_OPTIONS);
 }
 
 /**
@@ -343,7 +344,7 @@ export function splitDocument(xml: string): DocumentSplitResult {
       type: "root",
       children: [{ ...docRoot, children: nonSectionChildren } as Element],
     };
-    const wrapper = toXml(wrapperRoot);
+    const wrapper = toXml(wrapperRoot, XML_SERIALIZE_OPTIONS);
     if (sectionElements.length === 0) return { wrapper, sections: [] };
     return {
       wrapper,
@@ -353,7 +354,7 @@ export function splitDocument(xml: string): DocumentSplitResult {
           id,
           xmlId: (el.attributes?.["xml:id"] as string) || id,
           title: extractTitle(el) || untitledLabel(el.name),
-          content: toXml({ type: "root", children: [el] } as Root),
+          content: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
           type: tagToType(el.name),
           sourceFormat: "pretext" as const,
         };
@@ -371,7 +372,7 @@ export function splitDocument(xml: string): DocumentSplitResult {
         id,
         xmlId: (el.attributes?.["xml:id"] as string) || id,
         title: extractTitle(el) || untitledLabel(el.name),
-        content: toXml({ type: "root", children: [el] } as Root),
+        content: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
         type: tagToType(el.name),
         sourceFormat: "pretext" as const,
       };
@@ -415,7 +416,7 @@ export function mergeDocument(
       } as Element,
     ],
   };
-  return toXml(merged);
+  return toXml(merged, XML_SERIALIZE_OPTIONS);
 }
 
 // ---------------------------------------------------------------------------
@@ -912,7 +913,7 @@ export function mergeTwoSections(
   };
   return {
     ...a,
-    content: toXml({ type: "root", children: [merged] } as Root),
+    content: toXml({ type: "root", children: [merged] } as Root, XML_SERIALIZE_OPTIONS),
   };
 }
 
@@ -1080,7 +1081,10 @@ export function updateSectionMetadata(
       ];
     }
 
-    const newContent = toXml({ type: "root", children: [newEl] } as Root);
+    const newContent = toXml(
+      { type: "root", children: [newEl] } as Root,
+      XML_SERIALIZE_OPTIONS,
+    );
     const newXmlId =
       changes.xmlId !== undefined && changes.xmlId !== null && changes.xmlId !== ""
         ? changes.xmlId
@@ -1159,7 +1163,7 @@ export function updateChapterMetadata(
       }
     }
 
-    return toXml({ type: "root", children: [newEl] } as Root);
+    return toXml({ type: "root", children: [newEl] } as Root, XML_SERIALIZE_OPTIONS);
   } catch {
     return chapterXml;
   }
@@ -1364,12 +1368,12 @@ export function wrapDocumentAsSection(
     };
     const id = generateId();
     return {
-      wrapper: toXml(newWrapper),
+      wrapper: toXml(newWrapper, XML_SERIALIZE_OPTIONS),
       sections: [{
         id,
         xmlId: id,
         title: sectionTitle,
-        content: toXml({ type: "root", children: [sectionEl] } as Root),
+        content: toXml({ type: "root", children: [sectionEl] } as Root, XML_SERIALIZE_OPTIONS),
         type: "section",
         sourceFormat: "pretext" as const,
       }],
@@ -1413,9 +1417,35 @@ function escapeRegex(s: string): string {
 }
 
 /**
+ * Whether a division of the given source format can embed child division refs.
+ *
+ * PreTeXt uses `<plus:* ref="..."/>` placeholders directly; Markdown uses the
+ * `::section{ref="..."}` leaf directive and LaTeX the `\plus{section}{ref}`
+ * macro — both of which `@pretextbook/remark-pretext` / `@pretextbook/latex-pretext`
+ * convert to the same placeholder. All three current formats can therefore
+ * embed child refs; they are enumerated (rather than returning a bare `true`)
+ * so a future format defaults to leaf-only and must opt in here explicitly,
+ * and so the TOC's "Add new division" gating reads intentionally.
+ */
+export function canEmbedDivisionRefs(sourceFormat: SourceFormat): boolean {
+  return (
+    sourceFormat === "pretext" ||
+    sourceFormat === "markdown" ||
+    sourceFormat === "latex"
+  );
+}
+
+/**
  * Tag names that may appear in a `<plus:TAG ref="..."/>` placeholder used to
  * position a `Division` within its parent's content — i.e. every
  * `DivisionType` plus the generic `division` alias.
+ *
+ * This is broader than {@link ALL_DIVISION_TYPES} (which lists only the
+ * top-level, splittable section tags used by document splitting): a division
+ * record can be *any* `DivisionType`, so the nested levels `subsection`,
+ * `subsubsection` and `paragraphs` must be included here too — otherwise a
+ * `<plus:subsection ref="..."/>` placeholder is not recognised and its child
+ * division is wrongly shown as orphaned in the TOC.
  *
  * Asset placeholders (`<plus:image ref="..."/>`, `<plus:doenet ref="..."/>`)
  * share the same `<plus:* ref="..."/>` shape but are NOT divisions — they
@@ -1426,31 +1456,73 @@ function escapeRegex(s: string): string {
 const DIVISION_REF_TAGS: ReadonlySet<string> = new Set([
   "division",
   ...ALL_DIVISION_TYPES,
+  "subsection",
+  "subsubsection",
+  "paragraphs",
 ]);
 
 const DIVISION_REF_TAG_ALTERNATION = Array.from(DIVISION_REF_TAGS).join("|");
 
 /**
- * Build a regex source that matches a `<plus:TAG ... ref="..." ...>` placeholder
- * in EITHER form:
+ * Regex source matching the PreTeXt (XML) form of a division-ref placeholder
+ * in EITHER shape:
  *   - self-closing:     `<plus:section ref="x"/>`
  *   - expanded-empty:   `<plus:section ref="x"></plus:section>`
  *
  * The expanded form is what an XML round-trip (e.g. through xast in
  * `stripSectionWrapper`/`rewrapSection`) produces, so every consumer must
  * accept it as well as the canonical self-closing form a user might type.
- *
- * Only matches tag names in {@link DIVISION_REF_TAGS} — asset placeholders
- * (`plus:image`, `plus:doenet`, ...) are deliberately excluded.
- *
- * When `refValue` is `null` the ref value is captured in group 1; otherwise the
- * pattern matches only that specific ref (nothing captured).
  */
-function divisionRefSource(refValue: string | null): string {
+function xmlDivisionRefSource(refValue: string | null): string {
   const ref =
     refValue === null ? `ref="([^"]+)"` : `ref="${escapeRegex(refValue)}"`;
   const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
   return `<plus:${tag}\\s[^>]*${ref}[^>]*?(?:/>|>\\s*</plus:${tag}>)`;
+}
+
+/**
+ * Regex source matching the Markdown form of a division-ref placeholder — the
+ * leaf directive `::section{ref="x"}` that `@pretextbook/remark-pretext`
+ * converts to `<plus:section ref="x"/>`.  An optional `[label]` between the
+ * name and the attribute block is tolerated (`::section[Intro]{ref="x"}`).
+ */
+function markdownDivisionRefSource(refValue: string | null): string {
+  const ref =
+    refValue === null ? `ref="([^"]+)"` : `ref="${escapeRegex(refValue)}"`;
+  const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
+  return `::${tag}(?:\\[[^\\]]*\\])?\\{[^}]*${ref}[^}]*\\}`;
+}
+
+/**
+ * Regex source matching the LaTeX form of a division-ref placeholder — the
+ * `\plus{section}{x}` macro that `@pretextbook/latex-pretext` converts to
+ * `<plus:section ref="x"/>`.  The first brace group is the tag name, the
+ * second the referenced `xml:id`.
+ */
+function latexDivisionRefSource(refValue: string | null): string {
+  const ref = refValue === null ? `([^}]+)` : escapeRegex(refValue);
+  const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
+  return `\\\\plus\\{${tag}\\}\\{${ref}\\}`;
+}
+
+/**
+ * Build a regex source that matches a division-ref placeholder written in ANY
+ * of the PreTeXt (`<plus:section ref="x"/>`), Markdown (`::section{ref="x"}`)
+ * or LaTeX (`\plus{section}{x}`) forms.  The three syntaxes are textually
+ * disjoint, so a combined pattern is unambiguous — letting every ref consumer
+ * (TOC tree building, parent lookup, reorder/remove) work uniformly regardless
+ * of the parent division's source format.
+ *
+ * Only matches tag names in {@link DIVISION_REF_TAGS} — asset placeholders
+ * (`plus:image`, `plus:doenet`, ...) are deliberately excluded.
+ *
+ * When `refValue` is `null` the ref value is captured — in group 1 for the XML
+ * form, group 2 for the Markdown form and group 3 for the LaTeX form (read as
+ * `m[1] ?? m[2] ?? m[3]`); otherwise the pattern matches only that specific ref
+ * (nothing captured).
+ */
+function divisionRefSource(refValue: string | null): string {
+  return `(?:${xmlDivisionRefSource(refValue)}|${markdownDivisionRefSource(refValue)}|${latexDivisionRefSource(refValue)})`;
 }
 
 /**
@@ -1465,7 +1537,10 @@ export function parseDivisionRefs(content: string): string[] {
   const re = new RegExp(divisionRefSource(null), "g");
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    refs.push(m[1]);
+    // Group 1 = XML form (`<plus:… ref="x"/>`), group 2 = Markdown form
+    // (`::…{ref="x"}`), group 3 = LaTeX form (`\plus{…}{x}`); exactly one
+    // matches per iteration.
+    refs.push(m[1] ?? m[2] ?? m[3]);
   }
   return refs;
 }
@@ -1485,15 +1560,21 @@ export function parseDivisionRefsWithTypes(
 ): { xmlId: string; type: DivisionType }[] {
   const refs: { xmlId: string; type: DivisionType }[] = [];
   const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
+  // Three alternatives: the PreTeXt form captures tag/ref in groups 1–2, the
+  // Markdown leaf-directive form (`::section{ref="x"}`) in groups 3–4, and the
+  // LaTeX macro form (`\plus{section}{x}`) in groups 5–6.
   const re = new RegExp(
-    `<plus:(${DIVISION_REF_TAG_ALTERNATION})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${tag}>)`,
+    `<plus:(${DIVISION_REF_TAG_ALTERNATION})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${tag}>)` +
+      `|::(${DIVISION_REF_TAG_ALTERNATION})(?:\\[[^\\]]*\\])?\\{[^}]*ref="([^"]+)"[^}]*\\}` +
+      `|\\\\plus\\{(${DIVISION_REF_TAG_ALTERNATION})\\}\\{([^}]+)\\}`,
     "g",
   );
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    const tagName = m[1];
+    const tagName = m[1] ?? m[3] ?? m[5];
+    const xmlId = m[2] ?? m[4] ?? m[6];
     const type: DivisionType = tagName === "division" ? "section" : (tagName as DivisionType);
-    refs.push({ type, xmlId: m[2] });
+    refs.push({ type, xmlId });
   }
   return refs;
 }
@@ -1509,29 +1590,42 @@ export interface AssetRef {
 }
 
 /**
- * Parse every `<plus:image ref="..."/>` / `<plus:doenet ref="..."/>` asset
- * placeholder out of `content`, in document order, without de-duplicating.
+ * Parse every asset placeholder out of `content`, in document order, without
+ * de-duplicating.  The PreTeXt form (`<plus:image ref="..."/>`), the Markdown
+ * leaf-directive form (`::image{ref="..."}`) and the LaTeX macro form
+ * (`\plus{image}{...}`) are all matched — the latter two are what
+ * `@pretextbook/remark-pretext` / `@pretextbook/latex-pretext` convert to the
+ * same placeholder.
  *
- * Asset placeholders share the `<plus:* ref="..."/>` shape used by division
- * refs (see {@link DIVISION_REF_TAGS}) but are deliberately parsed by a
- * separate, disjoint tag set so the two kinds of include are never conflated.
+ * Asset placeholders share the same shape as division refs (see
+ * {@link DIVISION_REF_TAGS}) but are deliberately parsed by a separate,
+ * disjoint tag set (`image`/`doenet`) so the two kinds of include are never
+ * conflated.
  */
 export function parseAssetRefs(content: string): AssetRef[] {
   const refs: AssetRef[] = [];
-  const re = /<plus:(image|doenet)\b[^>]*\bref="([^"]+)"/g;
+  // XML form captures kind/ref in groups 1–2, the Markdown form in groups 3–4,
+  // and the LaTeX form in groups 5–6.
+  const re =
+    /<plus:(image|doenet)\b[^>]*\bref="([^"]+)"|::(image|doenet)(?:\[[^\]]*\])?\{[^}]*\bref="([^"]+)"[^}]*\}|\\plus\{(image|doenet)\}\{([^}]+)\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(content)) !== null) {
-    refs.push({ kind: m[1] as AssetRef["kind"], ref: m[2] });
+    refs.push({
+      kind: (m[1] ?? m[3] ?? m[5]) as AssetRef["kind"],
+      ref: m[2] ?? m[4] ?? m[6],
+    });
   }
   return refs;
 }
 
 /**
- * Rewrite every `<plus:KIND ... ref="oldRef" ...>` placeholder in `content` to
- * use `newRef` instead, leaving any other attributes (e.g. `width="50%"`)
- * untouched. Used when an asset's `ref` is renamed, or when an unresolved
- * placeholder is linked to an existing asset whose ref differs — so the source
- * stays in sync with the project-asset pool across every division.
+ * Rewrite every asset placeholder for `oldRef` in `content` to use `newRef`
+ * instead, leaving any other attributes (e.g. `width="50%"`) untouched. The
+ * PreTeXt (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) and
+ * LaTeX (`\plus{image}{...}`) forms are all rewritten in place. Used when an
+ * asset's `ref` is renamed, or when an unresolved placeholder is linked to an
+ * existing asset whose ref differs — so the source stays in sync with the
+ * project-asset pool across every division.
  */
 export function renameAssetRef(
   content: string,
@@ -1539,30 +1633,61 @@ export function renameAssetRef(
   oldRef: string,
   newRef: string,
 ): string {
-  // Match the opening `<plus:KIND` and the specific `ref="oldRef"` separately so
-  // other attributes between/around them are preserved verbatim.
-  const re = new RegExp(
-    `(<plus:${escapeRegex(kind)}\\b[^>]*?\\bref=")${escapeRegex(oldRef)}(")`,
+  const k = escapeRegex(kind);
+  const oldR = escapeRegex(oldRef);
+  // Match the placeholder opening and the specific ref separately so other
+  // attributes between/around them are preserved verbatim. The three forms are
+  // textually disjoint, so replacing each in turn never double-applies.
+  const xmlRe = new RegExp(`(<plus:${k}\\b[^>]*?\\bref=")${oldR}(")`, "g");
+  const mdRe = new RegExp(
+    `(::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref=")${oldR}(")`,
     "g",
   );
-  return content.replace(re, `$1${newRef}$2`);
+  const latexRe = new RegExp(`(\\\\plus\\{${k}\\}\\{)${oldR}(\\})`, "g");
+  return content
+    .replace(xmlRe, `$1${newRef}$2`)
+    .replace(mdRe, `$1${newRef}$2`)
+    .replace(latexRe, `$1${newRef}$2`);
 }
 
 /**
- * Remove every `<plus:KIND ref="ref"/>` placeholder for the given kind+ref from
- * `content`. Used when removing an unresolved placeholder (one with no backing
- * asset) directly from the source.
+ * Remove every asset placeholder for the given kind+ref from `content`, in the
+ * PreTeXt (`<plus:image ref="..."/>`), Markdown (`::image{ref="..."}`) or LaTeX
+ * (`\plus{image}{...}`) form. Used when removing an unresolved placeholder
+ * (one with no backing asset) directly from the source.
  */
 export function removeAssetRef(
   content: string,
   kind: AssetRef["kind"],
   ref: string,
 ): string {
-  const re = new RegExp(
-    `<plus:${escapeRegex(kind)}\\b[^>]*?\\bref="${escapeRegex(ref)}"[^>]*/?>`,
+  const k = escapeRegex(kind);
+  const r = escapeRegex(ref);
+  const xmlRe = new RegExp(`<plus:${k}\\b[^>]*?\\bref="${r}"[^>]*/?>`, "g");
+  const mdRe = new RegExp(
+    `::${k}(?:\\[[^\\]]*\\])?\\{[^}]*?\\bref="${r}"[^}]*\\}`,
     "g",
   );
-  return content.replace(re, "");
+  const latexRe = new RegExp(`\\\\plus\\{${k}\\}\\{${r}\\}`, "g");
+  return content.replace(xmlRe, "").replace(mdRe, "").replace(latexRe, "");
+}
+
+/**
+ * Build the embed code a user copies (or types) to place an asset placeholder,
+ * matched to the target division's source format. A Markdown division needs the
+ * leaf-directive form `::image{ref="x"}` and a LaTeX division the macro form
+ * `\plus{image}{x}` — raw `<plus:image .../>` XML pasted into either does NOT
+ * survive conversion (it is escaped as literal text). PreTeXt gets the
+ * canonical `<plus:… ref="x"/>` form.
+ */
+export function assetEmbedCode(
+  kind: AssetRef["kind"],
+  ref: string,
+  sourceFormat: SourceFormat = "pretext",
+): string {
+  if (sourceFormat === "markdown") return `::${kind}{ref="${ref}"}`;
+  if (sourceFormat === "latex") return `\\plus{${kind}}{${ref}}`;
+  return `<plus:${kind} ref="${ref}"/>`;
 }
 
 /**
@@ -1624,8 +1749,18 @@ export function insertDivisionRef(
   xmlId: string,
   type: DivisionType,
   afterXmlId: string | null,
+  sourceFormat: SourceFormat = "pretext",
 ): string {
-  const tag = `<plus:${type} ref="${xmlId}"/>`;
+  // Emit the include in the parent's own syntax: a Markdown parent stores its
+  // includes as `::type{ref="x"}` leaf directives, a LaTeX parent as
+  // `\plus{type}{x}` macros, and a PreTeXt parent as the canonical
+  // `<plus:type ref="x"/>` placeholder.
+  const tag =
+    sourceFormat === "markdown"
+      ? `::${type}{ref="${xmlId}"}`
+      : sourceFormat === "latex"
+        ? `\\plus{${type}}{${xmlId}}`
+        : `<plus:${type} ref="${xmlId}"/>`;
 
   if (afterXmlId !== null) {
     const afterRe = new RegExp(divisionRefSource(afterXmlId));
@@ -1674,11 +1809,7 @@ export function moveDivisionRef(
   // Capture the original tag so we preserve its element name.
   const captureRe = new RegExp(divisionRefSource(xmlId));
   const m = captureRe.exec(content);
-  // Normalise to self-closing form so a round-tripped expanded-empty tag
-  // (`<plus:x ref="y"></plus:x>`) is re-emitted tidily when moved.
-  const originalTag = m
-    ? normalizeSelfClosingRefs(m[0])
-    : `<plus:division ref="${xmlId}"/>`;
+  const originalTag = m ? m[0] : `<plus:division ref="${xmlId}"/>`;
 
   const withoutRef = removeDivisionRef(content, xmlId);
 
@@ -1724,8 +1855,17 @@ export function renameDivisionRef(
   newType: DivisionType,
 ): string {
   const re = new RegExp(divisionRefSource(oldXmlId));
-  if (!re.test(content)) return content;
-  return content.replace(re, `<plus:${newType} ref="${newXmlId}"/>`);
+  // Rewrite the placeholder in the SAME syntax it was found in: a Markdown
+  // parent's `::section{ref="x"}` stays a leaf directive, a LaTeX parent's
+  // `\plus{section}{x}` stays a macro, and a PreTeXt parent's
+  // `<plus:section ref="x"/>` stays XML. (`.replace` returns `content`
+  // unchanged when nothing matches.)
+  return content.replace(re, (match) => {
+    const trimmed = match.trimStart();
+    if (trimmed.startsWith("::")) return `::${newType}{ref="${newXmlId}"}`;
+    if (trimmed.startsWith("\\plus")) return `\\plus{${newType}}{${newXmlId}}`;
+    return `<plus:${newType} ref="${newXmlId}"/>`;
+  });
 }
 
 /**
@@ -1763,19 +1903,6 @@ export function reorderDivisionRefs(
     prev = xmlId;
   }
   return result;
-}
-
-/**
- * Collapse expanded-empty `<plus:TAG ...></plus:TAG>` placeholders back to the
- * canonical self-closing `<plus:TAG .../>` form.  An XML round-trip through
- * xast expands self-closing elements, so this is applied after editing a
- * division's content to keep the stored source tidy.
- */
-export function normalizeSelfClosingRefs(content: string): string {
-  return content.replace(
-    /<plus:([a-z-]+)((?:\s[^>]*?)?)>\s*<\/plus:\1>/g,
-    (_m, tag, attrs) => `<plus:${tag}${attrs}/>`,
-  );
 }
 
 /**
@@ -1911,7 +2038,7 @@ function ensureRootLabel(xml: string): string {
     if (!el.attributes.label) {
       const unusedLabel = findUnusedLabel(tree, "pretext-plus-preview");
       el.attributes.label = unusedLabel;
-      return toXml(tree);
+      return toXml(tree, XML_SERIALIZE_OPTIONS);
     }
     return xml;
   } catch (error) {
@@ -1959,9 +2086,12 @@ function findUnusedLabel(tree: Root, desiredLabel: string): string {
  * Resolve a single division to its final PreTeXt XML, then recursively expand
  * any `<plus:* ref="..."/>` placeholders found inside it.
  *
- * LaTeX/Markdown divisions are leaves (see {@link Division}): their content is
- * converted to PreTeXt and wrapped in the division's own element before
- * recursion, since only PreTeXt divisions can embed child ref placeholders.
+ * A LaTeX/Markdown division's content is first converted to PreTeXt (its own
+ * element included) and the resulting XML is then scanned for child refs just
+ * like a native PreTeXt division — Markdown authors express includes as
+ * `::section{ref="x"}` leaf directives and LaTeX authors as `\plus{section}{x}`
+ * macros, both of which the converter turns into `<plus:section ref="x"/>`
+ * placeholders before this expansion runs.
  *
  * `ancestors` guards against cycles in the ref graph — a division that
  * (directly or transitively) references itself is rendered as a comment
@@ -1998,8 +2128,14 @@ function resolveDivisionXml(
       `<!-- conversion error: ${division.xmlId} -->`;
   }
 
-  if (division.sourceFormat !== "pretext") return xml;
-
+  // Expand child `<plus:* ref="..."/>` placeholders against the *derived*
+  // PreTeXt, whatever the source format was. Markdown includes authored as
+  // `::section{ref="x"}` and LaTeX includes as `\plus{section}{x}` (and the
+  // asset variants `::image{ref="x"}` / `\plus{image}{x}`) are converted to
+  // `<plus:… ref="x"/>` by `@pretextbook/remark-pretext` /
+  // `@pretextbook/latex-pretext` before we reach here, so a Markdown/LaTeX
+  // division is no longer a leaf — its resolved XML must be scanned for refs
+  // exactly like a native PreTeXt division's.
   const nextAncestors = new Set(ancestors).add(xmlId);
   return xml.replace(
     /<plus:([a-z-]+)\s([^>]*ref="[^"]+"[^>]*?)(?:\/>|>\s*<\/plus:\1>)/g,
@@ -2168,6 +2304,16 @@ export function normalizeDivisionsOnLoad(
       if (!division.title) {
         const mdTitle = extractMarkdownDivisionMetadata(division.content)?.title;
         if (mdTitle) return { ...division, title: mdTitle };
+      }
+      return division;
+    }
+    if (division.sourceFormat === "latex") {
+      // LaTeX divisions keep their title in the source header (the first-line
+      // `\section{…}` or a `\title{…}` inside `\begin{section}`); backfill a
+      // blank title from there so the TOC doesn't show "Untitled".
+      if (!division.title) {
+        const latexTitle = extractLatexDivisionTitle(division.content);
+        if (latexTitle) return { ...division, title: latexTitle };
       }
       return division;
     }

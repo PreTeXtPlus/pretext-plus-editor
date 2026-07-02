@@ -15,9 +15,10 @@ import type { SourceFormat } from "./editor";
  * appear in any other division's ref placeholders are considered *orphaned* and
  * are shown separately in the TOC so they can be placed.
  *
- * `"latex"` and `"markdown"` divisions are always leaf nodes for now — they
- * cannot contain child ref placeholders.  Syntax for embedded refs in those
- * formats will be added in a future release.
+ * `"markdown"` divisions can contain child refs authored as the leaf directive
+ * `::section{ref="..."}`, and `"latex"` divisions as the macro
+ * `\plus{section}{...}`.  Both are converted to a `<plus:section ref="..."/>`
+ * placeholder by `@pretextbook/remark-pretext` / `@pretextbook/latex-pretext`.
  */
 
 /**
@@ -78,8 +79,9 @@ export interface Division {
    * Parent divisions may include `<plus:division ref="child-id"/>` placeholders
    * where child divisions should be rendered.
    *
-   * For LaTeX / Markdown divisions this is raw source; child ref placeholders
-   * are not yet supported for these formats.
+   * For LaTeX / Markdown divisions this is raw source. Markdown may embed
+   * child refs as `::section{ref="child-id"}` leaf directives, and LaTeX as
+   * `\plus{section}{child-id}` macros.
    */
   content: string;
 }

@@ -50,7 +50,7 @@ const DEMO_DIVISIONS: Division[] = [
   </p>
 
   <p>
-    Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview.
+    Divisions can mix source formats: most sections below are authored in PreTeXt, but <c>sec-latex</c> is authored in LaTeX and <c>sec-markdown</c> in Markdown. Each is converted to PreTeXt for the preview. Both nest a child subsection: the Markdown section via a <c>::subsection{ref="..."}</c> directive and the LaTeX section via a <c>\\plus{subsection}{...}</c> macro.
   </p>
 
   <p> 
@@ -118,7 +118,34 @@ Inline math like $E = mc^2$ and display math both convert to PreTeXt:
 \\begin{itemize}
   \\item LaTeX lists become PreTeXt lists.
   \\item \\textbf{Bold} and \\emph{emphasis} convert too.
-\\end{itemize}`,
+\\end{itemize}
+
+Assets embed with the \\verb|\\plus| macro — the line below becomes a
+\\verb|<plus:image ref="..."/>| placeholder, shows up in the TOC's asset panel,
+and resolves to the project asset when the source is assembled:
+
+\\plus{image}{euler-formula.png}
+
+A LaTeX division can also embed a child division: the macro below is converted
+to a \\verb|<plus:subsection ref="..."/>| placeholder, so the TOC shows it
+nested here and the child is expanded into place when the source is assembled.
+
+\\plus{subsection}{sec-latex-child}`,
+  },
+  {
+    id: "demo-latex-child",
+    xmlId: "sec-latex-child",
+    title: "A Nested LaTeX Subsection",
+    type: "subsection",
+    sourceFormat: "latex",
+    // Child of the LaTeX section above, referenced from its body as
+    // `\plus{subsection}{sec-latex-child}`. Rename its xml:id from the TOC and
+    // the parent's `\plus{...}{...}` macro is rewritten to match, just like a
+    // PreTeXt `plus:` placeholder or a Markdown `::` directive.
+    content: `\\subsection{A Nested LaTeX Subsection}\\label{sec-latex-child}
+
+This subsection is authored in \\LaTeX{} and pulled into the parent LaTeX
+section by its \\verb|\\plus{subsection}{sec-latex-child}| macro.`,
   },
   {
     id: "demo-markdown",
@@ -127,12 +154,12 @@ Inline math like $E = mc^2$ and display math both convert to PreTeXt:
     type: "section",
     sourceFormat: "markdown",
     // Markdown divisions are real markdown files: a YAML frontmatter block
-    // (division/xml:id/label — shown locked in the code editor) followed by the
+    // (division/xmlid/label — shown locked in the code editor) followed by the
     // markdown body. The remark-pretext converter turns the whole file into the
     // proper <section xml:id="...">…</section> element.
     content: `---
 division: section
-xml:id: sec-markdown
+xmlid: sec-markdown
 ---
 # A Markdown Section
 
@@ -144,7 +171,38 @@ You can use *emphasis*, \`inline code\`, and inline math such as $a^2 + b^2 = c^
 - A second item to show structure.
 
 1. Ordered lists work too.
-2. And convert on preview.`,
+2. And convert on preview.
+
+Assets embed the same way — the directive below becomes a
+\`<plus:image ref="..."/>\` placeholder, shows up in the TOC's asset panel, and
+resolves to the project asset when the source is assembled:
+
+::image{ref="euler-formula.png"}
+
+A Markdown division can also embed a child division: the leaf directive below
+is converted to a \`<plus:subsection ref="..."/>\` placeholder, so the TOC shows
+it nested here and the child is expanded into place when the source is assembled.
+
+::subsection{ref="sec-md-child"}`,
+  },
+  {
+    id: "demo-md-child",
+    xmlId: "sec-md-child",
+    title: "A Nested Subsection",
+    type: "subsection",
+    sourceFormat: "pretext",
+    // Child of the Markdown section above, referenced from its markdown body as
+    // `::subsection{ref="sec-md-child"}`. The child itself can be any format —
+    // here PreTeXt — showing a Markdown parent nesting a PreTeXt child.
+    content: `<subsection xml:id="sec-md-child">
+  <title>A Nested Subsection</title>
+
+  <p>
+    This subsection is referenced from the Markdown section's body. Rename its
+    <c>xml:id</c> from the TOC and the parent's <c>::subsection{ref="..."}</c>
+    directive is rewritten to match, just like a PreTeXt <c>plus:</c> placeholder.
+  </p>
+</subsection>`,
   },
   {
     id: "demo-orphan",
@@ -299,7 +357,26 @@ and environments like \texttt{verbatim}.
 
 \section{Results}
 
-The third section can contain whatever you like.`,
+The third section can contain whatever you like.
+
+The macro below embeds a child section — it shows up nested in the TOC and is
+expanded into place when the full document source is assembled.
+
+\plus{section}{latex-demo-sec}
+`,
+  },
+  {
+    id: "latex-demo-sec",
+    xmlId: "latex-demo-sec",
+    title: "A Referenced Section",
+    type: "section",
+    sourceFormat: "latex",
+    // A LaTeX child of the LaTeX root, referenced from the root's body as
+    // `\plus{section}{latex-demo-sec}`.
+    content: String.raw`\section{A Referenced Section}\label{latex-demo-sec}
+
+This whole section lives in its own LaTeX division and is pulled in by the
+root's \verb|\plus{section}{latex-demo-sec}| macro.`,
   },
 ];
 
@@ -312,7 +389,7 @@ const MARKDOWN_DEMO_DIVISIONS: Division[] = [
     sourceFormat: "markdown",
     content: `---
 division: article
-xml:id: markdown-demo
+xmlid: markdown-demo
 ---
 
 # Markdown Demo
@@ -338,6 +415,29 @@ Theorem:
     This is the proof.
 
 More text.
+
+The directive below embeds a child section — it shows up nested in the TOC and
+is expanded into place when the full document source is assembled.
+
+::section{ref="md-demo-sec"}
+`,
+  },
+  {
+    id: "markdown-demo-sec",
+    xmlId: "md-demo-sec",
+    title: "A Referenced Section",
+    type: "section",
+    sourceFormat: "markdown",
+    // A Markdown child of the Markdown root, referenced from the root's body as
+    // `::section{ref="md-demo-sec"}`.
+    content: `---
+division: section
+xmlid: md-demo-sec
+---
+# A Referenced Section
+
+This whole section lives in its own Markdown division and is pulled in by the
+root's \`::section{ref="md-demo-sec"}\` directive.
 `,
   },
 ];

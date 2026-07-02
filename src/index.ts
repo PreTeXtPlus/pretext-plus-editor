@@ -44,7 +44,6 @@ export {
   renameDivisionRef,
   findDivisionParent,
   reorderDivisionRefs,
-  normalizeSelfClosingRefs,
   getOrphanedDivisions,
   getOrphanRoots,
   buildDivisionTree,

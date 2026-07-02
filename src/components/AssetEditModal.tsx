@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Editor } from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
 import type { Asset } from "../types/editor";
+import { useEditorStore } from "../store/hooks";
+import { assetEmbedCode } from "../sectionUtils";
 import "./dialog.css";
 import "./AssetManagerModal.css";
 
@@ -53,6 +55,15 @@ const AssetEditModal = ({
   onReplace,
   onDuplicate,
 }: AssetEditModalProps) => {
+  const divisions = useEditorStore((s) => s.divisions);
+  const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
+  // Match the copyable embed code to the division being edited — Markdown needs
+  // the `::image{ref="x"}` directive form (raw `<plus:.../>` XML doesn't survive
+  // Markdown conversion). Defaults to PreTeXt.
+  const activeFormat =
+    divisions?.find((d) => d.xmlId === activeDivisionId)?.sourceFormat ??
+    "pretext";
+
   const prevRef = asset.ref ?? "";
   const [nameValue, setNameValue] = useState(asset.name);
   const [refValue, setRefValue] = useState(prevRef);
@@ -79,7 +90,11 @@ const AssetEditModal = ({
     sync();
   };
 
-  const embedCode = `<plus:${asset.kind} ref="${refValue.trim() || prevRef}"/>`;
+  const embedCode = assetEmbedCode(
+    asset.kind,
+    refValue.trim() || prevRef,
+    activeFormat,
+  );
 
   const handleCopy = () => {
     navigator.clipboard.writeText(embedCode).catch(() => {});
