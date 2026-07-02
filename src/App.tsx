@@ -482,7 +482,7 @@ function App() {
     {
       id: "asset-1",
       name: "Euler Formula",
-      ref: "euler-formula.png",
+      ref: "euler-formula",
       kind: "image",
       isFile: true,
       url: demoImageDataUrl("Euler Formula", "#0e639c"),
@@ -492,7 +492,7 @@ function App() {
     {
       id: "asset-2",
       name: "Markdown Logo",
-      ref: "markdown-logo.svg",
+      ref: "markdown-logo",
       kind: "image",
       isFile: true,
       url: demoImageDataUrl("Markdown Logo", "#0f766e"),
@@ -502,7 +502,7 @@ function App() {
     {
       id: "asset-3",
       name: "PreTeXt Logo",
-      ref: "pretext-logo.png",
+      ref: "pretext-logo",
       kind: "image",
       isFile: true,
       url: demoImageDataUrl("PreTeXt Logo", "#7c3aed"),

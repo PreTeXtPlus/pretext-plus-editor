@@ -28,28 +28,29 @@ export interface Asset {
   /**
    * Whether this asset is backed by an uploaded/fetched file rather than
    * being defined purely by `source`. File-based image assets emit a
-   * `source` attribute on the generated `<image>` element (from
-   * {@link fileRef}, falling back to {@link url}); non-file image assets
-   * carry no `source` attribute and rely entirely on their authored
+   * `source` attribute on the generated `<image>` element built from this
+   * asset's {@link ref} plus a file extension (e.g. `ref="euler-painting"`
+   * with a PNG upload emits `source="euler-painting.png"`); non-file image
+   * assets carry no `source` attribute and rely entirely on their authored
    * `source` content.
    */
   isFile?: boolean;
   /**
-   * Publicly accessible URL used **only** as the asset-manager thumbnail
-   * (`<img src={url}>`). It is no longer the value written to the `<image>`
-   * `source` attribute — use {@link fileRef} for that. It remains the
-   * `source` fallback when `fileRef` is absent, for backwards compatibility.
+   * Publicly accessible URL used as the asset-manager thumbnail
+   * (`<img src={url}>`). Its filename extension (if any) is also used, as a
+   * fallback after {@link fileRef}, to determine the extension appended to
+   * `ref` for the generated `<image source="...">` attribute. The URL itself
+   * (e.g. a UUID-based storage key) is never written into the document.
    */
   url?: string;
   /**
-   * The exact string emitted as the `source` attribute of the generated
-   * `<image>` element for a file-backed asset — typically a bare external
-   * filename like `"euler-painting.png"`. The PreTeXt build server treats
-   * `<image source="X">` as an external-asset filename and prepends
-   * `external/` itself, so this must be a bare filename, not a URL.
+   * The server-assigned storage filename for a file-backed asset (e.g. a
+   * UUID-based key). Its extension, if present, is used to build the
+   * `source` attribute of the generated `<image>` element as
+   * `"{ref}.{extension}"` — the rest of this value (e.g. the UUID itself)
+   * is never written into the document.
    *
-   * Only meaningful when {@link isFile} is true. When absent, the emit sites
-   * fall back to {@link url} so existing hosts keep working unchanged.
+   * Only meaningful when {@link isFile} is true.
    */
   fileRef?: string;
   /** Mime type for the asset, if applicable.  Used for hints only. */

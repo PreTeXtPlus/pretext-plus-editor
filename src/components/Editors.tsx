@@ -671,7 +671,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
     // that appeared in the edited content but don't yet have a matching division.
     const existingIds = new Set(divisions.map((d) => d.xmlId));
-    for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped)) {
+    for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped, activeDivisionFormat)) {
       if (!existingIds.has(xmlId)) {
         applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
         existingIds.add(xmlId); // prevent duplicates within the same edit

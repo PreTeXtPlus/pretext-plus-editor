@@ -1526,21 +1526,104 @@ function divisionRefSource(refValue: string | null): string {
 }
 
 /**
+ * Return the regex source for a division-ref placeholder written in the ONE
+ * syntax that a division of `format` actually uses:
+ *   - `pretext`  → `<plus:section ref="x"/>`
+ *   - `markdown` → `::section{ref="x"}`
+ *   - `latex`    → `\plus{section}{x}`
+ *
+ * Unlike {@link divisionRefSource}, which matches all three at once, this
+ * restricts scanning to the parent's own format. A `::section{ref="x"}` typed
+ * into a PreTeXt division (e.g. as literal example text, or by a Markdown
+ * author pasting into the wrong pane) is then NOT mistaken for a real child
+ * include — the false match that was producing spurious blank sections.
+ */
+function divisionRefSourceForFormat(
+  format: SourceFormat,
+  refValue: string | null,
+): string {
+  switch (format) {
+    case "pretext":
+      return xmlDivisionRefSource(refValue);
+    case "markdown":
+      return markdownDivisionRefSource(refValue);
+    case "latex":
+      return latexDivisionRefSource(refValue);
+  }
+}
+
+/**
+ * Regex sources matching *verbatim* spans in each source format — regions whose
+ * text is rendered literally and must never be scanned for include placeholders.
+ * An include shown as documentation inside a Markdown code fence
+ * (```` ```\n::section{ref="x"}\n``` ````) or a PreTeXt `<pre>` is an example,
+ * not a real child, so it is blanked out before ref-scanning (see
+ * {@link blankVerbatim}).
+ *
+ * Each entry is an un-anchored source with NO capturing groups (so the
+ * alternatives can be safely `|`-joined). Ordering matters: list block-level
+ * spans (fences, environments) before inline spans so the larger region is
+ * consumed first.
+ */
+const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
+  // TODO(learning): decide which PreTeXt elements hold verbatim text — see the
+  // request in the assistant's message. Leaving this empty is safe: the
+  // format guard above already stops cross-format false matches; these entries
+  // additionally suppress an include written literally inside a PreTeXt code
+  // sample. Starter examples (verify against the PreTeXt schema before adding):
+  //   "<pre>[\\s\\S]*?</pre>",
+  //   "<c>[\\s\\S]*?</c>",
+  //   "<cd>[\\s\\S]*?</cd>",
+  //   "<program\\b[\\s\\S]*?</program>",
+  pretext: [],
+  markdown: [
+    "```[\\s\\S]*?```", // fenced code block (backticks)
+    "~~~[\\s\\S]*?~~~", // fenced code block (tildes)
+    "`[^`\\n]*`", // inline code span
+  ],
+  latex: [
+    "\\\\begin\\{verbatim\\}[\\s\\S]*?\\\\end\\{verbatim\\}",
+    "\\\\begin\\{lstlisting\\}[\\s\\S]*?\\\\end\\{lstlisting\\}",
+    "\\\\verb\\*?\\|[^|\\n]*\\|", // \verb|...| (pipe delimiter, the common case)
+  ],
+};
+
+/**
+ * Replace every verbatim span (per {@link VERBATIM_SOURCES} for `sourceFormat`)
+ * with equal-length whitespace, preserving newlines. Blanking rather than
+ * deleting keeps character offsets and document order intact for the caller's
+ * subsequent ref scan, and guarantees no placeholder can straddle a blanked
+ * boundary.
+ */
+function blankVerbatim(content: string, sourceFormat: SourceFormat): string {
+  const sources = VERBATIM_SOURCES[sourceFormat];
+  if (sources.length === 0) return content;
+  const re = new RegExp(sources.join("|"), "g");
+  return content.replace(re, (match) => match.replace(/[^\n]/g, " "));
+}
+
+/**
  * Return the ordered list of `xmlId` values referenced by
  * `<plus:* ref="..."/>` placeholders found in `content`.
  *
  * Only direct children are returned — the function does not recurse.
  * Call it for each division in the pool to build the full tree.
+ *
+ * `sourceFormat` is the parent division's format: only that format's include
+ * syntax is scanned, and its verbatim spans are blanked first, so example
+ * placeholders in code samples don't become phantom children.
  */
-export function parseDivisionRefs(content: string): string[] {
+export function parseDivisionRefs(
+  content: string,
+  sourceFormat: SourceFormat,
+): string[] {
   const refs: string[] = [];
-  const re = new RegExp(divisionRefSource(null), "g");
+  const re = new RegExp(divisionRefSourceForFormat(sourceFormat, null), "g");
+  const scanned = blankVerbatim(content, sourceFormat);
   let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    // Group 1 = XML form (`<plus:… ref="x"/>`), group 2 = Markdown form
-    // (`::…{ref="x"}`), group 3 = LaTeX form (`\plus{…}{x}`); exactly one
-    // matches per iteration.
-    refs.push(m[1] ?? m[2] ?? m[3]);
+  while ((m = re.exec(scanned)) !== null) {
+    // The per-format source has a single capture group: the ref value.
+    refs.push(m[1]);
   }
   return refs;
 }
@@ -1557,22 +1640,24 @@ export function parseDivisionRefs(content: string): string[] {
  */
 export function parseDivisionRefsWithTypes(
   content: string,
+  sourceFormat: SourceFormat,
 ): { xmlId: string; type: DivisionType }[] {
   const refs: { xmlId: string; type: DivisionType }[] = [];
-  const tag = `(?:${DIVISION_REF_TAG_ALTERNATION})`;
-  // Three alternatives: the PreTeXt form captures tag/ref in groups 1–2, the
-  // Markdown leaf-directive form (`::section{ref="x"}`) in groups 3–4, and the
-  // LaTeX macro form (`\plus{section}{x}`) in groups 5–6.
-  const re = new RegExp(
-    `<plus:(${DIVISION_REF_TAG_ALTERNATION})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${tag}>)` +
-      `|::(${DIVISION_REF_TAG_ALTERNATION})(?:\\[[^\\]]*\\])?\\{[^}]*ref="([^"]+)"[^}]*\\}` +
-      `|\\\\plus\\{(${DIVISION_REF_TAG_ALTERNATION})\\}\\{([^}]+)\\}`,
-    "g",
-  );
+  const tags = DIVISION_REF_TAG_ALTERNATION;
+  const closeTag = `(?:${tags})`;
+  // One alternative per format, each capturing tag in group 1 and ref in
+  // group 2, so only the parent's own include syntax is recognised.
+  const source: Record<SourceFormat, string> = {
+    pretext: `<plus:(${tags})\\s[^>]*ref="([^"]+)"[^>]*?(?:/>|>\\s*</plus:${closeTag}>)`,
+    markdown: `::(${tags})(?:\\[[^\\]]*\\])?\\{[^}]*ref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{(${tags})\\}\\{([^}]+)\\}`,
+  };
+  const re = new RegExp(source[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
   let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
-    const tagName = m[1] ?? m[3] ?? m[5];
-    const xmlId = m[2] ?? m[4] ?? m[6];
+  while ((m = re.exec(scanned)) !== null) {
+    const tagName = m[1];
+    const xmlId = m[2];
     const type: DivisionType = tagName === "division" ? "section" : (tagName as DivisionType);
     refs.push({ type, xmlId });
   }
@@ -1602,17 +1687,26 @@ export interface AssetRef {
  * disjoint tag set (`image`/`doenet`) so the two kinds of include are never
  * conflated.
  */
-export function parseAssetRefs(content: string): AssetRef[] {
+export function parseAssetRefs(
+  content: string,
+  sourceFormat: SourceFormat,
+): AssetRef[] {
   const refs: AssetRef[] = [];
-  // XML form captures kind/ref in groups 1–2, the Markdown form in groups 3–4,
-  // and the LaTeX form in groups 5–6.
-  const re =
-    /<plus:(image|doenet)\b[^>]*\bref="([^"]+)"|::(image|doenet)(?:\[[^\]]*\])?\{[^}]*\bref="([^"]+)"[^}]*\}|\\plus\{(image|doenet)\}\{([^}]+)\}/g;
+  // One alternative per format, each capturing kind in group 1 and ref in
+  // group 2, so only the division's own asset-include syntax is recognised
+  // and example placeholders in verbatim spans are ignored.
+  const source: Record<SourceFormat, string> = {
+    pretext: `<plus:(image|doenet)\\b[^>]*\\bref="([^"]+)"`,
+    markdown: `::(image|doenet)(?:\\[[^\\]]*\\])?\\{[^}]*\\bref="([^"]+)"[^}]*\\}`,
+    latex: `\\\\plus\\{(image|doenet)\\}\\{([^}]+)\\}`,
+  };
+  const re = new RegExp(source[sourceFormat], "g");
+  const scanned = blankVerbatim(content, sourceFormat);
   let m: RegExpExecArray | null;
-  while ((m = re.exec(content)) !== null) {
+  while ((m = re.exec(scanned)) !== null) {
     refs.push({
-      kind: (m[1] ?? m[3] ?? m[5]) as AssetRef["kind"],
-      ref: m[2] ?? m[4] ?? m[6],
+      kind: m[1] as AssetRef["kind"],
+      ref: m[2],
     });
   }
   return refs;
@@ -1921,7 +2015,7 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
     seen.add(id);
     const div = divisions.find((d) => d.xmlId === id);
     if (div) {
-      for (const ref of parseDivisionRefs(div.content)) {
+      for (const ref of parseDivisionRefs(div.content, div.sourceFormat)) {
         queue.push(ref);
       }
     }
@@ -1972,7 +2066,7 @@ export function buildDivisionTree(
   const walk = (parentXmlId: string, depth: number) => {
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    for (const ref of parseDivisionRefs(parent.content)) {
+    for (const ref of parseDivisionRefs(parent.content, parent.sourceFormat)) {
       if (visited.has(ref)) continue;
       const div = divisions.find((d) => d.xmlId === ref);
       if (!div) continue;
@@ -1999,7 +2093,7 @@ export function getOrphanRoots(
   const orphanIds = new Set(orphans.map((d) => d.xmlId));
   const referenced = new Set<string>();
   for (const o of orphans) {
-    for (const ref of parseDivisionRefs(o.content)) {
+    for (const ref of parseDivisionRefs(o.content, o.sourceFormat)) {
       if (orphanIds.has(ref)) referenced.add(ref);
     }
   }
