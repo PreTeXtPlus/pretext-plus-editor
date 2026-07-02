@@ -1566,16 +1566,23 @@ function divisionRefSourceForFormat(
  * consumed first.
  */
 const VERBATIM_SOURCES: Record<SourceFormat, string[]> = {
-  // TODO(learning): decide which PreTeXt elements hold verbatim text — see the
-  // request in the assistant's message. Leaving this empty is safe: the
-  // format guard above already stops cross-format false matches; these entries
-  // additionally suppress an include written literally inside a PreTeXt code
-  // sample. Starter examples (verify against the PreTeXt schema before adding):
-  //   "<pre>[\\s\\S]*?</pre>",
-  //   "<c>[\\s\\S]*?</c>",
-  //   "<cd>[\\s\\S]*?</cd>",
-  //   "<program\\b[\\s\\S]*?</program>",
-  pretext: [],
+  // PreTeXt elements whose contents are rendered literally, so a `<plus:… ref>`
+  // typed inside one (as a code sample / documentation) is an example, not a
+  // real include. `<program>`, `<console>` and `<sage>` also enclose the
+  // nested `<input>`/`<output>` verbatim blocks, so listing those separately
+  // is unnecessary. Each opening tag tolerates attributes (e.g. `<program
+  // language="python">`) via `(?:\s[^>]*)?`.
+  pretext: [
+    "pre",
+    "c", // inline code
+    "cd", // code display
+    "program",
+    "console",
+    "sage",
+    "latex-image",
+    "sageplot",
+    "asymptote",
+  ].map((tag) => `<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`),
   markdown: [
     "```[\\s\\S]*?```", // fenced code block (backticks)
     "~~~[\\s\\S]*?~~~", // fenced code block (tildes)
@@ -2122,9 +2129,9 @@ function ensureRootLabel(xml: string): string {
     const firstElement = tree.children.find((node): node is Element => node.type === "element");
     const el = firstElement?.name === "pretext"
       ? firstElement.children.find(
-          (node): node is Element =>
-            node.type === "element" && ROOT_DIVISION_TYPES.has(node.name as DivisionType),
-        )
+        (node): node is Element =>
+          node.type === "element" && ROOT_DIVISION_TYPES.has(node.name as DivisionType),
+      )
       : firstElement && ROOT_DIVISION_TYPES.has(firstElement.name as DivisionType)
         ? firstElement
         : undefined;
@@ -2342,8 +2349,8 @@ export function wrapDivisionForPreview(
   const body = ROOT_DIVISION_TYPES.has(divisionType)
     ? divisionXml
     : BOOK_CHILD_DIVISION_TYPES.has(divisionType)
-    ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
-    : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
+      ? `<book>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</book>`
+      : `<article>\n<title>${wrapperTitle}</title>\n${divisionXml}\n</article>`;
   return wrapInPretextDocument(body, docinfo);
 }
 
