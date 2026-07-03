@@ -154,14 +154,14 @@ section by its \\verb|\\plus{subsection}{sec-latex-child}| macro.`,
     type: "section",
     sourceFormat: "markdown",
     // Markdown divisions are real markdown files: a YAML frontmatter block
-    // (division/xmlid/label — shown locked in the code editor) followed by the
+    // (division/id/label — shown locked in the code editor) followed by the
     // markdown body. The remark-pretext converter turns the whole file into the
     // proper <section xml:id="...">…</section> element.
     source: `---
 division: section
-xmlid: sec-markdown
+title: A Markdown Section
+id: sec-markdown
 ---
-# A Markdown Section
 
 This section is authored in **Markdown**, which is auto-converted to PreTeXt.
 
@@ -339,7 +339,8 @@ const LATEX_DEMO_DIVISIONS: Division[] = [
     title: "Testing LaTeX Source Mode",
     type: "article",
     sourceFormat: "latex",
-    source: String.raw`This paragraph appears before the first section, so it becomes the
+    source: String.raw`\article{Testing LaTeX Source Mode}\label{latex-demo}
+    This paragraph appears before the first section, so it becomes the
 introduction when converted to PreTeXt.
 
 \section{Background}
@@ -389,24 +390,24 @@ const MARKDOWN_DEMO_DIVISIONS: Division[] = [
     sourceFormat: "markdown",
     source: `---
 division: article
-xmlid: markdown-demo
+title: Markdown Demo
+id: markdown-demo
 ---
 
-# Markdown Demo
 
 This demo lets you test the **markdown** source mode in the code editor.
 
-## Features To Try
+# Features To Try
 
 - Heading and paragraph editing
 - Lists and inline code like \`inline code\`
 - Fenced code blocks
 
-## Example Math-like Text
+# Example Math-like Text
 
 Inline math such as $E = mc^2$ converts to PreTeXt.
 
-## Blocks and environments
+# Blocks and environments
 
 Theorem:
   This is the theorem.
@@ -432,9 +433,9 @@ is expanded into place when the full document source is assembled.
     // `::section{ref="md-demo-sec"}`.
     source: `---
 division: section
-xmlid: md-demo-sec
+title: A Referenced Section
+id: md-demo-sec
 ---
-# A Referenced Section
 
 This whole section lives in its own Markdown division and is pulled in by the
 root's \`::section{ref="md-demo-sec"}\` directive.
@@ -653,12 +654,12 @@ function App() {
     console.log("Asset inserted:", asset.ref);
   };
 
-  const handleAssetUpload = async (file: File): Promise<Asset> => {
-    console.log("Asset upload started:", file.name, file.type, file.size);
+  const handleAssetUpload = async (file: File, title?: string): Promise<Asset> => {
+    console.log("Asset upload started:", file.name, file.type, file.size, "title:", title);
     await new Promise((resolve) => setTimeout(resolve, 800));
     const newAsset: Asset = {
       id: `asset-${Date.now()}`,
-      title: file.name.replace(/\.[^.]+$/, ""),
+      title: title?.trim() || file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
       kind: "image",
       isFile: true,
@@ -810,6 +811,7 @@ function App() {
         onDivisionAdd={handleDivisionAdd}
         onDivisionRemove={handleDivisionRemove}
         onDivisionUpdate={handleDivisionUpdate}
+        hideAssets={true}
       />
     </>
   );

@@ -42,6 +42,7 @@ interface CodeEditorMenuProps {
   onOpenAssets?: () => void;
   /** Called when the user clicks "Display Full Source" to open the assembled-source modal. */
   onShowFullSource: () => void;
+  hideAssets?: boolean;
 }
 
 /** A single toolbar action, rendered either inline or inside the overflow dropdown. */
@@ -233,6 +234,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
   onConvertToPretext,
   canConvertToPretext,
   onOpenAssets,
+  hideAssets,
   onShowFullSource,
 }) => {
   const handleFormat = () => {
@@ -316,7 +318,7 @@ const CodeEditorMenu: React.FC<CodeEditorMenuProps> = ({
         onClick: onOpenDocinfoEditor,
         title: "Edit Macros",
       },
-      ...(onOpenAssets
+      ...(onOpenAssets && !hideAssets
         ? [
             {
               key: "assets",

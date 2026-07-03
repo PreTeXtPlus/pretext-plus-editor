@@ -42,6 +42,7 @@ interface CodeEditorProps {
    * since the tag/title/xml:id aren't editable in-place.
    */
   onRequestWrapperEdit?: () => void;
+  hideAssets?: boolean;
 }
 
 /** Imperative handle exposed via `forwardRef` for programmatic control. */
@@ -200,6 +201,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onOpenAssets,
   onShowFullSource,
   onRequestWrapperEdit,
+  hideAssets,
 }, ref) => {
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -561,6 +563,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
         canConvertToPretext={canConvertToPretext}
         onOpenAssets={onOpenAssets}
         onShowFullSource={onShowFullSource}
+        hideAssets={hideAssets}
       />
       <div style={{ flex: 1 }}>
         <Editor

@@ -215,13 +215,19 @@ export interface editorProps {
   onAssetInsert?: (asset: Asset) => void;
   /** Called when the user picks a library asset not yet in this project. */
   onAssetAddFromLibrary?: (asset: Asset) => Promise<void> | void;
-  /** Called when the user uploads an image file. */
-  onAssetUpload?: (file: File) => Promise<Asset>;
+  /**
+   * Called when the user uploads an image file, or after `onAssetFetchUrl`
+   * fetches an external URL. `title` is the human-readable title the user
+   * entered in the modal (may differ from `file.name`) — persist it as the
+   * asset's title rather than deriving one from the filename.
+   */
+  onAssetUpload?: (file: File, title?: string) => Promise<Asset>;
   /**
    * Called when the user adds an image by URL. Should fetch the URL
    * server-side (to avoid CORS) and return the raw file bytes — it must
    * NOT create a persisted asset. The returned file is then committed via
-   * `onAssetUpload`, the same as a local file pick.
+   * `onAssetUpload`, the same as a local file pick, with the user's entered
+   * title passed as `onAssetUpload`'s second argument.
    */
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /** Called when the user creates a new Doenet activity. */
@@ -234,6 +240,8 @@ export interface editorProps {
   onLoadAssets?: () => Promise<Asset[]>;
   /** Called when the asset modal opens to fetch the full library asset list. */
   onLoadLibraryAssets?: () => Promise<Asset[]>;
+  /** If true, the TOC and asset manager hide all assets. */
+  hideAssets?: boolean;
 }
 
 // ── Helper: find the root division for a divisions pool ─────────────────────
@@ -1174,6 +1182,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       // The code editor only fires this when a locked leading line is actually
       // present, so it's safe to wire up for all formats.
       onRequestWrapperEdit={handleRequestWrapperEdit}
+      hideAssets={props.hideAssets}
     />
   );
 
@@ -1212,6 +1221,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     <TableOfContents
       isCollapsed={isTocCollapsed}
       onToggleCollapse={() => setIsTocCollapsed((c) => !c)}
+      hideAssets={props.hideAssets}
       onOpenAssetPicker={
         props.projectAssets !== undefined
           ? () => openModal("isAssetPickerOpen")

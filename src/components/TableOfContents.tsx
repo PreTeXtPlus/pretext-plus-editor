@@ -6,6 +6,8 @@ export interface TableOfContentsProps {
   onToggleCollapse: () => void;
   /** When provided, shows "Open asset picker" affordance in the TOC. */
   onOpenAssetPicker?: () => void;
+  /** If true, hides all assets in the TOC and asset manager. */
+  hideAssets?: boolean;
 }
 
 /** TOC sidebar. ArticleToc reads divisions data from the editor store. */
@@ -13,6 +15,7 @@ const TableOfContents = ({
   isCollapsed,
   onToggleCollapse,
   onOpenAssetPicker,
+  hideAssets,
 }: TableOfContentsProps) => {
   if (isCollapsed) {
     return (
@@ -46,8 +49,7 @@ const TableOfContents = ({
           </button>
         </div>
       </div>
-
-      <ArticleToc onOpenAssetPicker={onOpenAssetPicker} />
+       <ArticleToc onOpenAssetPicker={onOpenAssetPicker} hideAssets={hideAssets} />
     </div>
   );
 };

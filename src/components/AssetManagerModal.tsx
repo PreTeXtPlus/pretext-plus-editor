@@ -29,8 +29,12 @@ export interface AssetManagerModalProps {
   onLoadLibraryAssets?: () => Promise<Asset[]>;
   /** Associate a library asset with the current project. */
   onAddFromLibrary?: (asset: Asset) => Promise<void> | void;
-  /** Upload an image file; host returns the created asset. */
-  onUpload?: (file: File) => Promise<Asset>;
+  /**
+   * Upload an image file; host returns the created asset. `title` is the
+   * human-readable title the user entered — distinct from `file.name` — and
+   * should be persisted as the asset's title.
+   */
+  onUpload?: (file: File, title?: string) => Promise<Asset>;
   /**
    * Fetch an external URL on the user's behalf (server-side, to avoid CORS)
    * and return the raw file bytes. Must not create a persisted asset — the
@@ -275,8 +279,7 @@ const AssetManagerModal = ({
     setIsUploading(true);
     try {
       const title = uploadTitle.trim() || pendingUploadFile.name;
-      const file = new File([pendingUploadFile], title, { type: pendingUploadFile.type });
-      const asset = await onUpload(file);
+      const asset = await onUpload(pendingUploadFile, title);
       commitAsset(asset);
       clearPendingUpload();
     } catch (err) {
@@ -295,8 +298,7 @@ const AssetManagerModal = ({
       setIsAddingUrl(true);
       try {
         const fetched = await onFetchUrl(url);
-        const file = title ? new File([fetched], title, { type: fetched.type }) : fetched;
-        const asset = await onUpload(file);
+        const asset = await onUpload(fetched, title || undefined);
         commitAsset(asset);
       } catch (err) {
         setUrlError(err instanceof Error ? err.message : "Failed to add URL.");

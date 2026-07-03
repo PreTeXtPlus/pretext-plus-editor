@@ -18,9 +18,10 @@ import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
 
 export interface ArticleTocProps {
   onOpenAssetPicker?: () => void;
+  hideAssets?: boolean;
 }
 
-const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
+const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
   const divisions = useEditorStore((s) => s.divisions);
   const rootDivisionId = useEditorStore((s) => s.rootDivisionId);
   const activeDivisionId = useEditorStore((s) => s.activeDivisionId);
@@ -465,127 +466,131 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       )}
 
       {/* Asset refs — kept separate from divisions, folded by default */}
-      <div className="pretext-plus-editor__toc-assets">
-        <div className="pretext-plus-editor__toc-assets-header">
-          <button
-            type="button"
-            className="pretext-plus-editor__toc-assets-toggle"
-            onClick={() => setAssetsExpanded((v) => !v)}
-            aria-expanded={assetsExpanded}
-          >
-            <span className="pretext-plus-editor__toc-assets-chevron">
-              {assetsExpanded ? "▾" : "▸"}
-            </span>
-            <span>Assets</span>
-            {assetView.length > 0 && (
-              <span className="pretext-plus-editor__toc-assets-count">
-                {assetView.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {assetsExpanded && (
-          <div className="pretext-plus-editor__toc-assets-body">
-            {assetView.length === 0 ? (
-              <p className="pretext-plus-editor__toc-assets-empty">
-                No assets in this project yet.{" "}
-                {onOpenAssetPicker && (
-                  <button
-                    type="button"
-                    className="pretext-plus-editor__toc-assets-add-link"
-                    onClick={onOpenAssetPicker}
-                  >
-                    Add one
-                  </button>
+      {!hideAssets && (
+        <>
+          <div className="pretext-plus-editor__toc-assets">
+            <div className="pretext-plus-editor__toc-assets-header">
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-assets-toggle"
+                onClick={() => setAssetsExpanded((v) => !v)}
+                aria-expanded={assetsExpanded}
+              >
+                <span className="pretext-plus-editor__toc-assets-chevron">
+                  {assetsExpanded ? "▾" : "▸"}
+                </span>
+                <span>Assets</span>
+                {assetView.length > 0 && (
+                  <span className="pretext-plus-editor__toc-assets-count">
+                    {assetView.length}
+                  </span>
                 )}
-              </p>
-            ) : (
-              <div className="pretext-plus-editor__toc-assets-groups">
-                {groupedAssetRows.map(({ kind, rows }) => (
-                  <div key={kind}>
-                    <div className="pretext-plus-editor__toc-assets-group-header">
-                      {ASSET_KIND_LABELS[kind]}
-                    </div>
-                    <ul className="pretext-plus-editor__toc-assets-list">
-                      {rows.map((row) => (
-                        <li
-                          key={row.ref}
-                          className={[
-                            "pretext-plus-editor__toc-asset-item",
-                            row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
-                            row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
-                            duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
-                          ].filter(Boolean).join(" ")}
-                        >
-                          {row.asset?.url ? (
-                            <img
-                              src={row.asset.url}
-                              className="pretext-plus-editor__toc-asset-img"
-                              onClick={() => openAssetRow(row)}
-                            />
-                          ) : (
-                            <span
-                              className="pretext-plus-editor__toc-asset-img pretext-plus-editor__toc-asset-img--placeholder"
-                              onClick={() => openAssetRow(row)}
-                              title={row.status === "unlinked" ? "No asset — click to link" : undefined}
-                              aria-hidden="true"
+              </button>
+            </div>
+
+            {assetsExpanded && (
+              <div className="pretext-plus-editor__toc-assets-body">
+                {assetView.length === 0 ? (
+                  <p className="pretext-plus-editor__toc-assets-empty">
+                    No assets in this project yet.{" "}
+                    {onOpenAssetPicker && (
+                      <button
+                        type="button"
+                        className="pretext-plus-editor__toc-assets-add-link"
+                        onClick={onOpenAssetPicker}
+                      >
+                        Add one
+                      </button>
+                    )}
+                  </p>
+                ) : (
+                  <div className="pretext-plus-editor__toc-assets-groups">
+                    {groupedAssetRows.map(({ kind, rows }) => (
+                      <div key={kind}>
+                        <div className="pretext-plus-editor__toc-assets-group-header">
+                          {ASSET_KIND_LABELS[kind]}
+                        </div>
+                        <ul className="pretext-plus-editor__toc-assets-list">
+                          {rows.map((row) => (
+                            <li
+                              key={row.ref}
+                              className={[
+                                "pretext-plus-editor__toc-asset-item",
+                                row.status === "unlinked" ? "pretext-plus-editor__toc-asset-item--unlinked" : "",
+                                row.status === "unused" ? "pretext-plus-editor__toc-asset-item--unused" : "",
+                                duplicatingRef === row.ref ? "pretext-plus-editor__toc-asset-item--busy" : "",
+                              ].filter(Boolean).join(" ")}
                             >
-                              {row.status === "unlinked" ? "⚠" : "🖼"}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            className="pretext-plus-editor__toc-asset-name"
-                            onClick={() => openAssetRow(row)}
-                            title={
-                              row.status === "unlinked"
-                                ? "No asset for this reference — click to link or create one"
-                                : "Edit asset"
-                            }
-                          >
-                            <span className="pretext-plus-editor__toc-asset-label">
-                              {row.asset?.title ?? row.ref}
-                            </span>
-                            <span className="pretext-plus-editor__toc-asset-filename">
-                              {row.status === "unlinked"
-                                ? `${row.ref} — needs asset`
-                                : row.status === "unused"
-                                  ? `${row.ref} — not placed`
-                                  : row.ref}
-                            </span>
-                          </button>
-                          <div className="pretext-plus-editor__toc-actions">
-                            {duplicatingRef === row.ref ? (
-                              <span
-                                className="pretext-plus-editor__toc-asset-spinner"
-                                role="status"
-                                aria-label="Duplicating asset"
-                                title="Duplicating…"
-                              />
-                            ) : (
-                              <DivisionMenu items={assetMenuItems(row)} />
-                            )}
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                              {row.asset?.url ? (
+                                <img
+                                  src={row.asset.url}
+                                  className="pretext-plus-editor__toc-asset-img"
+                                  onClick={() => openAssetRow(row)}
+                                />
+                              ) : (
+                                <span
+                                  className="pretext-plus-editor__toc-asset-img pretext-plus-editor__toc-asset-img--placeholder"
+                                  onClick={() => openAssetRow(row)}
+                                  title={row.status === "unlinked" ? "No asset — click to link" : undefined}
+                                  aria-hidden="true"
+                                >
+                                  {row.status === "unlinked" ? "⚠" : "🖼"}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className="pretext-plus-editor__toc-asset-name"
+                                onClick={() => openAssetRow(row)}
+                                title={
+                                  row.status === "unlinked"
+                                    ? "No asset for this reference — click to link or create one"
+                                    : "Edit asset"
+                                }
+                              >
+                                <span className="pretext-plus-editor__toc-asset-label">
+                                  {row.asset?.title ?? row.ref}
+                                </span>
+                                <span className="pretext-plus-editor__toc-asset-filename">
+                                  {row.status === "unlinked"
+                                    ? `${row.ref} — needs asset`
+                                    : row.status === "unused"
+                                      ? `${row.ref} — not placed`
+                                      : row.ref}
+                                </span>
+                              </button>
+                              <div className="pretext-plus-editor__toc-actions">
+                                {duplicatingRef === row.ref ? (
+                                  <span
+                                    className="pretext-plus-editor__toc-asset-spinner"
+                                    role="status"
+                                    aria-label="Duplicating asset"
+                                    title="Duplicating…"
+                                  />
+                                ) : (
+                                  <DivisionMenu items={assetMenuItems(row)} />
+                                )}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>
-        )}
-      </div>
 
-      {onOpenAssetPicker && (
-        <button
-          type="button"
-          className="pretext-plus-editor__toc-assets-btn"
-          onClick={onOpenAssetPicker}
-        >
-          Manage Assets
-        </button>
+          {onOpenAssetPicker && (
+            <button
+              type="button"
+              className="pretext-plus-editor__toc-assets-btn"
+              onClick={onOpenAssetPicker}
+            >
+              Manage Assets
+            </button>
+          )}
+        </>
       )}
     </>
   );

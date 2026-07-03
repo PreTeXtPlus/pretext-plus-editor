@@ -795,28 +795,25 @@ export function updateLatexDivisionMetadata(
  * Convert a LaTeX division's source to PreTeXt by passing the visible LaTeX
  * straight to `@pretextbook/latex-pretext` and using its output as-is.
  *
- * A content division's header (`\section{…}\label{…}`, `\worksheet{…}`, …)
- * converts to its own complete `<type xml:id="…"><title>…>` element, so the
- * conversion is used exactly as produced — if a header doesn't convert
- * correctly, that surfaces here to be fixed in the converter rather than worked
- * around. Root divisions (`book`/`article`/`slideshow`) hold a whole document
- * body that converts to a sequence of elements, so it is wrapped in the root
- * element (whose title/`xml:id` aren't expressed in the LaTeX body).
+ * A division's header (`\section{…}\label{…}`, `\worksheet{…}`, … — and, for a
+ * root division, `\article{…}`/`\book{…}`/`\slideshow{…}`) converts to its own
+ * complete `<type xml:id="…"><title>…>` element, so the conversion is used
+ * exactly as produced with no extra wrapper added here — doing so would nest a
+ * second `<article>`/`<book>`/`<slideshow>` around the one the converter
+ * already emitted from the header. If a header doesn't convert correctly,
+ * that surfaces here to be fixed in the converter rather than worked around.
  *
  * Returns `null` when the conversion fails, so callers can disable the convert
  * action / fall back.
  */
 export function latexDivisionToTaggedPretext(
-  division: Pick<Division, "source" | "type" | "xmlId" | "title">,
+  division: Pick<Division, "source">,
 ): string | null {
   const { pretextSource, pretextError } = derivePretextContent(
     division.source,
     "latex",
   );
   if (pretextError || pretextSource === undefined) return null;
-  if (ROOT_DIVISION_TYPES.has(division.type)) {
-    return `<${division.type} xml:id="${division.xmlId}">\n<title>${division.title}</title>\n\n${pretextSource}\n</${division.type}>`;
-  }
   return pretextSource;
 }
 
@@ -1177,7 +1174,7 @@ export function updateChapterMetadata(
  * Markdown divisions are stored as real markdown files: a leading YAML
  * frontmatter block carrying the structural metadata followed by the markdown
  * body.  The frontmatter keys are `division` (the PreTeXt element type),
- * `xmlid`, `label`, and `title`.  `@pretextbook/remark-pretext` turns the
+ * `id`, `label`, and `title`.  `@pretextbook/remark-pretext` turns the
  * whole file — frontmatter included — into the proper
  * `<type xml:id="..." label="..."><title>...</title>` element, so (unlike
  * PreTeXt divisions) the wrapper element never appears in storage.
@@ -1229,16 +1226,16 @@ export function parseMarkdownFrontmatter(content: string): {
   let label = "";
   let title = "";
   for (const rawLine of match[1].split(/\r?\n/)) {
-    // `@pretextbook/remark-pretext` reads the id from a `xmlid` key (a YAML key
-    // can't contain a colon), but accept the legacy `xml:id` spelling too so
-    // divisions saved before the fix still parse.
-    const kv = /^[ \t]*(xmlid|xml:id|division|label|title)[ \t]*:[ \t]*(.*)$/.exec(
+    // `@pretextbook/remark-pretext` reads the id from an `id` key, but accepts
+    // the older `xmlid` (a YAML key can't contain a colon) and `xml:id`
+    // spellings too so divisions saved before each rename still parse.
+    const kv = /^[ \t]*(id|xmlid|xml:id|division|label|title)[ \t]*:[ \t]*(.*)$/.exec(
       rawLine,
     );
     if (!kv) continue;
     const value = unquoteYamlValue(kv[2]);
     if (kv[1] === "division") type = value;
-    else if (kv[1] === "xmlid" || kv[1] === "xml:id") xmlId = value;
+    else if (kv[1] === "id" || kv[1] === "xmlid" || kv[1] === "xml:id") xmlId = value;
     else if (kv[1] === "title") title = value;
     else label = value;
   }
@@ -1252,7 +1249,7 @@ export function buildMarkdownFrontmatter(meta: {
   label: string;
   title?: string;
 }): string {
-  const lines = [`division: ${meta.type}`, `xmlid: ${meta.xmlId}`];
+  const lines = [`division: ${meta.type}`, `id: ${meta.xmlId}`];
   if (meta.title) lines.push(`title: ${quoteYamlValue(meta.title)}`);
   if (meta.label) lines.push(`label: ${meta.label}`);
   return `---\n${lines.join("\n")}\n---`;
@@ -2144,7 +2141,7 @@ const ROOT_DIVISION_TYPES: ReadonlySet<DivisionType> = new Set([
 ]);
 
 /**
- * Ensure that the provided xml string has either a label or xml:id attribute on the root document element (Book, Article, or Slideshow).  If not, add a label="preview" attribute to the root element.  This is necessary for the build server to know which file to return for previewing.
+ * Ensure that the provided xml string has a label on the root document element (Book, Article, or Slideshow).  We can generally assume there is an xml:id, but we should duplicate that as a label if it is missing.  This is important for the previewer, which uses the label to identify the root document element.
  * @param xml: Full XML for a pretext document, including <pretext> around the <book>/<article>/<slideshow> root element. 
  */
 function ensureRootLabel(xml: string): string {
@@ -2160,9 +2157,13 @@ function ensureRootLabel(xml: string): string {
         ? firstElement
         : undefined;
     if (!el) return xml;
+    let xmlId = el.attributes.xmlId;
+    if (!xmlId) {
+      console.warn("Root element doesn't have an xml:id");
+      xmlId = findUnusedLabel(tree, "pretext-plus-preview");
+    }
     if (!el.attributes.label) {
-      const unusedLabel = findUnusedLabel(tree, "pretext-plus-preview");
-      el.attributes.label = unusedLabel;
+      el.attributes.label = xmlId;
       return toXml(tree, XML_SERIALIZE_OPTIONS);
     }
     return xml;

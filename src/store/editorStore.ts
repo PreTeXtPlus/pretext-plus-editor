@@ -329,7 +329,7 @@ export interface EditorStoreHandle {
 export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
   // Plain mutable bag — NOT React state.  Not tracked by Zustand, so updating
   // it does not trigger any re-renders.  Store actions close over this object.
-  const noop = () => {};
+  const noop = () => { };
   const bag: { cbs: EditorCallbacks } = {
     cbs: {
       selectDivision: noop,
@@ -404,15 +404,15 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         const divisions = s.divisions.map((d) =>
           d.xmlId === xmlId
             ? {
-                ...d,
-                ...(changes.id !== undefined && { id: changes.id }),
-                ...(changes.title !== undefined && { title: changes.title }),
-                ...(changes.type !== undefined && { type: changes.type }),
-                ...(changes.xmlId != null && { xmlId: changes.xmlId }),
-                ...(changes.sourceFormat !== undefined && {
-                  sourceFormat: changes.sourceFormat,
-                }),
-              }
+              ...d,
+              ...(changes.id !== undefined && { id: changes.id }),
+              ...(changes.title !== undefined && { title: changes.title }),
+              ...(changes.type !== undefined && { type: changes.type }),
+              ...(changes.xmlId != null && { xmlId: changes.xmlId }),
+              ...(changes.sourceFormat !== undefined && {
+                sourceFormat: changes.sourceFormat,
+              }),
+            }
             : d,
         );
         return { divisions };
@@ -463,16 +463,16 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       // and no `xml:id` at all (see ensureRootLabel in sectionUtils.ts).
       const { xmlId, label } =
         section.sourceFormat === "markdown"
-          ? extractMarkdownDivisionMetadata(section.source) ?? {
-              xmlId: section.xmlId,
-              label: "",
-            }
+          ? (() => {
+            const meta = extractMarkdownDivisionMetadata(section.source);
+            return { xmlId: meta?.xmlId || section.xmlId, label: meta?.label ?? "" };
+          })()
           : section.sourceFormat === "latex"
-          ? {
+            ? {
               xmlId: extractLatexSectionLabel(section.source) || section.xmlId,
               label: "",
             }
-          : (() => {
+            : (() => {
               const attrs = getSectionAttributes(section.source);
               return { xmlId: attrs.xmlId || section.xmlId, label: attrs.label };
             })();
