@@ -1071,21 +1071,17 @@ const EditorsInner = (props: EditorsInnerProps) => {
     }
   }, [isFullSourceOpen, rootDivision, divisions, effectiveDocinfo, projectAssets]);
 
-  // The active division's own tagged XML (outer element included). For
-  // PreTeXt divisions this also expands any `<plus:* ref="..."/>` child
-  // placeholders against the full divisions pool — the real build server
-  // has no notion of that placeholder syntax, so previewing a division that
-  // still contains unresolved refs to its children produces invalid PreTeXt
-  // and a build failure. `divisionConvertedPretext` is already kept up to
-  // date for non-PreTeXt divisions (which are leaves and never contain refs).
+  // The active division's own tagged XML (outer element included), with any
+  // `<plus:* ref="..."/>` placeholder expanded against the full divisions
+  // pool — the real build server has no notion of that placeholder syntax,
+  // so previewing a division that still contains unresolved refs (to child
+  // divisions or to assets like `<plus:image ref="...">`) produces invalid
+  // PreTeXt and a build failure. `assembleProjectSource` handles the
+  // LaTeX/Markdown -> PreTeXt conversion internally before resolving refs, so
+  // this is correct for every source format, not just PreTeXt.
   const divisionTaggedXml = !activeDivision
     ? undefined
-    : activeDivisionFormat === "pretext"
-    ? assembleProjectSource(divisions, activeDivision.xmlId, projectAssets)
-    : // Markdown and LaTeX both convert to a complete `<type xml:id="...">`
-      // element (see `divisionConvertedPretext`), so the conversion is used
-      // as-is; `undefined` when it failed.
-      divisionConvertedPretext;
+    : assembleProjectSource(divisions, activeDivision.xmlId, projectAssets);
 
   const previewContent =
     activeDivision && divisionTaggedXml !== undefined
