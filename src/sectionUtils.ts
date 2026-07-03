@@ -217,12 +217,12 @@ export function updateDivisionTitle(
 /** Create a new blank `<section>` as a `Division`. */
 export function createNewSection(title = "New Section"): DocumentSection {
   const id = generateId();
-  const content = `<section xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
+  const source = `<section xml:id="${id}">\n\t<title>${title}</title>\n\n\t<p>\n\n\t</p>\n\n</section>`;
   return {
     id,
     xmlId: id,
     title,
-    content,
+    source,
     type: "section",
     sourceFormat: "pretext",
   };
@@ -231,12 +231,12 @@ export function createNewSection(title = "New Section"): DocumentSection {
 /** Create a blank `<introduction>` division. */
 export function createIntroduction(): DocumentSection {
   const id = generateId();
-  const content = `<introduction xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
+  const source = `<introduction xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</introduction>`;
   return {
     id,
     xmlId: id,
     title: "Introduction",
-    content,
+    source,
     type: "introduction",
     sourceFormat: "pretext",
   };
@@ -245,12 +245,12 @@ export function createIntroduction(): DocumentSection {
 /** Create a blank `<conclusion>` division. */
 export function createConclusion(): DocumentSection {
   const id = generateId();
-  const content = `<conclusion xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
+  const source = `<conclusion xml:id="${id}">\n\n\t<p>\n\n\t</p>\n\n</conclusion>`;
   return {
     id,
     xmlId: id,
     title: "Conclusion",
-    content,
+    source,
     type: "conclusion",
     sourceFormat: "pretext",
   };
@@ -354,7 +354,7 @@ export function splitDocument(xml: string): DocumentSplitResult {
           id,
           xmlId: (el.attributes?.["xml:id"] as string) || id,
           title: extractTitle(el) || untitledLabel(el.name),
-          content: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
+          source: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
           type: tagToType(el.name),
           sourceFormat: "pretext" as const,
         };
@@ -372,7 +372,7 @@ export function splitDocument(xml: string): DocumentSplitResult {
         id,
         xmlId: (el.attributes?.["xml:id"] as string) || id,
         title: extractTitle(el) || untitledLabel(el.name),
-        content: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
+        source: toXml({ type: "root", children: [el] } as Root, XML_SERIALIZE_OPTIONS),
         type: tagToType(el.name),
         sourceFormat: "pretext" as const,
       };
@@ -384,16 +384,16 @@ export function mergeDocument(
   wrapper: string,
   sections: DocumentSection[],
 ): string {
-  if (!wrapper) return sections.map((s) => s.content).join("\n\n");
+  if (!wrapper) return sections.map((s) => s.source).join("\n\n");
   const wrapperTree = safeFromXml(wrapper);
-  if (!wrapperTree) return sections.map((s) => s.content).join("\n\n");
+  if (!wrapperTree) return sections.map((s) => s.source).join("\n\n");
   const rootElement = wrapperTree.children.find((n) => n.type === "element") as
     | Element
     | undefined;
-  if (!rootElement) return sections.map((s) => s.content).join("\n\n");
+  if (!rootElement) return sections.map((s) => s.source).join("\n\n");
   const sectionNodes: Element[] = sections.flatMap((sec) => {
     try {
-      const secTree: Root = fromXml(sec.content);
+      const secTree: Root = fromXml(sec.source);
       return secTree.children.filter((n) => n.type === "element") as Element[];
     } catch {
       return [];
@@ -525,14 +525,14 @@ function splitLatexByCommands(latex: string): DocumentSplitResult {
   const intro = parts[0].trim();
   if (intro) {
     const id = generateId();
-    sections.push({ id, xmlId: id, title: "Introduction", content: intro, type: "introduction", sourceFormat: "latex" });
+    sections.push({ id, xmlId: id, title: "Introduction", source: intro, type: "introduction", sourceFormat: "latex" });
   }
   for (let i = 1; i < parts.length; i += 2) {
     const header = parts[i];
     const sectionBody = parts[i + 1] ?? "";
     const title = extractLatexSectionTitle(header);
     const id = generateId();
-    sections.push({ id, xmlId: id, title, content: header + sectionBody, type: "section", sourceFormat: "latex" });
+    sections.push({ id, xmlId: id, title, source: header + sectionBody, type: "section", sourceFormat: "latex" });
   }
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   return { wrapper, sections };
@@ -547,19 +547,19 @@ function splitLatexByEnvironments(latex: string): DocumentSplitResult {
     const before = body.slice(0, firstMatch.index).trim();
     if (before) {
       const id = generateId();
-      sections.push({ id, xmlId: id, title: "Introduction", content: before, type: "introduction", sourceFormat: "latex" });
+      sections.push({ id, xmlId: id, title: "Introduction", source: before, type: "introduction", sourceFormat: "latex" });
     }
     const titleMatch = /\\title\{([^}]*)\}/.exec(firstMatch[1]);
     const title = titleMatch?.[1]?.trim() ?? "Section";
     const id = generateId();
-    sections.push({ id, xmlId: id, title, content: firstMatch[0], type: "section", sourceFormat: "latex" });
+    sections.push({ id, xmlId: id, title, source: firstMatch[0], type: "section", sourceFormat: "latex" });
   }
   let match: RegExpExecArray | null;
   while ((match = envRe.exec(body)) !== null) {
     const titleMatch = /\\title\{([^}]*)\}/.exec(match[1]);
     const title = titleMatch?.[1]?.trim() ?? "Section";
     const id = generateId();
-    sections.push({ id, xmlId: id, title, content: match[0], type: "section", sourceFormat: "latex" });
+    sections.push({ id, xmlId: id, title, source: match[0], type: "section", sourceFormat: "latex" });
   }
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   return { wrapper, sections };
@@ -574,7 +574,7 @@ export function mergeLatexDocument(
   wrapper: string,
   sections: DocumentSection[],
 ): string {
-  const sectionTexts = sections.map((s) => s.content).join("\n\n");
+  const sectionTexts = sections.map((s) => s.source).join("\n\n");
   if (!wrapper) return sectionTexts;
   const w = decodeLatexWrapper(wrapper);
   if (!w) return sectionTexts;
@@ -763,18 +763,18 @@ export function updateLatexDivisionMetadata(
     label?: string | null;
   },
 ): Division {
-  let content = division.content;
+  let source = division.source;
   if (changes.type !== undefined) {
-    content = content.replace(
+    source = source.replace(
       LEADING_LATEX_DIVISION_MACRO,
       `$1\\${changes.type}$2`,
     );
   }
   if (changes.title !== undefined) {
-    content = updateLatexSectionTitle(content, changes.title);
+    source = updateLatexSectionTitle(source, changes.title);
   }
   if (changes.xmlId !== undefined) {
-    content = content.replace(
+    source = source.replace(
       /^(\s*\\(?!begin\b|end\b)[A-Za-z][A-Za-z-]*\*?\{[^}]*\})(\s*\\label\{[^}]*\})?/,
       (_full, header: string) =>
         changes.xmlId == null || changes.xmlId === ""
@@ -784,7 +784,7 @@ export function updateLatexDivisionMetadata(
   }
   return {
     ...division,
-    content,
+    source,
     title: changes.title ?? division.title,
     type: changes.type ?? division.type,
     xmlId: changes.xmlId || division.xmlId,
@@ -807,10 +807,10 @@ export function updateLatexDivisionMetadata(
  * action / fall back.
  */
 export function latexDivisionToTaggedPretext(
-  division: Pick<Division, "content" | "type" | "xmlId" | "title">,
+  division: Pick<Division, "source" | "type" | "xmlId" | "title">,
 ): string | null {
   const { pretextSource, pretextError } = derivePretextContent(
-    division.content,
+    division.source,
     "latex",
   );
   if (pretextError || pretextSource === undefined) return null;
@@ -827,7 +827,7 @@ export function createNewLatexSection(title = "New Section"): DocumentSection {
     id,
     xmlId: id,
     title,
-    content: `\\section{${title}}\n\n`,
+    source: `\\section{${title}}\n\n`,
     type: "section",
     sourceFormat: "latex",
   };
@@ -840,7 +840,7 @@ export function createLatexIntroduction(): DocumentSection {
     id,
     xmlId: id,
     title: "Introduction",
-    content: "% Introduction\n\n",
+    source: "% Introduction\n\n",
     type: "introduction",
     sourceFormat: "latex",
   };
@@ -853,7 +853,7 @@ export function createLatexConclusion(): DocumentSection {
     id,
     xmlId: id,
     title: "Conclusion",
-    content: "% Conclusion\n\n",
+    source: "% Conclusion\n\n",
     type: "conclusion",
     sourceFormat: "latex",
   };
@@ -881,16 +881,16 @@ export function mergeTwoSections(
   isLatex: boolean,
 ): DocumentSection {
   if (isLatex) {
-    const bBody = stripLatexSectionWrapper(b.content, b.type);
+    const bBody = stripLatexSectionWrapper(b.source, b.type);
     return {
       ...a,
-      content: a.content.trimEnd() + "\n\n" + bBody.trimStart(),
+      source: a.source.trimEnd() + "\n\n" + bBody.trimStart(),
     };
   }
 
   // PreTeXt: parse and combine xast children
-  const aTree = safeFromXml(a.content);
-  const bTree = safeFromXml(b.content);
+  const aTree = safeFromXml(a.source);
+  const bTree = safeFromXml(b.source);
   const aEl = aTree?.children.find((n) => n.type === "element") as
     | Element
     | undefined;
@@ -900,7 +900,7 @@ export function mergeTwoSections(
 
   if (!aEl || !bEl) {
     // Malformed XML in either section: fall back to plain concatenation.
-    return { ...a, content: a.content + "\n\n" + b.content };
+    return { ...a, source: a.source + "\n\n" + b.source };
   }
 
   // Drop the second section's <title> element
@@ -913,7 +913,7 @@ export function mergeTwoSections(
   };
   return {
     ...a,
-    content: toXml({ type: "root", children: [merged] } as Root, XML_SERIALIZE_OPTIONS),
+    source: toXml({ type: "root", children: [merged] } as Root, XML_SERIALIZE_OPTIONS),
   };
 }
 
@@ -1011,7 +1011,7 @@ export function extractDivisionMetadata(content: string): {
  * Pass `null` for `xmlId` or `label` to remove the attribute entirely.
  * Omit a key (or pass `undefined`) to leave it unchanged.
  *
- * Returns a new `DocumentSection` with updated `content`, `title`, and `type`.
+ * Returns a new `DocumentSection` with updated `source`, `title`, and `type`.
  */
 export function updateSectionMetadata(
   section: DocumentSection,
@@ -1026,13 +1026,13 @@ export function updateSectionMetadata(
   const newTitle = changes.title ?? section.title;
 
   try {
-    const tree: Root = fromXml(section.content);
+    const tree: Root = fromXml(section.source);
     const el = tree.children.find((n) => n.type === "element") as
       | Element
       | undefined;
 
     if (!el) {
-      // Fallback: return section with type/title updated but content unchanged.
+      // Fallback: return section with type/title updated but source unchanged.
       return { ...section, title: newTitle, type: newType };
     }
 
@@ -1081,7 +1081,7 @@ export function updateSectionMetadata(
       ];
     }
 
-    const newContent = toXml(
+    const newSource = toXml(
       { type: "root", children: [newEl] } as Root,
       XML_SERIALIZE_OPTIONS,
     );
@@ -1094,7 +1094,7 @@ export function updateSectionMetadata(
       title: newTitle,
       type: newType,
       xmlId: newXmlId,
-      content: newContent,
+      source: newSource,
     };
   } catch {
     return { ...section, title: newTitle, type: newType };
@@ -1177,15 +1177,36 @@ export function updateChapterMetadata(
  * Markdown divisions are stored as real markdown files: a leading YAML
  * frontmatter block carrying the structural metadata followed by the markdown
  * body.  The frontmatter keys are `division` (the PreTeXt element type),
- * `xmlid`, and `label`.  `@pretextbook/remark-pretext` turns the whole file —
- * frontmatter included — into the proper `<type xml:id="..." label="...">`
- * element, so (unlike PreTeXt divisions) the wrapper element never appears in
- * storage.  The division's title lives in the body as its leading `# heading`.
+ * `xmlid`, `label`, and `title`.  `@pretextbook/remark-pretext` turns the
+ * whole file — frontmatter included — into the proper
+ * `<type xml:id="..." label="..."><title>...</title>` element, so (unlike
+ * PreTeXt divisions) the wrapper element never appears in storage.
  */
 
 /** Matches a leading `---` ... `---` YAML frontmatter block. */
 const MARKDOWN_FRONTMATTER_RE =
   /^\uFEFF?[ \t]*---[ \t]*\r?\n([\s\S]*?)\r?\n[ \t]*---[ \t]*(?:\r?\n|$)/;
+
+/**
+ * Strip surrounding quotes from a scalar YAML value, unescaping `\"` and `\\`
+ * when the value was double-quoted. Not a general YAML parser — just enough
+ * to round-trip what {@link buildMarkdownFrontmatter} writes.
+ */
+function unquoteYamlValue(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed
+      .slice(1, -1)
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+  return trimmed.replace(/^['"]|['"]$/g, "");
+}
+
+/** Double-quote and escape a scalar value for use in a YAML frontmatter line. */
+function quoteYamlValue(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
 
 /**
  * Parse the leading frontmatter block of a markdown division into its
@@ -1197,6 +1218,7 @@ export function parseMarkdownFrontmatter(content: string): {
   type: DivisionType;
   xmlId: string;
   label: string;
+  title: string;
   body: string;
 } | null {
   const match = MARKDOWN_FRONTMATTER_RE.exec(content);
@@ -1205,20 +1227,22 @@ export function parseMarkdownFrontmatter(content: string): {
   let type = "section";
   let xmlId = "";
   let label = "";
+  let title = "";
   for (const rawLine of match[1].split(/\r?\n/)) {
     // `@pretextbook/remark-pretext` reads the id from a `xmlid` key (a YAML key
     // can't contain a colon), but accept the legacy `xml:id` spelling too so
     // divisions saved before the fix still parse.
-    const kv = /^[ \t]*(xmlid|xml:id|division|label)[ \t]*:[ \t]*(.*)$/.exec(
+    const kv = /^[ \t]*(xmlid|xml:id|division|label|title)[ \t]*:[ \t]*(.*)$/.exec(
       rawLine,
     );
     if (!kv) continue;
-    const value = kv[2].trim().replace(/^["']|["']$/g, "");
+    const value = unquoteYamlValue(kv[2]);
     if (kv[1] === "division") type = value;
     else if (kv[1] === "xmlid" || kv[1] === "xml:id") xmlId = value;
+    else if (kv[1] === "title") title = value;
     else label = value;
   }
-  return { type: (type || "section") as DivisionType, xmlId, label, body };
+  return { type: (type || "section") as DivisionType, xmlId, label, title, body };
 }
 
 /** Build a `---`-fenced frontmatter block for a markdown division. */
@@ -1226,33 +1250,33 @@ export function buildMarkdownFrontmatter(meta: {
   type: DivisionType;
   xmlId: string;
   label: string;
+  title?: string;
 }): string {
   const lines = [`division: ${meta.type}`, `xmlid: ${meta.xmlId}`];
+  if (meta.title) lines.push(`title: ${quoteYamlValue(meta.title)}`);
   if (meta.label) lines.push(`label: ${meta.label}`);
   return `---\n${lines.join("\n")}\n---`;
 }
 
-/** Extract a markdown division's leading `# heading` text, or `null` if none. */
+/**
+ * Extract a markdown division's leading `# heading` text, or `null` if none.
+ * Legacy fallback only — titles now live in frontmatter's `title` key; see
+ * {@link extractMarkdownDivisionMetadata}. Kept so documents saved before the
+ * frontmatter-title migration still show a real title instead of "Untitled".
+ */
 export function deriveMarkdownTitle(body: string): string | null {
   const m = /^[ \t]*#[ \t]+(.*)$/m.exec(body);
   return m ? m[1].trim() : null;
 }
 
-/** Replace (or insert) the leading `# heading` of a markdown body. */
-function setMarkdownHeading(body: string, title: string): string {
-  const m = /^[ \t]*#[ \t]+.*$/m.exec(body);
-  if (m) {
-    return body.slice(0, m.index) + `# ${title}` + body.slice(m.index + m[0].length);
-  }
-  return `# ${title}\n\n${body.replace(/^\s+/, "")}`;
-}
-
 /**
  * Derive a markdown division's title, type, `xml:id`, and `label` directly from
- * its source — the frontmatter for the structural metadata and the leading
- * `# heading` for the title.  Markdown analogue of {@link extractDivisionMetadata};
- * returns `null` when the frontmatter is absent/malformed (both common
- * mid-edit), so callers can skip the update rather than clobber metadata.
+ * its source — all from the frontmatter block. Markdown analogue of
+ * {@link extractDivisionMetadata}; returns `null` when the frontmatter is
+ * absent/malformed (both common mid-edit), so callers can skip the update
+ * rather than clobber metadata. When the frontmatter carries no `title` (a
+ * document predating the migration to a frontmatter title), falls back to the
+ * body's leading `# heading`.
  */
 export function extractMarkdownDivisionMetadata(content: string): {
   title: string;
@@ -1263,7 +1287,7 @@ export function extractMarkdownDivisionMetadata(content: string): {
   const parsed = parseMarkdownFrontmatter(content);
   if (!parsed) return null;
   return {
-    title: deriveMarkdownTitle(parsed.body) ?? "",
+    title: parsed.title || deriveMarkdownTitle(parsed.body) || "",
     type: parsed.type,
     xmlId: parsed.xmlId,
     label: parsed.label,
@@ -1272,12 +1296,12 @@ export function extractMarkdownDivisionMetadata(content: string): {
 
 /**
  * Update the title, type (`division`), `xml:id`, and `label` of a markdown
- * division.  Structural metadata is rewritten in the frontmatter block; a title
- * change rewrites the body's leading `# heading`.  Markdown analogue of
- * {@link updateSectionMetadata} (which is XML-only and would wrongly inject a
- * `<title>` element).  Pass `null`/empty for `label` to clear it; omit a key to
- * leave it unchanged.  The `xml:id` is never cleared — it is the division's
- * identity — so an empty value falls back to the record's existing id.
+ * division — all rewritten in the frontmatter block; the body is left
+ * untouched. Markdown analogue of {@link updateSectionMetadata} (which is
+ * XML-only and would wrongly inject a `<title>` element). Pass `null`/empty
+ * for `label` to clear it; omit a key to leave it unchanged. The `xml:id` is
+ * never cleared — it is the division's identity — so an empty value falls
+ * back to the record's existing id.
  */
 export function updateMarkdownDivisionMetadata(
   division: Division,
@@ -1288,33 +1312,33 @@ export function updateMarkdownDivisionMetadata(
     label?: string | null;
   },
 ): Division {
-  const parsed = parseMarkdownFrontmatter(division.content);
-  const body0 = parsed ? parsed.body : division.content;
+  const parsed = parseMarkdownFrontmatter(division.source);
+  const body = parsed ? parsed.body : division.source;
   const curType = parsed?.type ?? division.type;
   const curXmlId = parsed?.xmlId ?? division.xmlId;
   const curLabel = parsed?.label ?? "";
+  const curTitle = parsed?.title || division.title;
 
   const newType = (changes.type ?? curType) as DivisionType;
   const effectiveXmlId =
     (changes.xmlId === undefined ? curXmlId : changes.xmlId ?? "") ||
     division.xmlId;
   const newLabel = changes.label === undefined ? curLabel : changes.label ?? "";
+  const newTitle = changes.title ?? curTitle;
 
-  const body =
-    changes.title !== undefined ? setMarkdownHeading(body0, changes.title) : body0;
-
-  const content = `${buildMarkdownFrontmatter({
+  const source = `${buildMarkdownFrontmatter({
     type: newType,
     xmlId: effectiveXmlId,
     label: newLabel,
+    title: newTitle,
   })}\n${body}`;
 
   return {
     ...division,
-    title: changes.title ?? division.title,
+    title: newTitle,
     type: newType,
     xmlId: effectiveXmlId,
-    content,
+    source,
   };
 }
 
@@ -1373,7 +1397,7 @@ export function wrapDocumentAsSection(
         id,
         xmlId: id,
         title: sectionTitle,
-        content: toXml({ type: "root", children: [sectionEl] } as Root, XML_SERIALIZE_OPTIONS),
+        source: toXml({ type: "root", children: [sectionEl] } as Root, XML_SERIALIZE_OPTIONS),
         type: "section",
         sourceFormat: "pretext" as const,
       }],
@@ -1386,7 +1410,7 @@ export function wrapDocumentAsSection(
       id,
       xmlId: id,
       title: sectionTitle,
-      content: `<section xml:id="${id}">\n\t<title>${sectionTitle}</title>\n\n${normalized}\n</section>`,
+      source: `<section xml:id="${id}">\n\t<title>${sectionTitle}</title>\n\n${normalized}\n</section>`,
       type: "section",
       sourceFormat: "pretext" as const,
     }],
@@ -1398,12 +1422,12 @@ export function wrapLatexDocumentAsSection(
   sectionTitle = "Section 1",
 ): DocumentSplitResult {
   const { preamble, body, closing } = splitLatexPreamble(latex);
-  const sectionContent = `\\section{${sectionTitle}}\n\n${body.trim()}\n\n`;
+  const sectionSource = `\\section{${sectionTitle}}\n\n${body.trim()}\n\n`;
   const wrapper = preamble ? encodeLatexWrapper({ preamble, closing }) : "";
   const id = generateId();
   return {
     wrapper,
-    sections: [{ id, xmlId: id, title: sectionTitle, content: sectionContent, type: "section", sourceFormat: "latex" }],
+    sections: [{ id, xmlId: id, title: sectionTitle, source: sectionSource, type: "section", sourceFormat: "latex" }],
   };
 }
 
@@ -1803,8 +1827,8 @@ export function createDivisionWithId(
 ): Division {
   const tag = type.charAt(0).toUpperCase() + type.slice(1);
   const title = `New ${tag}`;
-  const content = createDivisionContent(type, sourceFormat, title, xmlId);
-  return { id: xmlId, xmlId, title, type, sourceFormat, content };
+  const source = createDivisionContent(type, sourceFormat, title, xmlId);
+  return { id: xmlId, xmlId, title, type, sourceFormat, source };
 }
 
 /**
@@ -1828,7 +1852,7 @@ export function createDivisionContent(
     return `\\${type}{${title}}\\label{${xmlId}}\n\n`;
   }
   if (sourceFormat === "markdown") {
-    return `${buildMarkdownFrontmatter({ type, xmlId, label: "" })}\n# ${title}\n\n`;
+    return `${buildMarkdownFrontmatter({ type, xmlId, label: "", title })}\n\n`;
   }
   if (type === "introduction" || type === "conclusion") {
     return `<${type} xml:id="${xmlId}">\n\n\t<p>\n\n\t</p>\n\n</${type}>`;
@@ -1980,7 +2004,7 @@ export function findDivisionParent(
   xmlId: string,
 ): Division | null {
   const re = new RegExp(divisionRefSource(xmlId));
-  return divisions.find((d) => re.test(d.content)) ?? null;
+  return divisions.find((d) => re.test(d.source)) ?? null;
 }
 
 /**
@@ -2022,7 +2046,7 @@ function collectReachable(divisions: Division[], rootXmlId: string): Set<string>
     seen.add(id);
     const div = divisions.find((d) => d.xmlId === id);
     if (div) {
-      for (const ref of parseDivisionRefs(div.content, div.sourceFormat)) {
+      for (const ref of parseDivisionRefs(div.source, div.sourceFormat)) {
         queue.push(ref);
       }
     }
@@ -2073,7 +2097,7 @@ export function buildDivisionTree(
   const walk = (parentXmlId: string, depth: number) => {
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    for (const ref of parseDivisionRefs(parent.content, parent.sourceFormat)) {
+    for (const ref of parseDivisionRefs(parent.source, parent.sourceFormat)) {
       if (visited.has(ref)) continue;
       const div = divisions.find((d) => d.xmlId === ref);
       if (!div) continue;
@@ -2100,7 +2124,7 @@ export function getOrphanRoots(
   const orphanIds = new Set(orphans.map((d) => d.xmlId));
   const referenced = new Set<string>();
   for (const o of orphans) {
-    for (const ref of parseDivisionRefs(o.content, o.sourceFormat)) {
+    for (const ref of parseDivisionRefs(o.source, o.sourceFormat)) {
       if (orphanIds.has(ref)) referenced.add(ref);
     }
   }
@@ -2210,14 +2234,14 @@ function resolveDivisionXml(
 
   let xml: string;
   if (division.sourceFormat === "pretext") {
-    xml = division.content;
+    xml = division.source;
   } else if (division.sourceFormat === "markdown") {
     // A markdown division is a full markdown file (frontmatter + body); the
     // converter emits the complete `<type xml:id="..." label="...">` element
-    // from the frontmatter, so the content is converted as-is with no wrapper
+    // from the frontmatter, so the source is converted as-is with no wrapper
     // to strip or re-add here.
     const { pretextSource, pretextError } = derivePretextContent(
-      division.content,
+      division.source,
       "markdown",
     );
     xml = pretextSource ?? `<!-- conversion error: ${pretextError} -->`;
@@ -2364,8 +2388,8 @@ export function wrapDivisionForPreview(
  *
  * Hosts aren't required to persist a division's `title` separately from its
  * PreTeXt source — it's meant to be read from the `<title>` element inside
- * `content` — so a freshly loaded division's `title` field can be blank even
- * though its content already has a real title. Backfill it here so the TOC
+ * `source` — so a freshly loaded division's `title` field can be blank even
+ * though its source already has a real title. Backfill it here so the TOC
  * doesn't show "Untitled" for content that already has one.
  *
  * The root division additionally needs an `<article>`/`<book>` wrapper
@@ -2399,11 +2423,11 @@ export function normalizeDivisionsOnLoad(
 
   return divisions.map((division) => {
     if (division.sourceFormat === "markdown") {
-      // Markdown divisions keep their structural metadata in frontmatter; only
-      // backfill a blank title from the body's leading `# heading` so the TOC
-      // doesn't show "Untitled" for content that already names itself.
+      // Markdown divisions keep their title (and other structural metadata)
+      // in frontmatter; only backfill a blank title so the TOC doesn't show
+      // "Untitled" for content that already names itself.
       if (!division.title) {
-        const mdTitle = extractMarkdownDivisionMetadata(division.content)?.title;
+        const mdTitle = extractMarkdownDivisionMetadata(division.source)?.title;
         if (mdTitle) return { ...division, title: mdTitle };
       }
       return division;
@@ -2413,14 +2437,14 @@ export function normalizeDivisionsOnLoad(
       // `\section{…}` or a `\title{…}` inside `\begin{section}`); backfill a
       // blank title from there so the TOC doesn't show "Untitled".
       if (!division.title) {
-        const latexTitle = extractLatexDivisionTitle(division.content);
+        const latexTitle = extractLatexDivisionTitle(division.source);
         if (latexTitle) return { ...division, title: latexTitle };
       }
       return division;
     }
     if (division.sourceFormat !== "pretext") return division;
 
-    const meta = extractDivisionMetadata(division.content);
+    const meta = extractDivisionMetadata(division.source);
 
     if (division.xmlId === rootDivisionId && !(meta && ROOT_DIVISION_TYPES.has(meta.type))) {
       // The bare fragment may already carry its own leading <title> even
@@ -2428,14 +2452,14 @@ export function normalizeDivisionsOnLoad(
       // the host's project title (and "Untitled" only as a last resort) so a
       // real title isn't discarded, and drop it from the body so it isn't
       // duplicated once it's reinserted as the wrapper's <title>.
-      const { title: embeddedTitle, body } = extractLeadingTitle(division.content);
+      const { title: embeddedTitle, body } = extractLeadingTitle(division.source);
       const title =
         division.title || embeddedTitle || projectTitle || "Untitled";
       return {
         ...division,
         type: wrapperType,
         title,
-        content: `<${wrapperType} xml:id="${division.xmlId}">\n<title>${title}</title>\n\n${body}\n</${wrapperType}>`,
+        source: `<${wrapperType} xml:id="${division.xmlId}">\n<title>${title}</title>\n\n${body}\n</${wrapperType}>`,
       };
     }
 

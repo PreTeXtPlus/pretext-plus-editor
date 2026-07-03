@@ -111,8 +111,8 @@ function computeLockedRegion(
   }
 
   // Markdown: lock a leading `---` ... `---` YAML frontmatter block (the
-  // division's type/xml:id/label) and the title's `# heading` right after it,
-  // keeping the markdown body below editable.
+  // division's type/xml:id/label/title — title included, since it's now only
+  // editable from the TOC), keeping the markdown body below fully editable.
   if (sourceFormat === "markdown") {
     if (model.getLineContent(1).trim() !== "---") return null;
     let fence = -1;
@@ -124,26 +124,15 @@ function computeLockedRegion(
     }
     if (fence === -1) return null;
 
-    // The title lives in the body as the leading `# heading`, possibly after
-    // some blank spacing lines; lock through it too, since it's now only
-    // editable from the TOC. Stop at the first non-blank line that isn't a
-    // heading — that's the body, and is left untouched.
-    let headerEnd = fence;
-    let scan = fence + 1;
-    while (scan <= lineCount && model.getLineContent(scan).trim() === "") scan++;
-    if (scan <= lineCount && /^#{1,6}[ \t]+\S/.test(model.getLineContent(scan))) {
-      headerEnd = scan;
-    }
-
-    // Need at least one body line after the locked header; otherwise lock
-    // nothing (don't trap the user mid-edit).
-    if (headerEnd >= lineCount) return null;
+    // Need at least one body line after the locked frontmatter; otherwise
+    // lock nothing (don't trap the user mid-edit).
+    if (fence >= lineCount) return null;
     const lockedLines: number[] = [];
-    for (let ln = 1; ln <= headerEnd; ln++) lockedLines.push(ln);
+    for (let ln = 1; ln <= fence; ln++) lockedLines.push(ln);
     return {
-      editableRange: [headerEnd + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
+      editableRange: [fence + 1, 1, lineCount, model.getLineMaxColumn(lineCount)],
       lockedLines,
-      leadingLockedLines: headerEnd,
+      leadingLockedLines: fence,
     };
   }
 
@@ -218,8 +207,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const lockedDecorationsRef = useRef<any>(null);
   const lockedRef = useRef(false);
   // How many lines at the very top are locked (the wrapper tag + title for
-  // PreTeXt, the frontmatter block + `# heading` for Markdown). Clicking any
-  // of them opens the TOC properties form.
+  // PreTeXt, the frontmatter block — title included — for Markdown). Clicking
+  // any of them opens the TOC properties form.
   const leadingLockedLinesRef = useRef(0);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
@@ -484,8 +473,8 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     updateUndoRedoState();
 
     // Clicking any locked leading line (the PreTeXt opening tag/title, or the
-    // Markdown frontmatter block + title heading) opens the division's
-    // properties editor in the TOC, since the type/title/xml:id/label can't
+    // Markdown frontmatter block) opens the division's properties editor in
+    // the TOC, since the type/title/xml:id/label can't
     // be edited in place.
     mouseListenerRef.current?.dispose?.();
     mouseListenerRef.current = editor.onMouseDown((e: any) => {

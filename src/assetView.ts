@@ -55,7 +55,7 @@ export function buildProjectAssetView(
 
   // 1. Document references, in document order, deduplicated across divisions.
   for (const division of divisions ?? []) {
-    for (const { kind, ref } of parseAssetRefs(division.content, division.sourceFormat)) {
+    for (const { kind, ref } of parseAssetRefs(division.source, division.sourceFormat)) {
       const key = `${kind}:${ref}`;
       if (seen.has(key)) continue;
       seen.add(key);

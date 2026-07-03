@@ -39,7 +39,7 @@ export interface AssetManagerModalProps {
    */
   onFetchUrl?: (url: string) => Promise<File>;
   /** Create a new Doenet activity; host returns the created asset. */
-  onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
+  onCreateDoenet?: (title: string, ref: string) => Promise<Asset>;
   /** Remove an asset from the project. */
   onRemoveAsset?: (asset: Asset) => void;
   /**
@@ -142,12 +142,12 @@ const AssetManagerModal = ({
 
   // URL state
   const [urlValue, setUrlValue] = useState("");
-  const [urlName, setUrlName] = useState("");
+  const [urlTitle, setUrlTitle] = useState("");
   const [isAddingUrl, setIsAddingUrl] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
 
   // Create Doenet state
-  const [doenetName, setDoenetName] = useState("");
+  const [doenetTitle, setDoenetTitle] = useState("");
   const [doenetRef, setDoenetRef] = useState("");
   const [isCreatingDoenet, setIsCreatingDoenet] = useState(false);
   const [doenetError, setDoenetError] = useState<string | null>(null);
@@ -289,13 +289,13 @@ const AssetManagerModal = ({
   const handleUrlInsert = async () => {
     const url = urlValue.trim();
     if (!url) return;
-    const name = urlName.trim();
+    const title = urlTitle.trim();
     if (onFetchUrl && onUpload) {
       setUrlError(null);
       setIsAddingUrl(true);
       try {
         const fetched = await onFetchUrl(url);
-        const file = name ? new File([fetched], name, { type: fetched.type }) : fetched;
+        const file = title ? new File([fetched], title, { type: fetched.type }) : fetched;
         const asset = await onUpload(file);
         commitAsset(asset);
       } catch (err) {
@@ -306,7 +306,7 @@ const AssetManagerModal = ({
     } else {
       commitAsset({
         id: localAssetId("url"),
-        name: name || url,
+        title: title || url,
         ref: url.split("/").pop() ?? "image",
         kind: "image",
         url,
@@ -315,14 +315,14 @@ const AssetManagerModal = ({
   };
 
   const handleCreateDoenet = async () => {
-    const name = doenetName.trim();
+    const title = doenetTitle.trim();
     const ref = doenetRef.trim();
-    if (!name || !ref) return;
+    if (!title || !ref) return;
     if (onCreateDoenet) {
       setDoenetError(null);
       setIsCreatingDoenet(true);
       try {
-        const asset = await onCreateDoenet(name, ref);
+        const asset = await onCreateDoenet(title, ref);
         commitAsset(asset);
       } catch (err) {
         setDoenetError(err instanceof Error ? err.message : "Failed to create activity.");
@@ -330,7 +330,7 @@ const AssetManagerModal = ({
         setIsCreatingDoenet(false);
       }
     } else {
-      commitAsset({ id: localAssetId("doenet"), name, ref, kind: "doenet" });
+      commitAsset({ id: localAssetId("doenet"), title, ref, kind: "doenet" });
     }
   };
 
@@ -376,7 +376,7 @@ const AssetManagerModal = ({
                     title={!asset.ref ? "Asset has no reference — cannot use" : inProject ? `Use "${asset.ref}"` : `Add to project & use "${asset.ref}"`}
                   >
                     <div className="pretext-plus-editor__am-row-info">
-                      <span className="pretext-plus-editor__am-row-name">{asset.name}</span>
+                      <span className="pretext-plus-editor__am-row-name">{asset.title}</span>
                       <span className="pretext-plus-editor__am-row-ref">{isAdding ? "Adding…" : asset.ref}</span>
                     </div>
                     {inProject && <span className="pretext-plus-editor__am-badge">✓</span>}
@@ -434,7 +434,7 @@ const AssetManagerModal = ({
             onClick={onOpen}
             title={row.status === "unlinked" ? "No asset for this reference — click to link or create one" : "Edit asset"}
           >
-            <span className="pretext-plus-editor__am-row-name">{row.asset?.name ?? row.ref}</span>
+            <span className="pretext-plus-editor__am-row-name">{row.asset?.title ?? row.ref}</span>
             <span className="pretext-plus-editor__am-row-ref">{row.ref}</span>
           </button>
           {row.status === "unlinked" && (
@@ -494,7 +494,7 @@ const AssetManagerModal = ({
                   if (
                     row.inDocument &&
                     !window.confirm(
-                      `Remove "${row.asset!.name}" from the project? This also deletes its reference(s) from the document.`,
+                      `Remove "${row.asset!.title}" from the project? This also deletes its reference(s) from the document.`,
                     )
                   ) {
                     return;
@@ -533,7 +533,7 @@ const AssetManagerModal = ({
   const renderAddedSuccess = (asset: Asset) => (
     <div className="pretext-plus-editor__am-success">
       <p className="pretext-plus-editor__am-success-title">
-        ✓ Added “{asset.name}” — embed code copied to clipboard
+        ✓ Added “{asset.title}” — embed code copied to clipboard
       </p>
       <p className="pretext-plus-editor__dialog-helper-copy">
         It now appears in the Assets list. Paste this where you want it to appear:
@@ -716,16 +716,16 @@ const AssetManagerModal = ({
               disabled={isAddingUrl}
               autoFocus
             />
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-url-name">
-              Name <span className="pretext-plus-editor__dialog-helper-copy">(optional)</span>
+            <label className="pretext-plus-editor__dialog-label" htmlFor="am-url-title">
+              Title <span className="pretext-plus-editor__dialog-helper-copy">(optional)</span>
             </label>
             <input
-              id="am-url-name"
+              id="am-url-title"
               type="text"
               className="pretext-plus-editor__am-input"
               placeholder="My image"
-              value={urlName}
-              onChange={(e) => setUrlName(e.target.value)}
+              value={urlTitle}
+              onChange={(e) => setUrlTitle(e.target.value)}
               disabled={isAddingUrl}
             />
             {urlError && <p className="pretext-plus-editor__am-error">{urlError}</p>}
@@ -796,18 +796,18 @@ const AssetManagerModal = ({
         {doenetTab === "library" && renderLibrary("doenet")}
         {doenetTab === "create" && (
           <div className="pretext-plus-editor__am-create-form">
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-name">Name</label>
+            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-title">Title</label>
             <input
-              id="am-doenet-name"
+              id="am-doenet-title"
               type="text"
               className="pretext-plus-editor__am-input"
               placeholder="My Activity"
-              value={doenetName}
-              onChange={(e) => setDoenetName(e.target.value)}
+              value={doenetTitle}
+              onChange={(e) => setDoenetTitle(e.target.value)}
               disabled={isCreatingDoenet}
               autoFocus
             />
-            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-ref">Reference ID</label>
+            <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-ref">Id</label>
             <input
               id="am-doenet-ref"
               type="text"
@@ -818,14 +818,14 @@ const AssetManagerModal = ({
               disabled={isCreatingDoenet}
             />
             <p className="pretext-plus-editor__dialog-helper-copy">
-              The reference ID is used in the embed code: <code>{embedFor("doenet", doenetRef || "my-activity")}</code>
+              The id is used in the embed code: <code>{embedFor("doenet", doenetRef || "my-activity")}</code>
             </p>
             {doenetError && <p className="pretext-plus-editor__am-error">{doenetError}</p>}
             <button
               type="button"
               className="pretext-plus-editor__dialog-button"
               onClick={handleCreateDoenet}
-              disabled={!doenetName.trim() || !doenetRef.trim() || isCreatingDoenet}
+              disabled={!doenetTitle.trim() || !doenetRef.trim() || isCreatingDoenet}
             >
               {isCreatingDoenet ? "Creating…" : onCreateDoenet ? "Create" : "Add"}
             </button>
@@ -884,7 +884,7 @@ const AssetManagerModal = ({
       target.kind,
       "Replace asset",
       <>
-        Choose or upload a new asset to replace <code>{target.name}</code>. Every place
+        Choose or upload a new asset to replace <code>{target.title}</code>. Every place
         it’s used in your document will show the new asset.
       </>,
     );

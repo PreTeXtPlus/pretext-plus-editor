@@ -8,8 +8,8 @@ export type AssetKind = "image" | "doenet";
 export interface Asset {
   /** Stable server-assigned identifier (hidden from users). */
   id: string;
-  /** Human-readable display name shown in the library UI. */
-  name: string;
+  /** Human-readable display title shown in the library UI. */
+  title: string;
   /** Short reference used when authoring references, e.g. `"euler-painting"`.
    * Authors write e.g. `<plus:image ref="euler-painting"/>` and the build system
    * resolves it to the necessary core PreTeXt markup based upon the kind of
@@ -81,7 +81,7 @@ export interface FeedbackSubmission {
 
 /**
  * Represents the full content state of the editor at any point in time.
- * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.
+ * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `source`.
  * When `sourceFormat` is `"latex"`, `pretextSource` holds the result of
  * converting the LaTeX source, or `pretextError` holds a description of why
  * conversion failed.
@@ -91,11 +91,11 @@ export interface FeedbackSubmission {
  */
 export interface EditorContentState {
   /** The raw source string as typed/loaded by the user. */
-  sourceContent: string;
-  /** The format of `sourceContent`. */
+  source: string;
+  /** The format of `source`. */
   sourceFormat: SourceFormat;
   /**
-   * The PreTeXt XML derived from `sourceContent`.
+   * The PreTeXt XML derived from `source`.
    * Present when conversion succeeded (or when the source is already PreTeXt).
    */
   pretextSource?: string;

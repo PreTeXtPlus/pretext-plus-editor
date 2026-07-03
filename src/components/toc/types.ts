@@ -81,6 +81,13 @@ export const TYPE_FULL_LABELS: Record<string, string> = {
   paragraphs: "Paragraphs",
 };
 
+/**
+ * Root document types the author can switch between from the TOC's root
+ * "Edit properties" form. Slideshow exists as a division type but isn't
+ * offered as a switch target yet.
+ */
+export const SWITCHABLE_ROOT_TYPES: DivisionType[] = ["article", "book"];
+
 /** Division types that can be freely reordered (not positionally constrained). */
 export const REGULAR_DIVISION_TYPES: DivisionType[] = [
   "part",

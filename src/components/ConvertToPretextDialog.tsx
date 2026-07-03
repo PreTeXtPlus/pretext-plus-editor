@@ -5,8 +5,8 @@ import "./dialog.css";
 
 interface ConvertToPretextDialogProps {
   /** The current source to display (read-only) on the left. */
-  sourceContent: string;
-  /** The format of `sourceContent` — used for the left-panel label and Monaco language. */
+  source: string;
+  /** The format of `source` — used for the left-panel label and Monaco language. */
   sourceFormat: SourceFormat;
   /** The already-converted PreTeXt to display (read-only) on the right. */
   pretextSource: string;
@@ -44,7 +44,7 @@ const FORMAT_LANGUAGES: Record<SourceFormat, string> = {
  * new PreTeXt division. Displays both sources side-by-side for review.
  */
 const ConvertToPretextDialog = ({
-  sourceContent,
+  source,
   sourceFormat,
   pretextSource,
   onConfirm,
@@ -109,7 +109,7 @@ const ConvertToPretextDialog = ({
                 options={editorOptions}
                 height="100%"
                 language={FORMAT_LANGUAGES[sourceFormat] ?? "plaintext"}
-                value={sourceContent}
+                value={source}
               />
             </div>
           </div>

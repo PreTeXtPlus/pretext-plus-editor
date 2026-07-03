@@ -65,7 +65,7 @@ const AssetEditModal = ({
     "pretext";
 
   const prevRef = asset.ref ?? "";
-  const [nameValue, setNameValue] = useState(asset.name);
+  const [titleValue, setTitleValue] = useState(asset.title);
   const [refValue, setRefValue] = useState(prevRef);
   const [sourceValue, setSourceValue] = useState(asset.source ?? "");
   const [isSaving, setIsSaving] = useState(false);
@@ -120,7 +120,7 @@ const AssetEditModal = ({
     setError(null);
     setIsSaving(true);
     try {
-      await onSave({ ...asset, name: nameValue.trim() || ref, ref, source: sourceValue }, prevRef);
+      await onSave({ ...asset, title: titleValue.trim() || ref, ref, source: sourceValue }, prevRef);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save asset.");
@@ -156,7 +156,7 @@ const AssetEditModal = ({
         className="pretext-plus-editor__dialog"
         role="dialog"
         aria-modal="true"
-        aria-label={`Edit asset ${asset.name}`}
+        aria-label={`Edit asset ${asset.title}`}
       >
         <div className="pretext-plus-editor__dialog-header">
           <h2 className="pretext-plus-editor__dialog-title">Edit asset</h2>
@@ -181,7 +181,7 @@ const AssetEditModal = ({
                 {showPreview && (
                   <img
                     src={asset.url}
-                    alt={nameValue}
+                    alt={titleValue}
                     className="pretext-plus-editor__am-url-preview"
                     onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
                   />
@@ -202,19 +202,19 @@ const AssetEditModal = ({
                 )}
               </div>
 
-              {/* Right column: name and reference fields, then embed code */}
+              {/* Right column: title and id fields, then embed code */}
               <div className="pretext-plus-editor__am-edit-col">
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-name">Name</label>
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-title">Title</label>
                 <input
-                  id="am-edit-name"
+                  id="am-edit-title"
                   type="text"
                   className="pretext-plus-editor__am-input"
-                  value={nameValue}
-                  onChange={(e) => setNameValue(e.target.value)}
+                  value={titleValue}
+                  onChange={(e) => setTitleValue(e.target.value)}
                   disabled={busy}
                 />
 
-                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-ref">Reference</label>
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-edit-ref">Id</label>
                 <input
                   id="am-edit-ref"
                   type="text"

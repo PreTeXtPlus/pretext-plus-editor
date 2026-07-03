@@ -225,7 +225,7 @@ export interface editorProps {
    */
   onAssetFetchUrl?: (url: string) => Promise<File>;
   /** Called when the user creates a new Doenet activity. */
-  onCreateDoenet?: (name: string, ref: string) => Promise<Asset>;
+  onCreateDoenet?: (title: string, ref: string) => Promise<Asset>;
   /** Called when the user removes an asset from the project. */
   onAssetRemove?: (asset: Asset) => void;
   /** Called when the user saves edits to an asset's content (e.g. its `source`). */
@@ -283,7 +283,7 @@ const Editors = (props: editorProps) => {
       normalizedDivisions.find((d) => d.xmlId === initActiveId) ?? normalizedRoot;
 
     return createEditorStore({
-      source: initActive?.content ?? "",
+      source: initActive?.source ?? "",
       sourceFormat: initActive?.sourceFormat ?? "pretext",
       title: props.title || normalizedRoot?.title || "Document Title",
       docinfo: props.docinfo ?? "",
@@ -406,7 +406,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // The code editor now shows (and edits) the division's full source,
   // wrapper tag included, rather than a stripped-down body — the wrapper
   // (with its xml:id/label attributes and title) is the source of truth.
-  const divisionActiveSource = activeDivision?.content ?? "";
+  const divisionActiveSource = activeDivision?.source ?? "";
 
   // ── Content-change emitter ───────────────────────────────────────────────
   // Single channel for every content change: a division edit, a structural
@@ -422,7 +422,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     setDivisionContent(xmlId, content);
     props.onContentChange({
       xmlId,
-      sourceContent: content,
+      source: content,
       sourceFormat: format,
       pretextSource: format === "pretext" ? content : undefined,
       ...extra,
@@ -472,7 +472,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         type,
         title,
         xmlId: newXmlId,
-        content: createDivisionContent(type, changes.sourceFormat, title, newXmlId),
+        source: createDivisionContent(type, changes.sourceFormat, title, newXmlId),
       };
     } else if (division.sourceFormat === "markdown") {
       updated = updateMarkdownDivisionMetadata(division, changes);
@@ -486,11 +486,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
       updated = updateSectionMetadata(division, changes);
     }
     const newXmlId = updated.xmlId;
-    if (updated.content !== division.content) {
+    if (updated.source !== division.source) {
       // Emit keyed on the OLD id — before the record is renamed in step 2.
       emitContentChange(
         division.xmlId,
-        updated.content,
+        updated.source,
         updated.sourceFormat,
       );
     }
@@ -504,12 +504,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
       const parent = findDivisionParent(divisions, division.xmlId);
       if (parent) {
         const newParentContent = renameDivisionRef(
-          parent.content,
+          parent.source,
           division.xmlId,
           newXmlId,
           updated.type,
         );
-        if (newParentContent !== parent.content) {
+        if (newParentContent !== parent.source) {
           emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
         }
       }
@@ -574,12 +574,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
         wrapped = updateSectionMetadata(
           {
             ...activeDivision,
-            content: wrapped,
+            source: wrapped,
             title: meta.title,
             type: meta.type,
           },
           { xmlId: activeDivision.xmlId, label: meta.label || null },
-        ).content;
+        ).source;
       }
     } else if (activeDivisionFormat === "markdown") {
       // The frontmatter is locked in the code editor, but re-assert the
@@ -588,13 +588,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
       const meta = extractMarkdownDivisionMetadata(wrapped);
       if (meta && meta.xmlId !== activeDivision.xmlId) {
         wrapped = updateMarkdownDivisionMetadata(
-          { ...activeDivision, content: wrapped },
+          { ...activeDivision, source: wrapped },
           { xmlId: activeDivision.xmlId },
-        ).content;
+        ).source;
       }
     }
 
-    if (wrapped === activeDivision.content) return;
+    if (wrapped === activeDivision.source) return;
     emitContentChange(activeDivision.xmlId, wrapped, activeDivisionFormat);
 
     // The source is the source of truth for title/type/label: re-derive them
@@ -618,22 +618,23 @@ const EditorsInner = (props: EditorsInnerProps) => {
           const parent = findDivisionParent(divisions, activeDivision.xmlId);
           if (parent) {
             const newParentContent = renameDivisionRef(
-              parent.content,
+              parent.source,
               activeDivision.xmlId,
               activeDivision.xmlId,
               meta.type,
             );
-            if (newParentContent !== parent.content) {
+            if (newParentContent !== parent.source) {
               emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
             }
           }
         }
       }
     } else if (activeDivisionFormat === "markdown") {
-      // Markdown's structural metadata lives in its frontmatter and its title in
-      // the leading `# heading`; re-derive them so the TOC stays in sync. The
-      // frontmatter is locked, so in practice only the title changes from the
-      // editor, but a type change is kept in sync with the parent ref defensively.
+      // Markdown's structural metadata — including its title — lives in its
+      // frontmatter; re-derive it so the TOC stays in sync. The frontmatter is
+      // normally locked in the code editor (see `computeLockedRegion`), so this
+      // is mostly defensive, but a type change is kept in sync with the parent
+      // ref regardless.
       const meta = extractMarkdownDivisionMetadata(wrapped);
       if (meta) {
         applyDivisionUpdate(activeDivision.xmlId, {
@@ -646,12 +647,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
           const parent = findDivisionParent(divisions, activeDivision.xmlId);
           if (parent) {
             const newParentContent = renameDivisionRef(
-              parent.content,
+              parent.source,
               activeDivision.xmlId,
               activeDivision.xmlId,
               meta.type,
             );
-            if (newParentContent !== parent.content) {
+            if (newParentContent !== parent.source) {
               emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
             }
           }
@@ -705,7 +706,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         emitContentChange(
           parent.xmlId,
           insertDivisionRef(
-            parent.content,
+            parent.source,
             newDiv.xmlId,
             newDiv.type,
             null,
@@ -764,10 +765,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const file = await props.onAssetFetchUrl(asset.url);
     // `file.name` comes from the source URL (often an opaque, server-generated
     // path segment, e.g. a storage key) rather than anything human-readable.
-    // Hosts commonly derive the asset's persisted name/ref from the uploaded
+    // Hosts commonly derive the asset's persisted title/ref from the uploaded
     // file's name, so rename it to `newRef` before handing it to
     // `onAssetUpload` — otherwise that opaque name leaks through as the
-    // duplicate's default name/ref instead of the friendly "-copy" we just
+    // duplicate's default title/ref instead of the friendly "-copy" we just
     // computed.
     const extension = /\.[^./\\]+$/.exec(file.name)?.[0] ?? "";
     const renamedFile = new File([file], `${newRef}${extension}`, { type: file.type });
@@ -775,7 +776,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const copy: Asset = {
       ...uploaded,
       ref: newRef,
-      name: `${asset.name} (copy)`,
+      title: `${asset.title} (copy)`,
       source: asset.source,
     };
     await props.onAssetUpdate?.(copy);
@@ -787,7 +788,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
    * Replace an asset with the user's chosen `newAsset` (from the asset manager's
    * replace mode), then drop the old one. Two cases, both safe because each asset
    * owns its own file:
-   *   • freshly created (upload/URL) — `newAsset` adopts the old ref/name/source
+   *   • freshly created (upload/URL) — `newAsset` adopts the old ref/title/source
    *     (`onAssetUpdate`) so the document's references don't move; or
    *   • picked from the library — `newAsset` keeps its own ref and the document
    *     placeholders are re-pointed to it (`renameAssetRefEverywhere`).
@@ -806,7 +807,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       const replaced: Asset = {
         ...newAsset,
         ref: oldAsset.ref,
-        name: oldAsset.name,
+        title: oldAsset.title,
         source: oldAsset.source,
       };
       await props.onAssetUpdate?.(replaced);
@@ -830,8 +831,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   ) => {
     if (oldRef === newRef) return;
     for (const division of divisions) {
-      const next = renameAssetRef(division.content, kind, oldRef, newRef);
-      if (next !== division.content) {
+      const next = renameAssetRef(division.source, kind, oldRef, newRef);
+      if (next !== division.source) {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
     }
@@ -840,8 +841,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   /** Delete every `<plus:KIND ref="ref"/>` placeholder for an unresolved ref. */
   const removeAssetRefEverywhere = (kind: AssetKind, ref: string) => {
     for (const division of divisions) {
-      const next = removeAssetRef(division.content, kind, ref);
-      if (next !== division.content) {
+      const next = removeAssetRef(division.source, kind, ref);
+      if (next !== division.source) {
         emitContentChange(division.xmlId, next, division.sourceFormat);
       }
     }
@@ -1034,12 +1035,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
     for (const division of normalized) {
       if (division.sourceFormat !== "pretext") continue;
       const original = props.divisions.find((d) => d.xmlId === division.xmlId);
-      if (!original || division.content === original.content) continue;
+      if (!original || division.source === original.source) continue;
       props.onContentChange({
         xmlId: division.xmlId,
-        sourceContent: division.content,
+        source: division.source,
         sourceFormat: "pretext",
-        pretextSource: division.content,
+        pretextSource: division.source,
       });
     }
   });
@@ -1125,7 +1126,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       title: activeDivision.title,
       type: activeDivision.type,
       sourceFormat: activeDivisionFormat,
-      content: activeDivision.content,
+      source: activeDivision.source,
     };
     const newDiv: Division =
       activeDivisionFormat === "markdown"
@@ -1315,7 +1316,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         ) : null}
         {isConvertDialogOpen && activeDivision && divisionConvertedPretext ? (
           <ConvertToPretextDialog
-            sourceContent={divisionActiveSource}
+            source={divisionActiveSource}
             sourceFormat={activeDivisionFormat}
             pretextSource={divisionConvertedPretext}
             onConfirm={handleConvertToPretext}
@@ -1343,7 +1344,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
                 const docinfoTarget = rootDivision ?? activeDivision;
                 emitContentChange(
                   docinfoTarget?.xmlId ?? "",
-                  docinfoTarget?.content ?? "",
+                  docinfoTarget?.source ?? "",
                   docinfoTarget?.sourceFormat ?? "pretext",
                   {
                     docinfo: value.docinfo,

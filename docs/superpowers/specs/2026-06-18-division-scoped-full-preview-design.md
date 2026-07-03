@@ -74,7 +74,7 @@ pool — pure string-in, string-out.
   them for consumers.)
 - Compute the active division's own tagged XML, reusing what's already
   available — no new conversion logic:
-  - PreTeXt format: `activeDivision.content` as-is.
+  - PreTeXt format: `activeDivision.source` as-is.
   - LaTeX/Markdown format: reconstruct the division's own tag around the
     **already-memoized** `divisionConvertedPretext`
     (`` `<${type} xml:id="${xmlId}">\n<title>${title}</title>\n\n${convertedBody}\n</${type}>` ``),

@@ -13,12 +13,18 @@ export interface DerivedPretextResult {
 
 /**
  * Heuristic markers that strongly suggest a document is LaTeX rather than
- * PreTeXt/XML.  Checked in order by {@link detectSourceFormat}.
+ * PreTeXt/XML.  Checked in order by {@link detectSourceFormat}.  Includes the
+ * root-division headers (`\article{`, `\book{`, `\slideshow{`) that
+ * `@pretextbook/latex-pretext` emits for a document's top-level division,
+ * alongside `\section`/`\chapter` for non-root divisions.
  */
 const LATEX_FORMAT_MARKERS = [
   "\\documentclass",
   "\\begin{document}",
   "\\begin{",
+  "\\article{",
+  "\\book{",
+  "\\slideshow{",
   "\\section",
   "\\chapter",
   "\\title",
@@ -32,13 +38,22 @@ const LATEX_FORMAT_MARKERS = [
 const MARKDOWN_FORMAT_MARKERS = ["# ", "## ", "### ", "#### "];
 
 /**
+ * Matches a leading `---` ... `---` YAML frontmatter block, the other strong
+ * Markdown signal: a division whose title now lives in frontmatter (a
+ * `title:` key) rather than a leading `# heading` won't match
+ * {@link MARKDOWN_FORMAT_MARKERS} at all.
+ */
+const MARKDOWN_FRONTMATTER_RE = /^[ \t]*---[ \t]*\r?\n[\s\S]*?\r?\n[ \t]*---[ \t]*(?:\r?\n|$)/;
+
+/**
  * Inspects `source` and returns the most likely {@link SourceFormat}.
  *
  * Rules (applied in order):
  * 1. Empty/whitespace-only → `"pretext"` (safe default).
  * 2. Starts with `<` → `"pretext"` (XML document).
  * 3. Contains any {@link LATEX_FORMAT_MARKERS} → `"latex"`.
- * 4. First non-blank line starts with a Markdown ATX heading → `"markdown"`.
+ * 4. First non-blank line starts with a Markdown ATX heading, or the document
+ *    opens with a YAML frontmatter block → `"markdown"`.
  * 5. Otherwise → `"pretext"`.
  */
 export function detectSourceFormat(source: string): SourceFormat {
@@ -53,7 +68,8 @@ export function detectSourceFormat(source: string): SourceFormat {
     return "latex";
   }
   if (
-    MARKDOWN_FORMAT_MARKERS.some((marker) => trimmedContent.startsWith(marker))
+    MARKDOWN_FORMAT_MARKERS.some((marker) => trimmedContent.startsWith(marker)) ||
+    MARKDOWN_FRONTMATTER_RE.test(trimmedContent)
   ) {
     return "markdown";
   }
@@ -106,7 +122,7 @@ export function getConversionErrorMessage(error: unknown): string {
 }
 
 /**
- * Derives PreTeXt content from `sourceContent` according to `sourceFormat`.
+ * Derives PreTeXt content from `source` according to `sourceFormat`.
  *
  * - If `sourceFormat` is `"pretext"`, the content is returned as-is.
  * - If `sourceFormat` is `"latex"`, the content is converted via
@@ -116,28 +132,28 @@ export function getConversionErrorMessage(error: unknown): string {
  *   {@link convertMarkdownToPretext}.  Conversion errors are caught and returned
  *   as `pretextError` so callers never need a try/catch.
  *
- * @param sourceContent - The raw source string.
- * @param sourceFormat - The format of `sourceContent`.
+ * @param source - The raw source string.
+ * @param sourceFormat - The format of `source`.
  * @returns A {@link DerivedPretextResult} with either `pretextSource` or `pretextError`.
  */
 export function derivePretextContent(
-  sourceContent: string,
+  source: string,
   sourceFormat: SourceFormat,
 ): DerivedPretextResult {
   if (sourceFormat === "pretext") {
-    return { pretextSource: sourceContent };
+    return { pretextSource: source };
   }
 
   if (sourceFormat === "markdown") {
     try {
-      return { pretextSource: convertMarkdownToPretext(sourceContent) };
+      return { pretextSource: convertMarkdownToPretext(source) };
     } catch (error) {
       return { pretextError: getConversionErrorMessage(error) };
     }
   }
 
   try {
-    return { pretextSource: convertLatexToPretext(sourceContent) };
+    return { pretextSource: convertLatexToPretext(source) };
   } catch (error) {
     return { pretextError: getConversionErrorMessage(error) };
   }

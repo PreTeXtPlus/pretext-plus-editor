@@ -118,7 +118,7 @@ interface PretextProjectCopyRequest {
 }
 
 interface EditorContentChange {
-  sourceContent: string;
+  source: string;
   sourceFormat: SourceFormat;
   pretextSource?: string;
   pretextError?: string;

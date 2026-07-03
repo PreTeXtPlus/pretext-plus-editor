@@ -39,16 +39,16 @@ export interface PretextProjectCopyRequest {
 
 /**
  * Represents the full content state of the editor at any point in time.
- * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `sourceContent`.
+ * When `sourceFormat` is `"pretext"`, `pretextSource` mirrors `source`.
  * When `sourceFormat` is `"latex"`, `pretextSource` holds the converted XML,
  * or `pretextError` holds an error description if conversion failed.
  */
 export interface EditorContentState {
   /** The raw source string as typed/loaded by the user. */
-  sourceContent: string;
-  /** The format of `sourceContent`. */
+  source: string;
+  /** The format of `source`. */
   sourceFormat: SourceFormat;
-  /** The PreTeXt XML derived from `sourceContent` (present when conversion succeeded). */
+  /** The PreTeXt XML derived from `source` (present when conversion succeeded). */
   pretextSource?: string;
   /** Human-readable error set when conversion fails.  When present, `pretextSource` is undefined. */
   pretextError?: string;
@@ -84,12 +84,12 @@ export function detectSourceFormat(source: string): SourceFormat;
 export function convertLatexToPretext(latexContent: string): string;
 
 /**
- * Derives PreTeXt content from `sourceContent`.  For PreTeXt input the
+ * Derives PreTeXt content from `source`.  For PreTeXt input the
  * content is returned as-is; for other formats conversion is attempted and
  * errors are caught and returned as `pretextError`.
  */
 export function derivePretextContent(
-  sourceContent: string,
+  source: string,
   sourceFormat: SourceFormat,
 ): DerivedPretextResult;
 

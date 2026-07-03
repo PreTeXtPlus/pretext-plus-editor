@@ -26,7 +26,7 @@ const DEMO_DIVISIONS: Division[] = [
     title: "",
     type: "article",
     sourceFormat: "pretext",
-    content: `<article>
+    source: `<article>
   <title>Divisions Mode Demo for Article</title>
   
   <plus:introduction ref="sec-intro"/>
@@ -44,7 +44,7 @@ const DEMO_DIVISIONS: Division[] = [
     title: "",
     type: "introduction",
     sourceFormat: "pretext",
-    content: `<introduction xml:id="sec-intro">
+    source: `<introduction xml:id="sec-intro">
   <p>
     Each section is a separate <c>Division</c> record in a flat pool. The TOC reads their order from <c>plus:section</c> placeholder tags embedded in this root division's content.
   </p>
@@ -68,7 +68,7 @@ const DEMO_DIVISIONS: Division[] = [
     title: "",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="sec-background">
+    source: `<section xml:id="sec-background">
   <title>Background</title>
   
   <p>
@@ -86,7 +86,7 @@ const DEMO_DIVISIONS: Division[] = [
     title: "Results",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="sec-results">
+    source: `<section xml:id="sec-results">
   <title>Results</title>
   
   <p>
@@ -105,7 +105,7 @@ const DEMO_DIVISIONS: Division[] = [
     // editor locks it (click it to edit the title/xml:id from the TOC), and
     // the `\label` becomes the division's `xml:id` on conversion. Body
     // content is converted to PreTeXt for the preview.
-    content: `\\section{A LaTeX Section}\\label{sec-latex}
+    source: `\\section{A LaTeX Section}\\label{sec-latex}
 
 This section is authored in \\LaTeX{} rather than PreTeXt. The editor locks the
 leading \\verb|\\section{...}| line; edit its title and xml:id from the TOC.
@@ -142,7 +142,7 @@ nested here and the child is expanded into place when the source is assembled.
     // `\plus{subsection}{sec-latex-child}`. Rename its xml:id from the TOC and
     // the parent's `\plus{...}{...}` macro is rewritten to match, just like a
     // PreTeXt `plus:` placeholder or a Markdown `::` directive.
-    content: `\\subsection{A Nested LaTeX Subsection}\\label{sec-latex-child}
+    source: `\\subsection{A Nested LaTeX Subsection}\\label{sec-latex-child}
 
 This subsection is authored in \\LaTeX{} and pulled into the parent LaTeX
 section by its \\verb|\\plus{subsection}{sec-latex-child}| macro.`,
@@ -157,7 +157,7 @@ section by its \\verb|\\plus{subsection}{sec-latex-child}| macro.`,
     // (division/xmlid/label — shown locked in the code editor) followed by the
     // markdown body. The remark-pretext converter turns the whole file into the
     // proper <section xml:id="...">…</section> element.
-    content: `---
+    source: `---
 division: section
 xmlid: sec-markdown
 ---
@@ -194,7 +194,7 @@ it nested here and the child is expanded into place when the source is assembled
     // Child of the Markdown section above, referenced from its markdown body as
     // `::subsection{ref="sec-md-child"}`. The child itself can be any format —
     // here PreTeXt — showing a Markdown parent nesting a PreTeXt child.
-    content: `<subsection xml:id="sec-md-child">
+    source: `<subsection xml:id="sec-md-child">
   <title>A Nested Subsection</title>
 
   <p>
@@ -210,7 +210,7 @@ it nested here and the child is expanded into place when the source is assembled
     title: "",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="sec-orphan">
+    source: `<section xml:id="sec-orphan">
   <title>Unplaced Section</title>
 
   <p>
@@ -229,7 +229,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "A Demo Book",
     type: "book",
     sourceFormat: "pretext",
-    content: `<book xml:id="demo-book">
+    source: `<book xml:id="demo-book">
 <title>A Demo Book</title>
 <plus:chapter ref="ch-one"/>
 <plus:chapter ref="ch-two"/>
@@ -241,7 +241,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Foundations",
     type: "chapter",
     sourceFormat: "pretext",
-    content: `<chapter xml:id="ch-one">
+    source: `<chapter xml:id="ch-one">
 <title>Foundations</title>
 <introduction>
 <p>This chapter is a <c>Division</c> of type <c>chapter</c>. Its sections are separate divisions referenced by <c>plus:section</c> placeholders below.</p>
@@ -256,7 +256,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "First Principles",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="ch1-sec1">
+    source: `<section xml:id="ch1-sec1">
 <title>First Principles</title>
 <p>A section nested two levels under the book root. Drag it within or between chapters to move it; the move rewrites <c>plus:section</c> refs in the relevant chapter's content.</p>
 </section>`,
@@ -267,7 +267,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Notation",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="ch1-sec2">
+    source: `<section xml:id="ch1-sec2">
 <title>Notation</title>
 <p>Another section in chapter one.</p>
 </section>`,
@@ -278,7 +278,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Applications",
     type: "chapter",
     sourceFormat: "pretext",
-    content: `<chapter xml:id="ch-two"> 
+    source: `<chapter xml:id="ch-two"> 
   <title>Applications</title>
   
   <plus:section ref="ch2-sec1"/>
@@ -290,7 +290,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Worked Examples",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="ch2-sec1">
+    source: `<section xml:id="ch2-sec1">
   <title>Worked Examples</title>
   <p>
     The only section in chapter two — try dragging a section from chapter one into here.
@@ -303,7 +303,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Appendix (unplaced)",
     type: "chapter",
     sourceFormat: "pretext",
-    content: `<chapter xml:id="ch-appendix">
+    source: `<chapter xml:id="ch-appendix">
   <title>Appendix (unplaced)</title>
   <plus:section ref="appendix-sec"/>
 </chapter>`,
@@ -314,7 +314,7 @@ const DEMO_BOOK_DIVISIONS: Division[] = [
     title: "Appendix Section",
     type: "section",
     sourceFormat: "pretext",
-    content: `<section xml:id="appendix-sec">
+    source: `<section xml:id="appendix-sec">
   <title>Appendix Section</title>
   <p>
     This section belongs to the unplaced appendix chapter, so it appears nested under it in the <q>Unplaced divisions</q> group. Use the <c>+</c> button on the appendix to attach the whole subtree to the book.
@@ -339,7 +339,7 @@ const LATEX_DEMO_DIVISIONS: Division[] = [
     title: "Testing LaTeX Source Mode",
     type: "article",
     sourceFormat: "latex",
-    content: String.raw`This paragraph appears before the first section, so it becomes the
+    source: String.raw`This paragraph appears before the first section, so it becomes the
 introduction when converted to PreTeXt.
 
 \section{Background}
@@ -373,7 +373,7 @@ expanded into place when the full document source is assembled.
     sourceFormat: "latex",
     // A LaTeX child of the LaTeX root, referenced from the root's body as
     // `\plus{section}{latex-demo-sec}`.
-    content: String.raw`\section{A Referenced Section}\label{latex-demo-sec}
+    source: String.raw`\section{A Referenced Section}\label{latex-demo-sec}
 
 This whole section lives in its own LaTeX division and is pulled in by the
 root's \verb|\plus{section}{latex-demo-sec}| macro.`,
@@ -387,7 +387,7 @@ const MARKDOWN_DEMO_DIVISIONS: Division[] = [
     title: "Testing Markdown Source Mode",
     type: "article",
     sourceFormat: "markdown",
-    content: `---
+    source: `---
 division: article
 xmlid: markdown-demo
 ---
@@ -430,7 +430,7 @@ is expanded into place when the full document source is assembled.
     sourceFormat: "markdown",
     // A Markdown child of the Markdown root, referenced from the root's body as
     // `::section{ref="md-demo-sec"}`.
-    content: `---
+    source: `---
 division: section
 xmlid: md-demo-sec
 ---
@@ -481,7 +481,7 @@ function App() {
   const [libraryAssets, setLibraryAssets] = useState<Asset[]>([
     {
       id: "asset-1",
-      name: "Euler Formula",
+      title: "Euler Formula",
       ref: "euler-formula",
       kind: "image",
       isFile: true,
@@ -491,7 +491,7 @@ function App() {
     },
     {
       id: "asset-2",
-      name: "Markdown Logo",
+      title: "Markdown Logo",
       ref: "markdown-logo",
       kind: "image",
       isFile: true,
@@ -501,7 +501,7 @@ function App() {
     },
     {
       id: "asset-3",
-      name: "PreTeXt Logo",
+      title: "PreTeXt Logo",
       ref: "pretext-logo",
       kind: "image",
       isFile: true,
@@ -511,7 +511,7 @@ function App() {
     },
     {
       id: "asset-4",
-      name: "Sample Activity",
+      title: "Sample Activity",
       ref: "sample-activity",
       kind: "doenet",
       source: "<!-- DoenetML for the sample activity goes here -->",
@@ -593,7 +593,7 @@ function App() {
     setDivisions((prev) =>
       prev.map((d) =>
         d.xmlId === change.xmlId
-          ? { ...d, content: change.sourceContent }
+          ? { ...d, source: change.source }
           : d,
       ),
     );
@@ -658,7 +658,7 @@ function App() {
     await new Promise((resolve) => setTimeout(resolve, 800));
     const newAsset: Asset = {
       id: `asset-${Date.now()}`,
-      name: file.name.replace(/\.[^.]+$/, ""),
+      title: file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
       kind: "image",
       isFile: true,
@@ -689,16 +689,16 @@ function App() {
   };
 
   const handleAssetAddFromLibrary = async (asset: Asset) => {
-    console.log("Adding library asset to project:", asset.id, asset.name);
+    console.log("Adding library asset to project:", asset.id, asset.title);
     await new Promise((resolve) => setTimeout(resolve, 200));
     setProjectAssetIds((prev) => new Set([...prev, asset.id]));
     console.log("Asset added to project:", asset.ref);
   };
 
-  const handleCreateDoenet = async (name: string, ref: string): Promise<Asset> => {
-    console.log("Creating Doenet activity:", name, ref);
+  const handleCreateDoenet = async (title: string, ref: string): Promise<Asset> => {
+    console.log("Creating Doenet activity:", title, ref);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    const newAsset: Asset = { id: `asset-${Date.now()}`, name, ref, kind: "doenet" };
+    const newAsset: Asset = { id: `asset-${Date.now()}`, title, ref, kind: "doenet" };
     setLibraryAssets((prev) => [...prev, newAsset]);
     setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
     return newAsset;

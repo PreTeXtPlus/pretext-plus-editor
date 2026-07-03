@@ -390,9 +390,9 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
         if (!s.divisions) return {};
         let changed = false;
         const divisions = s.divisions.map((d) => {
-          if (d.xmlId === xmlId && d.content !== content) {
+          if (d.xmlId === xmlId && d.source !== content) {
             changed = true;
-            return { ...d, content };
+            return { ...d, source: content };
           }
           return d;
         });
@@ -456,20 +456,26 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
       // Each format stores its xml:id/label differently: Markdown in YAML
       // frontmatter, LaTeX as the `\label` after `\section` (it has no separate
       // PreTeXt `label` attribute), and PreTeXt as the wrapper element's
-      // attributes. Markdown/LaTeX fall back to the record id when their source
-      // carries none yet, so the field shows the division's current identity.
+      // attributes. All three fall back to the record id when their source
+      // carries none yet, so the field shows the division's current identity
+      // rather than a misleadingly blank one — notably the root division,
+      // whose <article>/<book> wrapper is valid PreTeXt with only a `label`
+      // and no `xml:id` at all (see ensureRootLabel in sectionUtils.ts).
       const { xmlId, label } =
         section.sourceFormat === "markdown"
-          ? extractMarkdownDivisionMetadata(section.content) ?? {
+          ? extractMarkdownDivisionMetadata(section.source) ?? {
               xmlId: section.xmlId,
               label: "",
             }
           : section.sourceFormat === "latex"
           ? {
-              xmlId: extractLatexSectionLabel(section.content) || section.xmlId,
+              xmlId: extractLatexSectionLabel(section.source) || section.xmlId,
               label: "",
             }
-          : getSectionAttributes(section.content);
+          : (() => {
+              const attrs = getSectionAttributes(section.source);
+              return { xmlId: attrs.xmlId || section.xmlId, label: attrs.label };
+            })();
       set({
         editingId: section.xmlId,
         editDraft: {

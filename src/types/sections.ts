@@ -5,7 +5,7 @@ import type { SourceFormat } from "./editor";
  * section, worksheet, etc. — is a `Division`.  Divisions are stored as a flat
  * pool of records on the host (Rails) side; hierarchy is expressed by
  * embedding `<plus:division ref="xml-id"/>` placeholder tags inside a parent
- * division's `content`.
+ * division's `source`.
  *
  * Type-specific aliases (`<plus:chapter ref="..."/>`, `<plus:section ref="..."/>`)
  * are accepted by the editor as equivalent to `<plus:division ref="..."/>`.
@@ -83,7 +83,7 @@ export interface Division {
    * child refs as `::section{ref="child-id"}` leaf directives, and LaTeX as
    * `\plus{section}{child-id}` macros.
    */
-  content: string;
+  source: string;
 }
 
 // ---------------------------------------------------------------------------

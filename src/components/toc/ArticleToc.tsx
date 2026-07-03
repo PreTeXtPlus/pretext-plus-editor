@@ -162,7 +162,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     if (!divisions) return;
     const parent = divisions.find((d) => d.xmlId === parentXmlId);
     if (!parent) return;
-    divisionContentChange(parent.xmlId, removeDivisionRef(parent.content, xmlId));
+    divisionContentChange(parent.xmlId, removeDivisionRef(parent.source, xmlId));
   };
 
   const handleDelete = (division: Division, parentXmlId: string | null) => {
@@ -177,7 +177,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
       if (parent) {
         divisionContentChange(
           parent.xmlId,
-          removeDivisionRef(parent.content, division.xmlId),
+          removeDivisionRef(parent.source, division.xmlId),
         );
       }
     }
@@ -208,7 +208,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
     divisionContentChange(
       rootDivision.xmlId,
       insertDivisionRef(
-        rootDivision.content,
+        rootDivision.source,
         orphan.xmlId,
         orphan.type,
         null,
@@ -267,7 +267,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
           if (
             row.inDocument &&
             !window.confirm(
-              `Remove "${row.asset!.name}" from the project? This also deletes its ${
+              `Remove "${row.asset!.title}" from the project? This also deletes its ${
                 row.inDocument ? "reference(s)" : "reference"
               } from the document.`,
             )
@@ -545,7 +545,7 @@ const ArticleToc = ({ onOpenAssetPicker }: ArticleTocProps) => {
                             }
                           >
                             <span className="pretext-plus-editor__toc-asset-label">
-                              {row.asset?.name ?? row.ref}
+                              {row.asset?.title ?? row.ref}
                             </span>
                             <span className="pretext-plus-editor__toc-asset-filename">
                               {row.status === "unlinked"
