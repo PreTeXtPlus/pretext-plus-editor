@@ -133,6 +133,12 @@ const AssetManagerModal = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A file picked for upload but not yet committed — held so the user can
+  // preview it and set a title before the actual upload fires (mirrors the
+  // External URL tab's preview-then-confirm flow).
+  const [pendingUploadFile, setPendingUploadFile] = useState<File | null>(null);
+  const [pendingUploadPreviewUrl, setPendingUploadPreviewUrl] = useState<string | null>(null);
+  const [uploadTitle, setUploadTitle] = useState("");
 
   // URL state
   const [urlValue, setUrlValue] = useState("");
@@ -197,6 +203,13 @@ const AssetManagerModal = ({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
+  // Revoke the preview object URL whenever it's replaced or the modal unmounts.
+  useEffect(() => {
+    return () => {
+      if (pendingUploadPreviewUrl) URL.revokeObjectURL(pendingUploadPreviewUrl);
+    };
+  }, [pendingUploadPreviewUrl]);
+
   if (!open) return null;
 
   const assetView = buildProjectAssetView(divisions, resolvedAssets);
@@ -241,13 +254,31 @@ const AssetManagerModal = ({
     commitAsset(asset, { fromLibrary: true });
   };
 
-  const handleFileSelect = async (file: File) => {
-    if (!onUpload) return;
+  // Stash a picked/dropped file for preview; the actual upload is deferred
+  // until the user confirms via "Add to Project".
+  const selectPendingUpload = (file: File) => {
+    setUploadError(null);
+    setPendingUploadFile(file);
+    setUploadTitle(file.name);
+    setPendingUploadPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const clearPendingUpload = () => {
+    setPendingUploadFile(null);
+    setPendingUploadPreviewUrl(null);
+    setUploadTitle("");
+  };
+
+  const handleUploadConfirm = async () => {
+    if (!onUpload || !pendingUploadFile) return;
     setUploadError(null);
     setIsUploading(true);
     try {
+      const title = uploadTitle.trim() || pendingUploadFile.name;
+      const file = new File([pendingUploadFile], title, { type: pendingUploadFile.type });
       const asset = await onUpload(file);
       commitAsset(asset);
+      clearPendingUpload();
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -613,39 +644,63 @@ const AssetManagerModal = ({
         {imageTab === "library" && renderLibrary("image")}
         {imageTab === "upload" && onUpload && (
           <div className="pretext-plus-editor__am-upload">
-            <div
-              className={[
-                "pretext-plus-editor__am-drop-zone",
-                isDragging ? "pretext-plus-editor__am-drop-zone--active" : "",
-                isUploading ? "pretext-plus-editor__am-drop-zone--uploading" : "",
-              ].filter(Boolean).join(" ")}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFileSelect(f); }}
-              onClick={() => !isUploading && fileInputRef.current?.click()}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
-              aria-label="Upload image — click or drag and drop"
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="pretext-plus-editor__dialog-file-input"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
-              />
-              {isUploading ? (
-                <p className="pretext-plus-editor__am-drop-text">Uploading…</p>
-              ) : (
-                <>
-                  <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
-                  <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, or click to browse</p>
-                  <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
-                </>
-              )}
-            </div>
-            {uploadError && <p className="pretext-plus-editor__am-error">{uploadError}</p>}
+            {!pendingUploadFile ? (
+              <div
+                className={[
+                  "pretext-plus-editor__am-drop-zone",
+                  isDragging ? "pretext-plus-editor__am-drop-zone--active" : "",
+                ].filter(Boolean).join(" ")}
+                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) selectPendingUpload(f); }}
+                onClick={() => fileInputRef.current?.click()}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
+                aria-label="Upload image — click or drag and drop"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="pretext-plus-editor__dialog-file-input"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) selectPendingUpload(f); }}
+                />
+                <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
+                <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, or click to browse</p>
+                <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
+              </div>
+            ) : (
+              <div className="pretext-plus-editor__am-url-form">
+                <img
+                  src={pendingUploadPreviewUrl ?? undefined}
+                  alt="Preview"
+                  className="pretext-plus-editor__am-url-preview"
+                />
+                <label className="pretext-plus-editor__dialog-label" htmlFor="am-upload-title">
+                  Title <span className="pretext-plus-editor__dialog-helper-copy">(optional)</span>
+                </label>
+                <input
+                  id="am-upload-title"
+                  type="text"
+                  className="pretext-plus-editor__am-input"
+                  placeholder={pendingUploadFile.name}
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  disabled={isUploading}
+                  autoFocus
+                />
+                {uploadError && <p className="pretext-plus-editor__am-error">{uploadError}</p>}
+                <button
+                  type="button"
+                  className="pretext-plus-editor__dialog-button pretext-plus-editor__dialog-button--secondary"
+                  onClick={clearPendingUpload}
+                  disabled={isUploading}
+                >
+                  Choose a different file
+                </button>
+              </div>
+            )}
           </div>
         )}
         {imageTab === "url" && (
@@ -682,18 +737,36 @@ const AssetManagerModal = ({
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
               />
             )}
-            <button
-              type="button"
-              className="pretext-plus-editor__dialog-button"
-              onClick={handleUrlInsert}
-              disabled={!urlValue.trim() || isAddingUrl}
-            >
-              {isAddingUrl ? "Adding…" : onFetchUrl && onUpload ? "Add to Project" : "Add"}
-            </button>
           </div>
         )}
       </div>
     </div>
+  );
+
+  // ── Footer "Add to Project" actions for the image sub-tabs ─────────────────
+  // Rendered in the dialog's shared footer (next to Close/Cancel) rather than
+  // inline, so both the URL and Upload flows commit from the same place once
+  // the user has previewed what they're adding.
+  const renderUrlAddAction = () => (
+    <button
+      type="button"
+      className="pretext-plus-editor__dialog-button"
+      onClick={handleUrlInsert}
+      disabled={!urlValue.trim() || isAddingUrl}
+    >
+      {isAddingUrl ? "Adding…" : onFetchUrl && onUpload ? "Add to Project" : "Add"}
+    </button>
+  );
+
+  const renderUploadAddAction = () => (
+    <button
+      type="button"
+      className="pretext-plus-editor__dialog-button"
+      onClick={handleUploadConfirm}
+      disabled={!pendingUploadFile || isUploading}
+    >
+      {isUploading ? "Uploading…" : "Add to Project"}
+    </button>
   );
 
   const renderDoenetAdd = (showBack: boolean) => (
@@ -790,6 +863,8 @@ const AssetManagerModal = ({
         >
           Cancel
         </button>
+        {kind === "image" && imageTab === "url" && renderUrlAddAction()}
+        {kind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
       </div>
     </>
   );
@@ -889,6 +964,8 @@ const AssetManagerModal = ({
               >
                 Close
               </button>
+              {!addedAsset && tab === "add" && addKind === "image" && imageTab === "url" && renderUrlAddAction()}
+              {!addedAsset && tab === "add" && addKind === "image" && imageTab === "upload" && onUpload && renderUploadAddAction()}
             </div>
           </>
         )}
