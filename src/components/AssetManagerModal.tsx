@@ -708,7 +708,7 @@ const AssetManagerModal = ({
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
-                aria-label="Upload image — click or drag and drop, or paste from clipboard"
+                aria-label="Paste an image, drag and drop to upload, or click to browse files"
               >
                 <input
                   ref={fileInputRef}
@@ -718,7 +718,7 @@ const AssetManagerModal = ({
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) selectPendingUpload(f); }}
                 />
                 <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
-                <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, paste, or click to browse</p>
+                <p className="pretext-plus-editor__am-drop-text">Paste your image, drag &amp; drop a file, or click to browse</p>
                 <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
               </div>
             ) : (
