@@ -81,6 +81,27 @@ function localAssetId(prefix: string): string {
   return `${prefix}-${Date.now()}`;
 }
 
+/**
+ * Clipboard image files often arrive with a generic or missing name (e.g. an
+ * empty string in Firefox). The server needs a real extension to serve the
+ * asset, so fall back to one derived from the MIME type when the name lacks one.
+ */
+const MIME_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp",
+};
+
+function namePastedImageFile(file: File): File {
+  if (/\.[a-z0-9]+$/i.test(file.name)) return file;
+  const ext = MIME_EXTENSIONS[file.type] ?? "png";
+  const name = `pasted-image-${Date.now()}.${ext}`;
+  return new File([file], name, { type: file.type });
+}
+
 const AssetManagerModal = ({
   open,
   onClose,
@@ -137,6 +158,7 @@ const AssetManagerModal = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
   // A file picked for upload but not yet committed — held so the user can
   // preview it and set a title before the actual upload fires (mirrors the
   // External URL tab's preview-then-confirm flow).
@@ -214,6 +236,14 @@ const AssetManagerModal = ({
     };
   }, [pendingUploadPreviewUrl]);
 
+  // Focus the drop zone whenever it appears so Ctrl/Cmd+V pastes an image
+  // straight away, without requiring the user to click it first.
+  useEffect(() => {
+    if (imageTab === "upload" && !pendingUploadFile) {
+      dropZoneRef.current?.focus();
+    }
+  }, [imageTab, pendingUploadFile]);
+
   if (!open) return null;
 
   const assetView = buildProjectAssetView(divisions, resolvedAssets);
@@ -265,6 +295,23 @@ const AssetManagerModal = ({
     setPendingUploadFile(file);
     setUploadTitle(file.name);
     setPendingUploadPreviewUrl(URL.createObjectURL(file));
+  };
+
+  // Ctrl/Cmd+V on the drop zone: pick the first pasted image out of the
+  // clipboard, same destination as a drag-drop or file-picker choice.
+  const handleDropZonePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          selectPendingUpload(namePastedImageFile(file));
+        }
+        return;
+      }
+    }
   };
 
   const clearPendingUpload = () => {
@@ -648,6 +695,7 @@ const AssetManagerModal = ({
           <div className="pretext-plus-editor__am-upload">
             {!pendingUploadFile ? (
               <div
+                ref={dropZoneRef}
                 className={[
                   "pretext-plus-editor__am-drop-zone",
                   isDragging ? "pretext-plus-editor__am-drop-zone--active" : "",
@@ -656,10 +704,11 @@ const AssetManagerModal = ({
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) selectPendingUpload(f); }}
                 onClick={() => fileInputRef.current?.click()}
+                onPaste={handleDropZonePaste}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
-                aria-label="Upload image — click or drag and drop"
+                aria-label="Upload image — click or drag and drop, or paste from clipboard"
               >
                 <input
                   ref={fileInputRef}
@@ -669,7 +718,7 @@ const AssetManagerModal = ({
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) selectPendingUpload(f); }}
                 />
                 <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
-                <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, or click to browse</p>
+                <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, paste, or click to browse</p>
                 <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
               </div>
             ) : (
