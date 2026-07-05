@@ -716,7 +716,7 @@
 }
 
 /* ── Assets button ───────────────────────────────────── */
-.pretext-plus-editor__toc-assets-btn {
+.pretext-plus-editor__toc-assets-btns {
   display: block;
   width: 100%;
   background: none;
@@ -725,10 +725,14 @@
   padding: 7px 10px;
   font: inherit;
   font-size: 0.78rem;
-  color: #2563eb;
-  cursor: pointer;
   text-align: left;
   flex-shrink: 0;
+}
+.pretext-plus-editor__toc-assets-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
 }
 
 .pretext-plus-editor__toc-assets-btn:hover {

@@ -12,6 +12,11 @@ export interface AssetManagerModalProps {
   open: boolean;
   onClose: () => void;
   /**
+   * Which main tab to show on open. Defaults to "in-document". Has no effect
+   * in resolve/replace mode, which always goes straight to the source picker.
+   */
+  initialTab?: AssetManagerMainTab;
+  /**
    * When set, the modal opens in "resolve" mode for an unresolved
    * `<plus:KIND ref="..."/>` placeholder: it goes straight to the source picker
    * for that kind, and whatever asset the user picks/uploads/creates is bound to
@@ -66,7 +71,8 @@ export interface AssetManagerModalProps {
   onReplaceAsset: (oldAsset: Asset, newAsset: Asset, fromLibrary: boolean) => void;
 }
 
-type MainTab = "in-document" | "add";
+export type AssetManagerMainTab = "in-document" | "add";
+type MainTab = AssetManagerMainTab;
 type ImageSourceTab = "library" | "upload" | "url";
 type DoenetSourceTab = "library" | "create";
 
@@ -105,6 +111,7 @@ function namePastedImageFile(file: File): File {
 const AssetManagerModal = ({
   open,
   onClose,
+  initialTab,
   resolveTarget,
   replaceTarget,
   onLoadAssets,
@@ -147,7 +154,7 @@ const AssetManagerModal = ({
   const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedAssets;
   const projectAssetIds = new Set(resolvedAssets.map((a) => a.id));
 
-  const [tab, setTab] = useState<MainTab>("in-document");
+  const [tab, setTab] = useState<MainTab>(initialTab ?? "in-document");
   const [addKind, setAddKind] = useState<AssetKind | null>(null);
   const [imageTab, setImageTab] = useState<ImageSourceTab>("library");
   const [doenetTab, setDoenetTab] = useState<DoenetSourceTab>("library");

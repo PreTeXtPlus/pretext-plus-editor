@@ -17,7 +17,7 @@ import { useEditorStore } from "../../store/hooks";
 import { ASSET_KIND_LABELS, VISIBLE_ASSET_KINDS } from "../../assetKinds";
 
 export interface ArticleTocProps {
-  onOpenAssetPicker?: () => void;
+  onOpenAssetPicker?: (initialTab?: "add") => void;
   hideAssets?: boolean;
 }
 
@@ -497,7 +497,7 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
                       <button
                         type="button"
                         className="pretext-plus-editor__toc-assets-add-link"
-                        onClick={onOpenAssetPicker}
+                        onClick={() => onOpenAssetPicker("add")}
                       >
                         Add one
                       </button>
@@ -582,13 +582,22 @@ const ArticleToc = ({ onOpenAssetPicker, hideAssets }: ArticleTocProps) => {
           </div>
 
           {onOpenAssetPicker && (
-            <button
-              type="button"
-              className="pretext-plus-editor__toc-assets-btn"
-              onClick={onOpenAssetPicker}
-            >
-              Manage Assets
-            </button>
+            <div className="pretext-plus-editor__toc-assets-btns">
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-assets-btn"
+                onClick={() => onOpenAssetPicker()}
+              >
+                Manage
+              </button>
+              <button
+                type="button"
+                className="pretext-plus-editor__toc-assets-btn"
+                onClick={() => onOpenAssetPicker("add")}
+              >
+                Add
+              </button>
+            </div>
           )}
         </>
       )}
