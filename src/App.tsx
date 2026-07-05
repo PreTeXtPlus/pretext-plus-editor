@@ -811,7 +811,7 @@ function App() {
         onDivisionAdd={handleDivisionAdd}
         onDivisionRemove={handleDivisionRemove}
         onDivisionUpdate={handleDivisionUpdate}
-        hideAssets={true}
+        hideAssets={false}
       />
     </>
   );
