@@ -4,10 +4,17 @@ export type SourceFormat = "pretext" | "latex" | "markdown";
 /** The kind of a project asset — determines the inserted PreTeXt tag. */
 export type AssetKind = "image" | "doenet";
 
-/** An asset stored in the project asset library. */
+/** An asset owned by a single project. */
 export interface Asset {
-  /** Stable server-assigned identifier (hidden from users). */
-  id: string;
+  /**
+   * Stable server-assigned identifier (hidden from users). Assets are
+   * persisted through the project's nested `assets_attributes`, so a
+   * freshly-created asset has **no** `id` until the project is saved and the
+   * server mints one — the *absence* of an `id` is the signal that an asset is
+   * new. The editor keys asset identity on `kind` + `ref` (never `id`), so an
+   * id-less asset is fully usable the instant it's added.
+   */
+  id?: string;
   /** Human-readable display title shown in the library UI. */
   title: string;
   /** Short reference used when authoring references, e.g. `"euler-painting"`.

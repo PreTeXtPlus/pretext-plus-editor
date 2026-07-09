@@ -53,8 +53,15 @@ export type DivisionType =
  * the editor.
  */
 export interface Division {
-  /** Stable server-assigned identifier (Rails record id or UUID). */
-  id: string;
+  /**
+   * Stable server-assigned identifier. Divisions are persisted through the
+   * project's nested `divisions_attributes`, so a freshly-created division has
+   * **no** `id` until the project is saved and the server mints one — the
+   * *absence* of an `id` is the signal that a division is new. The editor keys
+   * division identity on `xmlId` (never `id`), so an id-less division is fully
+   * usable the instant it's added.
+   */
+  id?: string;
   /**
    * The `xml:id` attribute value for this division.  Used as the `ref`
    * value in `<plus:division ref="..."/>` placeholders in parent divisions.

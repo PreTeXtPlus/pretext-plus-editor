@@ -2157,13 +2157,12 @@ function ensureRootLabel(xml: string): string {
         ? firstElement
         : undefined;
     if (!el) return xml;
-    let xmlId = el.attributes.xmlId;
+    let xmlId = el.attributes["xml:id"];
     if (!xmlId) {
-      console.warn("Root element doesn't have an xml:id");
-      xmlId = findUnusedLabel(tree, "pretext-plus-preview");
+      xmlId = findUnusedLabel(tree, "main");
     }
-    if (!el.attributes.label) {
-      el.attributes.label = xmlId;
+    if (!el.attributes["label"]) {
+      el.attributes["label"] = xmlId;
       return toXml(tree, XML_SERIALIZE_OPTIONS);
     }
     return xml;
