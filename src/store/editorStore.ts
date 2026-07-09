@@ -49,7 +49,6 @@ const sameAssetRef = (a: Asset, b: Asset): boolean =>
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type DivisionChanges = {
-  id?: string;
   title?: string;
   type?: DivisionType;
   xmlId?: string | null;
@@ -123,12 +122,6 @@ export interface EditorStoreState {
    * it's added, without waiting for the host to echo it back.
    */
   projectAssets: Asset[] | undefined;
-  /**
-   * The user's cross-project asset library. Unlike `projectAssets` this stays a
-   * host-owned, fetch-on-demand cache (loaded via `onLoadLibraryAssets`), so it
-   * is still mirrored from props every render via `syncState`.
-   */
-  libraryAssets: Asset[] | undefined;
   title: string;
   docinfo: string;
   commonDocinfo: string;
@@ -246,13 +239,6 @@ export interface EditorStoreState {
   /** Duplicate a project asset under a fresh ref. Resolves when the host settles. */
   duplicateAsset: (asset: Asset) => Promise<void>;
   /**
-   * Replace the whole project-asset pool — e.g. after `onLoadAssets` resolves
-   * with the server's fresh list. The server is authoritative at that point,
-   * so this overwrites the pool wholesale (matching how the divisions pool is
-   * reset on an external update).
-   */
-  setProjectAssets: (assets: Asset[]) => void;
-  /**
    * Optimistically add an asset to the pool (no-op if one with the same
    * kind+ref already exists). Used when an asset is uploaded, created, added
    * from the library, or inserted, so it's editable immediately.
@@ -281,7 +267,6 @@ export type EditorSyncableState = Pick<
   EditorStoreState,
   | "source"
   | "sourceFormat"
-  | "libraryAssets"
   | "title"
   | "docinfo"
   | "commonDocinfo"
@@ -348,7 +333,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     source: init.source,
     sourceFormat: init.sourceFormat,
     projectAssets: init.projectAssets,
-    libraryAssets: undefined,
     title: init.title,
     docinfo: init.docinfo,
     commonDocinfo: init.commonDocinfo,
@@ -405,7 +389,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
           d.xmlId === xmlId
             ? {
               ...d,
-              ...(changes.id !== undefined && { id: changes.id }),
               ...(changes.title !== undefined && { title: changes.title }),
               ...(changes.type !== undefined && { type: changes.type }),
               ...(changes.xmlId != null && { xmlId: changes.xmlId }),
@@ -548,7 +531,6 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     duplicateAsset: async (asset) => {
       await bag.cbs.assetDuplicate?.(asset);
     },
-    setProjectAssets: (assets) => set({ projectAssets: assets }),
     addAssetToPool: (asset) =>
       set((s) => {
         const base = s.projectAssets ?? [];

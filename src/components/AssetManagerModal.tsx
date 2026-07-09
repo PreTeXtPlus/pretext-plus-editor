@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import type { Asset, AssetKind } from "../types/editor";
 import { useEditorStore } from "../store/hooks";
 import { assetEmbedCode } from "../sectionUtils";
@@ -25,10 +25,6 @@ export interface AssetManagerModalProps {
    * takes over from this asset (handled by `onReplaceAsset`).
    */
   replaceTarget?: Asset | null;
-  onLoadAssets?: () => Promise<Asset[]>;
-  onLoadLibraryAssets?: () => Promise<Asset[]>;
-  /** Associate a library asset with the current project. */
-  onAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /**
    * Upload an image file; host returns the created asset. `title` is the
    * human-readable title the user entered — distinct from `file.name` — and
@@ -58,17 +54,14 @@ export interface AssetManagerModalProps {
   /** Rewrite in-document `<plus:KIND ref="oldRef"/>` placeholders to `newRef`. */
   onResolveRef: (kind: AssetKind, oldRef: string, newRef: string) => void;
   /**
-   * Replace `oldAsset` with the user's chosen `newAsset`. `fromLibrary` is true
-   * when `newAsset` is an existing library asset (so it keeps its own ref and
-   * the document is re-pointed), false when freshly created (so it adopts the
-   * old asset's ref).
+   * Replace `oldAsset` with the user's freshly created `newAsset`, which adopts
+   * the old asset's ref so the document's references don't move.
    */
-  onReplaceAsset: (oldAsset: Asset, newAsset: Asset, fromLibrary: boolean) => void;
+  onReplaceAsset: (oldAsset: Asset, newAsset: Asset) => void;
 }
 
 type MainTab = "in-document" | "add";
-type ImageSourceTab = "library" | "upload" | "url";
-type DoenetSourceTab = "library" | "create";
+type ImageSourceTab = "upload" | "url";
 
 /**
  * A throwaway client-side id for a locally-created asset, used only in the
@@ -86,9 +79,6 @@ const AssetManagerModal = ({
   onClose,
   resolveTarget,
   replaceTarget,
-  onLoadAssets,
-  onLoadLibraryAssets,
-  onAddFromLibrary,
   onUpload,
   onFetchUrl,
   onCreateDoenet,
@@ -108,29 +98,15 @@ const AssetManagerModal = ({
     "pretext";
   const embedFor = (kind: AssetKind, ref: string) =>
     assetEmbedCode(kind, ref, activeFormat);
-  // Authoritative project-asset pool, owned by the store. A fresh server list
-  // from `onLoadAssets` is written straight back into it via `setProjectAssets`.
+  // Authoritative project-asset pool, owned by the store.
   const projectAssets = useEditorStore((s) => s.projectAssets) ?? [];
-  const setProjectAssets = useEditorStore((s) => s.setProjectAssets);
-  const libraryAssets = useEditorStore((s) => s.libraryAssets);
   const openAssetEditor = useEditorStore((s) => s.openAssetEditor);
   const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
-  const hasLoaders = !!(onLoadAssets || onLoadLibraryAssets);
-
-  const [dynamicLibraryAssets, setDynamicLibraryAssets] = useState<Asset[] | null>(null);
-  const [isLoadingAssets, setIsLoadingAssets] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const resolvedAssets = projectAssets;
-  const resolvedLibraryAssets = dynamicLibraryAssets ?? libraryAssets ?? resolvedAssets;
-  const projectAssetIds = new Set(resolvedAssets.map((a) => a.id));
 
   const [tab, setTab] = useState<MainTab>("in-document");
   const [addKind, setAddKind] = useState<AssetKind | null>(null);
-  const [imageTab, setImageTab] = useState<ImageSourceTab>("library");
-  const [doenetTab, setDoenetTab] = useState<DoenetSourceTab>("library");
-  const [addingAssetId, setAddingAssetId] = useState<string | null>(null);
+  const [imageTab, setImageTab] = useState<ImageSourceTab>("upload");
 
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
@@ -165,40 +141,6 @@ const AssetManagerModal = ({
   // Success panel shown after a normal-mode add (asset added + embed copied).
   const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
 
-  const loadAssets = useCallback(() => {
-    if (!onLoadAssets && !onLoadLibraryAssets) return;
-    setIsLoadingAssets(true);
-    setLoadError(null);
-    Promise.all([
-      onLoadAssets?.() ?? Promise.resolve(null),
-      onLoadLibraryAssets?.() ?? Promise.resolve(null),
-    ])
-      .then(([proj, lib]) => {
-        // The server list is authoritative at load time — write it straight
-        // into the store's pool (any optimistic local additions were already
-        // persisted by the host before this fetch, so they'll be included).
-        if (proj !== null) setProjectAssets(proj);
-        if (lib !== null) setDynamicLibraryAssets(lib);
-      })
-      .catch((err) => {
-        setLoadError(err instanceof Error ? err.message : "Failed to load assets.");
-      })
-      .finally(() => setIsLoadingAssets(false));
-  }, [onLoadAssets, onLoadLibraryAssets, setProjectAssets]);
-
-  // Load assets once per open. Keyed solely on `open` so it cannot re-fire on
-  // unrelated re-renders; `loadAssets` is read through a ref to avoid a
-  // self-sustaining loop (loading writes to the store → re-render → host hands
-  // a fresh `onClose`/loader → effect would otherwise re-run → reloads forever).
-  const loadAssetsRef = useRef(loadAssets);
-  useEffect(() => {
-    loadAssetsRef.current = loadAssets;
-  });
-  useEffect(() => {
-    if (!open) return;
-    loadAssetsRef.current();
-  }, [open]);
-
   // Escape-to-close. Re-binds when `onClose` changes, but never triggers a load.
   useEffect(() => {
     if (!open) return;
@@ -216,16 +158,16 @@ const AssetManagerModal = ({
 
   if (!open) return null;
 
-  const assetView = buildProjectAssetView(divisions, resolvedAssets);
+  const assetView = buildProjectAssetView(divisions, projectAssets);
 
-  // ── Commit a freshly-produced asset (upload/url/library/create) ───────────
+  // ── Commit a freshly-produced asset (upload/url/create) ───────────────────
   // Replace mode swaps it in for `replaceTarget`. Resolve mode binds it to the
   // placeholder being resolved (rewriting that placeholder's ref). Otherwise
   // (normal add) it's dropped in the pool, its embed code is copied, and the
   // success panel is shown so the user can paste it where they want it.
-  const commitAsset = (asset: Asset, opts?: { fromLibrary?: boolean }) => {
+  const commitAsset = (asset: Asset) => {
     if (replaceTarget) {
-      onReplaceAsset(replaceTarget, asset, !!opts?.fromLibrary);
+      onReplaceAsset(replaceTarget, asset);
       onClose();
       return;
     }
@@ -244,18 +186,6 @@ const AssetManagerModal = ({
     navigator.clipboard.writeText(embedFor(kind, ref)).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
-  };
-
-  const handleLibrarySelect = async (asset: Asset) => {
-    if (!projectAssetIds.has(asset.id) && onAddFromLibrary) {
-      setAddingAssetId(asset.id);
-      try {
-        await onAddFromLibrary(asset);
-      } finally {
-        setAddingAssetId(null);
-      }
-    }
-    commitAsset(asset, { fromLibrary: true });
   };
 
   // Stash a picked/dropped file for preview; the actual upload is deferred
@@ -334,62 +264,6 @@ const AssetManagerModal = ({
     } else {
       commitAsset({ id: localAssetId("doenet"), title, ref, kind: "doenet" });
     }
-  };
-
-  // ── Shared library list ────────────────────────────────────────────────────
-  const renderLibrary = (kind: AssetKind) => {
-    const assets = resolvedLibraryAssets.filter((a) => a.kind === kind);
-    return (
-      <div className="pretext-plus-editor__am-library">
-        {hasLoaders && (
-          <div className="pretext-plus-editor__am-toolbar">
-            {loadError && <span className="pretext-plus-editor__asset-load-error">{loadError}</span>}
-            <button
-              type="button"
-              className="pretext-plus-editor__asset-library-refresh"
-              onClick={loadAssets}
-              disabled={isLoadingAssets}
-            >
-              {isLoadingAssets ? "Loading…" : "Refresh"}
-            </button>
-          </div>
-        )}
-        {isLoadingAssets && assets.length === 0 ? (
-          <p className="pretext-plus-editor__am-empty-text">Loading…</p>
-        ) : assets.length === 0 ? (
-          <p className="pretext-plus-editor__am-empty-text">
-            No {ASSET_KIND_LABELS[kind].toLowerCase()} assets in your library.
-          </p>
-        ) : (
-          <ul className="pretext-plus-editor__am-list">
-            {assets.map((asset) => {
-              const inProject = projectAssetIds.has(asset.id);
-              const isAdding = addingAssetId === asset.id;
-              return (
-                <li key={asset.id}>
-                  <button
-                    type="button"
-                    className={[
-                      "pretext-plus-editor__am-lib-row",
-                      inProject ? "pretext-plus-editor__am-lib-row--in-project" : "",
-                    ].filter(Boolean).join(" ")}
-                    onClick={() => handleLibrarySelect(asset)}
-                    disabled={isAdding || !asset.ref}
-                    title={!asset.ref ? "Asset has no reference — cannot use" : inProject ? `Use "${asset.ref}"` : `Add to project & use "${asset.ref}"`}
-                  >
-                    <div className="pretext-plus-editor__am-row-info">
-                      <span className="pretext-plus-editor__am-row-name">{asset.title}</span>
-                      <span className="pretext-plus-editor__am-row-ref">{isAdding ? "Adding…" : asset.ref}</span>
-                    </div>
-                    {inProject && <span className="pretext-plus-editor__am-badge">✓</span>}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    );
   };
 
   // ── "In Document" tab — the joined project-asset view ─────────────────────
@@ -579,7 +453,7 @@ const AssetManagerModal = ({
         <button
           type="button"
           className="pretext-plus-editor__am-kind-card"
-          onClick={() => { setAddKind("image"); setImageTab("library"); }}
+          onClick={() => { setAddKind("image"); setImageTab(onUpload ? "upload" : "url"); }}
         >
           <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true">🖼️</span>
           <span className="pretext-plus-editor__am-kind-card-label">Image</span>
@@ -589,7 +463,7 @@ const AssetManagerModal = ({
           <button
             type="button"
             className="pretext-plus-editor__am-kind-card"
-            onClick={() => { setAddKind("doenet"); setDoenetTab("library"); }}
+            onClick={() => setAddKind("doenet")}
           >
             <span className="pretext-plus-editor__am-kind-card-icon" aria-hidden="true"><img src={doenetLogo} alt="Doenet" /></span>
             <span className="pretext-plus-editor__am-kind-card-label">Doenet</span>
@@ -618,13 +492,6 @@ const AssetManagerModal = ({
         </button>
       )}
       <div className="pretext-plus-editor__dialog-tab-bar pretext-plus-editor__am-sub-tabs">
-        <button
-          type="button"
-          className={`pretext-plus-editor__dialog-tab${imageTab === "library" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-          onClick={() => setImageTab("library")}
-        >
-          Library
-        </button>
         {onUpload && (
           <button
             type="button"
@@ -643,7 +510,6 @@ const AssetManagerModal = ({
         </button>
       </div>
       <div className="pretext-plus-editor__am-configure-body">
-        {imageTab === "library" && renderLibrary("image")}
         {imageTab === "upload" && onUpload && (
           <div className="pretext-plus-editor__am-upload">
             {!pendingUploadFile ? (
@@ -778,26 +644,8 @@ const AssetManagerModal = ({
           ← Back
         </button>
       )}
-      <div className="pretext-plus-editor__dialog-tab-bar pretext-plus-editor__am-sub-tabs">
-        <button
-          type="button"
-          className={`pretext-plus-editor__dialog-tab${doenetTab === "library" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-          onClick={() => setDoenetTab("library")}
-        >
-          Library
-        </button>
-        <button
-          type="button"
-          className={`pretext-plus-editor__dialog-tab${doenetTab === "create" ? " pretext-plus-editor__dialog-tab--active" : ""}`}
-          onClick={() => setDoenetTab("create")}
-        >
-          Create New
-        </button>
-      </div>
       <div className="pretext-plus-editor__am-configure-body">
-        {doenetTab === "library" && renderLibrary("doenet")}
-        {doenetTab === "create" && (
-          <div className="pretext-plus-editor__am-create-form">
+        <div className="pretext-plus-editor__am-create-form">
             <label className="pretext-plus-editor__dialog-label" htmlFor="am-doenet-title">Title</label>
             <input
               id="am-doenet-title"
@@ -831,8 +679,7 @@ const AssetManagerModal = ({
             >
               {isCreatingDoenet ? "Creating…" : onCreateDoenet ? "Create" : "Add"}
             </button>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
