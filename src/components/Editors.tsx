@@ -166,13 +166,12 @@ export interface editorProps {
    * `xmlId` the editor picked — and should be persisted as-is.
    *
    * The division is added to the local pool synchronously and immediately,
-   * before this is called, so the host's `id` provisioning never blocks the
-   * UI. If a host needs to mint its own stable `id` (e.g. a Rails record
-   * id) for the division, it can return that id here; once the returned
-   * promise resolves, the editor patches it into the division's `id` field
-   * in place. `xmlId` is unaffected and is never remapped.
+   * before this is called, so persistence never blocks the UI. The division
+   * arrives with **no** `id`: it is new until the host saves it through the
+   * project's nested `divisions_attributes` (no id = insert) and the server
+   * mints one, which flows back via the `divisions` prop (matched by `xmlId`).
    */
-  onDivisionAdd?: (division: Division) => Promise<string> | void;
+  onDivisionAdd?: (division: Division) => void;
 
   /**
    * Called when the user deletes a division via the TOC UI.
@@ -202,19 +201,13 @@ export interface editorProps {
    */
   projectAssets?: Asset[];
   /**
-   * All assets available in the user's library (across all projects).
-   */
-  libraryAssets?: Asset[];
-  /**
    * @deprecated Assets are no longer inserted at the cursor — adding an asset
    * now copies its embed code to the clipboard. Retained for backward
    * compatibility; it is no longer called. Use the creation hooks
-   * (`onAssetUpload`/`onAssetAddFromLibrary`/`onCreateDoenet`) to learn when an
-   * asset enters the project.
+   * (`onAssetUpload`/`onCreateDoenet`) to learn when an asset enters the
+   * project.
    */
   onAssetInsert?: (asset: Asset) => void;
-  /** Called when the user picks a library asset not yet in this project. */
-  onAssetAddFromLibrary?: (asset: Asset) => Promise<void> | void;
   /**
    * Called when the user uploads an image file, or after `onAssetFetchUrl`
    * fetches an external URL. `title` is the human-readable title the user
@@ -236,10 +229,6 @@ export interface editorProps {
   onAssetRemove?: (asset: Asset) => void;
   /** Called when the user saves edits to an asset's content (e.g. its `source`). */
   onAssetUpdate?: (asset: Asset) => Promise<void> | void;
-  /** Called when the asset modal opens to fetch the latest project assets. */
-  onLoadAssets?: () => Promise<Asset[]>;
-  /** Called when the asset modal opens to fetch the full library asset list. */
-  onLoadLibraryAssets?: () => Promise<Asset[]>;
   /** If true, the TOC and asset manager hide all assets. */
   hideAssets?: boolean;
 }
@@ -532,13 +521,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   const applyDivisionAdd = (division: Division) => {
-    addDivisionToPool(division);
-    // Added to the pool synchronously above so the UI never waits on the
-    // host. If the host provisions its own stable `id` (e.g. a Rails record
-    // id), patch just that field in once it resolves — `xmlId` is what every
-    // other code path keys on, so this never needs to be remapped anywhere.
-    const provisioned = props.onDivisionAdd?.(division);
-    provisioned?.then((id) => patchDivision(division.xmlId, { id })).catch(() => {});
+    // A newly created division is persisted through the project's nested
+    // `divisions_attributes` with no id, so the server mints one on save
+    // (no id = new). Strip any placeholder id a creation helper set locally —
+    // `xmlId` is what every code path keys on, and the server-assigned id
+    // flows back later via the `divisions` prop (matched by `xmlId`).
+    const newDivision: Division = { ...division, id: undefined };
+    addDivisionToPool(newDivision);
+    props.onDivisionAdd?.(newDivision);
   };
 
   const applyDivisionRemove = (xmlId: string) => {
@@ -739,8 +729,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // Add to the authoritative pool optimistically so it's editable immediately,
     // even before the host echoes it back as an updated `projectAssets` prop.
     // The host already learns of the asset through the creation hook that
-    // produced it (`onAssetUpload`/`onAssetAddFromLibrary`/`onCreateDoenet`),
-    // so the deprecated `onAssetInsert` is no longer fired here.
+    // produced it (`onAssetUpload`/`onCreateDoenet`), so the deprecated
+    // `onAssetInsert` is no longer fired here.
     addAssetToPool(asset);
   };
 
@@ -756,10 +746,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // uploads the new image, hands it the old ref, and drops the old asset.
   const canDuplicateAsset = !!(props.onAssetUpload && props.onAssetFetchUrl && props.onAssetUpdate);
   // Replace swaps in a chosen/created asset and drops the old one, so it needs
-  // a removal hook plus at least one source (upload or library).
-  const canReplaceAsset = !!(
-    props.onAssetRemove && (props.onAssetUpload || props.onAssetAddFromLibrary)
-  );
+  // a removal hook plus an upload source for the replacement.
+  const canReplaceAsset = !!(props.onAssetRemove && props.onAssetUpload);
 
   /**
    * Duplicate an asset under a fresh, non-colliding ref by re-fetching its bytes
@@ -795,34 +783,20 @@ const EditorsInner = (props: EditorsInnerProps) => {
   };
 
   /**
-   * Replace an asset with the user's chosen `newAsset` (from the asset manager's
-   * replace mode), then drop the old one. Two cases, both safe because each asset
-   * owns its own file:
-   *   • freshly created (upload/URL) — `newAsset` adopts the old ref/title/source
-   *     (`onAssetUpdate`) so the document's references don't move; or
-   *   • picked from the library — `newAsset` keeps its own ref and the document
-   *     placeholders are re-pointed to it (`renameAssetRefEverywhere`).
+   * Replace an asset with the user's freshly created `newAsset` (from the asset
+   * manager's replace mode), then drop the old one. The new asset adopts the old
+   * ref/title/source (`onAssetUpdate`) so the document's references don't move,
+   * and it's safe because each asset owns its own file.
    */
-  const handleAssetReplaceCommit = async (
-    oldAsset: Asset,
-    newAsset: Asset,
-    fromLibrary: boolean,
-  ) => {
-    if (fromLibrary) {
-      if (newAsset.ref && oldAsset.ref) {
-        renameAssetRefEverywhere(oldAsset.kind, oldAsset.ref, newAsset.ref);
-      }
-      addAssetToPool(newAsset);
-    } else {
-      const replaced: Asset = {
-        ...newAsset,
-        ref: oldAsset.ref,
-        title: oldAsset.title,
-        source: oldAsset.source,
-      };
-      await props.onAssetUpdate?.(replaced);
-      updateAssetInPool(replaced);
-    }
+  const handleAssetReplaceCommit = async (oldAsset: Asset, newAsset: Asset) => {
+    const replaced: Asset = {
+      ...newAsset,
+      ref: oldAsset.ref,
+      title: oldAsset.title,
+      source: oldAsset.source,
+    };
+    await props.onAssetUpdate?.(replaced);
+    updateAssetInPool(replaced);
     props.onAssetRemove?.(oldAsset);
     removeAssetFromPool(oldAsset);
   };
@@ -907,7 +881,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
     syncState({
       source: divisionActiveSource,
       sourceFormat: activeDivisionFormat,
-      libraryAssets: props.libraryAssets,
       projectType: props.projectType,
       projectUrl: props.projectUrl,
       rootDivisionId: rootDivision?.xmlId,
@@ -1383,9 +1356,6 @@ const EditorsInner = (props: EditorsInnerProps) => {
               setAssetReplaceTarget(null);
               setAssetPickerInitialTab("in-document");
             }}
-            onLoadAssets={props.onLoadAssets}
-            onLoadLibraryAssets={props.onLoadLibraryAssets}
-            onAddFromLibrary={props.onAssetAddFromLibrary}
             onUpload={props.onAssetUpload}
             onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}

@@ -479,7 +479,11 @@ function App() {
   // ---------------------------------------------------------------------------
   // Asset demo state
   // ---------------------------------------------------------------------------
-  const [libraryAssets, setLibraryAssets] = useState<Asset[]>([
+  // A single flat per-project asset pool, mirroring the Rails single-Asset
+  // model where each project has-many assets. Seed assets carry an `id`
+  // (already persisted); a freshly created asset has none until the project is
+  // saved and the server mints one via nested `assets_attributes`.
+  const [projectAssets, setProjectAssets] = useState<Asset[]>([
     {
       id: "asset-1",
       title: "Euler Formula",
@@ -510,18 +514,7 @@ function App() {
       contentType: "image/svg+xml",
       source: "<shortdescription>The PreTeXt logo.</shortdescription>",
     },
-    {
-      id: "asset-4",
-      title: "Sample Activity",
-      ref: "sample-activity",
-      kind: "doenet",
-      source: "<!-- DoenetML for the sample activity goes here -->",
-    },
   ]);
-  const [projectAssetIds, setProjectAssetIds] = useState<Set<string>>(
-    new Set(["asset-1"]),
-  );
-  const projectAssets = libraryAssets.filter((a) => projectAssetIds.has(a.id));
 
   const [projectType, setProjectType] = useState<"article" | "book">("article");
   const [demoLabel, setDemoLabel] = useState("Article");
@@ -600,15 +593,14 @@ function App() {
     );
   };
 
-  const handleDivisionAdd = async (division: Division): Promise<string> => {
+  const handleDivisionAdd = (division: Division) => {
+    // The division arrives with no id — it's new until the project is saved.
+    // A real host sends it through the project's nested `divisions_attributes`
+    // (no id = insert) and the server mints one on save, which then flows back
+    // via the `divisions` prop (matched by `xmlId`).
     setDivisions((prev) => [...prev, division]);
     setActiveDivisionId(division.xmlId);
-    // Simulate a Rails round-trip that provisions the record's real id.
-    // The editor already shows the division locally; this id is patched in
-    // once it resolves, without affecting the xmlId used everywhere else.
-    console.log("Division provisioning started:", division.xmlId);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    return `division-${Date.now()}`;
+    console.log("New division added (no id yet):", division.xmlId);
   };
 
   const handleDivisionRemove = (xmlId: string) => {
@@ -658,7 +650,9 @@ function App() {
     console.log("Asset upload started:", file.name, file.type, file.size, "title:", title);
     await new Promise((resolve) => setTimeout(resolve, 800));
     const newAsset: Asset = {
-      id: `asset-${Date.now()}`,
+      // No `id`: a freshly uploaded asset is new until the project is saved.
+      // A real host sends it through the project's nested `assets_attributes`
+      // (no id = insert) and the server mints one on save.
       title: title?.trim() || file.name.replace(/\.[^.]+$/, ""),
       ref: file.name,
       kind: "image",
@@ -666,8 +660,7 @@ function App() {
       url: URL.createObjectURL(file),
       contentType: file.type,
     };
-    setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    setProjectAssets((prev) => [...prev, newAsset]);
     return newAsset;
   };
 
@@ -689,35 +682,29 @@ function App() {
     }
   };
 
-  const handleAssetAddFromLibrary = async (asset: Asset) => {
-    console.log("Adding library asset to project:", asset.id, asset.title);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    setProjectAssetIds((prev) => new Set([...prev, asset.id]));
-    console.log("Asset added to project:", asset.ref);
-  };
-
   const handleCreateDoenet = async (title: string, ref: string): Promise<Asset> => {
     console.log("Creating Doenet activity:", title, ref);
     await new Promise((resolve) => setTimeout(resolve, 400));
-    const newAsset: Asset = { id: `asset-${Date.now()}`, title, ref, kind: "doenet" };
-    setLibraryAssets((prev) => [...prev, newAsset]);
-    setProjectAssetIds((prev) => new Set([...prev, newAsset.id]));
+    // No `id` — same new-asset convention as uploads.
+    const newAsset: Asset = { title, ref, kind: "doenet" };
+    setProjectAssets((prev) => [...prev, newAsset]);
     return newAsset;
   };
 
+  // Assets are keyed by kind+ref, not id — a new asset may not have an id yet.
   const handleAssetRemove = (asset: Asset) => {
     console.log("Removing asset from project:", asset.ref);
-    setProjectAssetIds((prev) => {
-      const next = new Set(prev);
-      next.delete(asset.id);
-      return next;
-    });
+    setProjectAssets((prev) =>
+      prev.filter((a) => !(a.kind === asset.kind && a.ref === asset.ref)),
+    );
   };
 
   const handleAssetUpdate = async (asset: Asset) => {
     console.log("Updating asset:", asset.ref, asset.source);
     await new Promise((resolve) => setTimeout(resolve, 300));
-    setLibraryAssets((prev) => prev.map((a) => (a.id === asset.id ? asset : a)));
+    setProjectAssets((prev) =>
+      prev.map((a) => (a.kind === asset.kind && a.ref === asset.ref ? asset : a)),
+    );
   };
 
   // ---------------------------------------------------------------------------
@@ -797,9 +784,7 @@ function App() {
         onPreviewRebuild={handlePreviewRebuild}
         projectType={projectType}
         projectAssets={projectAssets}
-        libraryAssets={libraryAssets}
         onAssetInsert={handleAssetInsert}
-        onAssetAddFromLibrary={handleAssetAddFromLibrary}
         onAssetUpload={handleAssetUpload}
         onAssetFetchUrl={handleAssetFetchUrl}
         onCreateDoenet={handleCreateDoenet}
