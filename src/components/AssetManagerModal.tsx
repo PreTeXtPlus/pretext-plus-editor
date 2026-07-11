@@ -193,26 +193,24 @@ const AssetManagerModal = ({
     };
   }, [pendingUploadPreviewUrl]);
 
-  // Is the upload drop zone the thing currently on screen? Drives the
-  // window-level paste listener below — kept separate from `open` since the
-  // modal can be open on a different tab/kind (e.g. the kind picker, Doenet
-  // form, or in-document list), where a stray Ctrl/Cmd+V shouldn't be
-  // intercepted as an image upload.
-  const showingImageDropZone =
+  // Is pasting an image a sensible thing to do right now? Any time this
+  // modal is open and uploads are supported — including the "Assets" tab,
+  // the kind picker, or mid-Doenet-form — a stray Ctrl/Cmd+V with an image
+  // on the clipboard jumps straight to Image/Upload. The one exception is a
+  // resolve/replace target locked to a non-image kind (e.g. an unresolved
+  // Doenet placeholder), which has no Image view to receive it.
+  const pasteImageActive =
     open &&
     !!onUpload &&
-    imageTab === "upload" &&
     !pendingUploadFile &&
     (resolveTarget ? resolveTarget.kind === "image"
       : replaceTarget ? replaceTarget.kind === "image"
-      : tab === "add" && addKind === "image");
+      : true);
 
-  // Ctrl/Cmd+V anywhere while the drop zone is on screen pastes an image —
-  // the user shouldn't have to click into the drop zone first. Bound at the
-  // window level (rather than the drop zone's onPaste) so it fires regardless
-  // of what currently has focus.
+  // Bound at the window level (rather than the drop zone's onPaste) so it
+  // fires no matter what currently has focus inside the modal.
   useEffect(() => {
-    if (!showingImageDropZone) return;
+    if (!pasteImageActive) return;
     const handlePaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -221,6 +219,12 @@ const AssetManagerModal = ({
           const file = item.getAsFile();
           if (file) {
             e.preventDefault();
+            // Clear the prior success panel (if any) — the newly staged
+            // upload should show, not a stale "added" confirmation.
+            setAddedAsset(null);
+            setTab("add");
+            setAddKind("image");
+            setImageTab("upload");
             selectPendingUpload(namePastedImageFile(file));
           }
           return;
@@ -229,7 +233,7 @@ const AssetManagerModal = ({
     };
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [showingImageDropZone]);
+  }, [pasteImageActive]);
 
   if (!open) return null;
 
