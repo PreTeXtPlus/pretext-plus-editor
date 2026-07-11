@@ -81,24 +81,14 @@ function localAssetId(prefix: string): string {
 }
 
 /**
- * Clipboard image files often arrive with a generic or missing name (e.g. an
- * empty string in Firefox). The server needs a real extension to serve the
- * asset, so fall back to one derived from the MIME type when the name lacks one.
+ * Clipboard image files never carry a meaningful filename — browsers hand
+ * back either an empty string (Firefox) or a generic placeholder like
+ * "image.png" (Chromium) that looks legitimate but isn't. Always replace it
+ * with a fresh, uniquely-timestamped name.
  */
-const MIME_EXTENSIONS: Record<string, string> = {
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/gif": "gif",
-  "image/webp": "webp",
-  "image/svg+xml": "svg",
-  "image/bmp": "bmp",
-};
 
 function namePastedImageFile(file: File): File {
-  if (/\.[a-z0-9]+$/i.test(file.name)) return file;
-  const ext = MIME_EXTENSIONS[file.type] ?? "png";
-  const name = `pasted-image-${Date.now()}.${ext}`;
-  return new File([file], name, { type: file.type });
+  return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
 }
 
 const AssetManagerModal = ({
