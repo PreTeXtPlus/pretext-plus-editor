@@ -195,14 +195,14 @@ const AssetManagerModal = ({
 
   // Is pasting an image a sensible thing to do right now? Any time this
   // modal is open and uploads are supported — including the "Assets" tab,
-  // the kind picker, or mid-Doenet-form — a stray Ctrl/Cmd+V with an image
-  // on the clipboard jumps straight to Image/Upload. The one exception is a
+  // the kind picker, mid-Doenet-form, or with an image already staged (a
+  // fresh paste replaces it) — a stray Ctrl/Cmd+V with an image on the
+  // clipboard jumps straight to Image/Upload. The one exception is a
   // resolve/replace target locked to a non-image kind (e.g. an unresolved
   // Doenet placeholder), which has no Image view to receive it.
   const pasteImageActive =
     open &&
     !!onUpload &&
-    !pendingUploadFile &&
     (resolveTarget ? resolveTarget.kind === "image"
       : replaceTarget ? replaceTarget.kind === "image"
       : true);
