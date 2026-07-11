@@ -170,11 +170,14 @@ const AssetManagerModal = ({
   const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
 
   // Stash a picked/dropped file for preview; the actual upload is deferred
-  // until the user confirms via "Add to Project".
-  const selectPendingUpload = (file: File) => {
+  // until the user confirms via "Add to Project". `title` defaults to the
+  // filename, but callers can override it — a pasted image's filename is a
+  // disposable, timestamped placeholder (see `namePastedImageFile`), not
+  // something worth showing as the default title/ref.
+  const selectPendingUpload = (file: File, title = file.name) => {
     setUploadError(null);
     setPendingUploadFile(file);
-    setUploadTitle(file.name);
+    setUploadTitle(title);
     setPendingUploadPreviewUrl(URL.createObjectURL(file));
   };
 
@@ -225,7 +228,7 @@ const AssetManagerModal = ({
             setTab("add");
             setAddKind("image");
             setImageTab("upload");
-            selectPendingUpload(namePastedImageFile(file));
+            selectPendingUpload(namePastedImageFile(file), "Pasted Image");
           }
           return;
         }
