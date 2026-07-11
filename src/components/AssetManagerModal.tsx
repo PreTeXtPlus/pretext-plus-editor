@@ -141,7 +141,6 @@ const AssetManagerModal = ({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const dropZoneRef = useRef<HTMLDivElement>(null);
   // A file picked for upload but not yet committed — held so the user can
   // preview it and set a title before the actual upload fires (mirrors the
   // External URL tab's preview-then-confirm flow).
@@ -170,6 +169,15 @@ const AssetManagerModal = ({
   // Success panel shown after a normal-mode add (asset added + embed copied).
   const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
 
+  // Stash a picked/dropped file for preview; the actual upload is deferred
+  // until the user confirms via "Add to Project".
+  const selectPendingUpload = (file: File) => {
+    setUploadError(null);
+    setPendingUploadFile(file);
+    setUploadTitle(file.name);
+    setPendingUploadPreviewUrl(URL.createObjectURL(file));
+  };
+
   // Escape-to-close. Re-binds when `onClose` changes, but never triggers a load.
   useEffect(() => {
     if (!open) return;
@@ -185,13 +193,43 @@ const AssetManagerModal = ({
     };
   }, [pendingUploadPreviewUrl]);
 
-  // Focus the drop zone whenever it appears so Ctrl/Cmd+V pastes an image
-  // straight away, without requiring the user to click it first.
+  // Is the upload drop zone the thing currently on screen? Drives the
+  // window-level paste listener below — kept separate from `open` since the
+  // modal can be open on a different tab/kind (e.g. the kind picker, Doenet
+  // form, or in-document list), where a stray Ctrl/Cmd+V shouldn't be
+  // intercepted as an image upload.
+  const showingImageDropZone =
+    open &&
+    !!onUpload &&
+    imageTab === "upload" &&
+    !pendingUploadFile &&
+    (resolveTarget ? resolveTarget.kind === "image"
+      : replaceTarget ? replaceTarget.kind === "image"
+      : tab === "add" && addKind === "image");
+
+  // Ctrl/Cmd+V anywhere while the drop zone is on screen pastes an image —
+  // the user shouldn't have to click into the drop zone first. Bound at the
+  // window level (rather than the drop zone's onPaste) so it fires regardless
+  // of what currently has focus.
   useEffect(() => {
-    if (imageTab === "upload" && !pendingUploadFile) {
-      dropZoneRef.current?.focus();
-    }
-  }, [imageTab, pendingUploadFile]);
+    if (!showingImageDropZone) return;
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            selectPendingUpload(namePastedImageFile(file));
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [showingImageDropZone]);
 
   if (!open) return null;
 
@@ -223,32 +261,6 @@ const AssetManagerModal = ({
     navigator.clipboard.writeText(embedFor(kind, ref)).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
-  };
-
-  // Stash a picked/dropped file for preview; the actual upload is deferred
-  // until the user confirms via "Add to Project".
-  const selectPendingUpload = (file: File) => {
-    setUploadError(null);
-    setPendingUploadFile(file);
-    setUploadTitle(file.name);
-    setPendingUploadPreviewUrl(URL.createObjectURL(file));
-  };
-
-  // Ctrl/Cmd+V on the drop zone: pick the first pasted image out of the
-  // clipboard, same destination as a drag-drop or file-picker choice.
-  const handleDropZonePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-    for (const item of items) {
-      if (item.kind === "file" && item.type.startsWith("image/")) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          selectPendingUpload(namePastedImageFile(file));
-        }
-        return;
-      }
-    }
   };
 
   const clearPendingUpload = () => {
@@ -568,7 +580,6 @@ const AssetManagerModal = ({
           <div className="pretext-plus-editor__am-upload">
             {!pendingUploadFile ? (
               <div
-                ref={dropZoneRef}
                 className={[
                   "pretext-plus-editor__am-drop-zone",
                   isDragging ? "pretext-plus-editor__am-drop-zone--active" : "",
@@ -577,7 +588,6 @@ const AssetManagerModal = ({
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setIsDragging(false); const f = e.dataTransfer.files[0]; if (f) selectPendingUpload(f); }}
                 onClick={() => fileInputRef.current?.click()}
-                onPaste={handleDropZonePaste}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
