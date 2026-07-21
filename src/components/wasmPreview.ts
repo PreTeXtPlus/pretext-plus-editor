@@ -63,19 +63,27 @@ function loadRenderer(): Promise<PretextHtmlModule> {
 }
 
 /**
- * Render a complete PreTeXt document to a standalone HTML page.
+ * Serializes renders. **Load-bearing, not an optimisation.**
  *
- * `source` must be a whole `<pretext>` document — which is what
- * `wrapDivisionForPreview` produces — so fragment mode is not needed. The
- * paths are virtual: nothing is read from a filesystem, and `sourceContent`
- * carries the actual text.
+ * `renderHtml` is not reentrant: it drives a single cached compiled
+ * stylesheet through a patched `globalThis.fetch` and shared mount tables.
+ * The transform *suspends* mid-run (that is what JSPI is for) to fetch
+ * stylesheets, and a second render entering during that window interleaves
+ * with the first and corrupts libxslt's internal state.
  *
- * Throws on malformed XML or a failed transform; the caller decides what to
- * do with that (FullPreview keeps the last good render and shows a banner).
+ * The symptom is badly misleading. The collision surfaces as an out-of-bounds
+ * memory access, which the renderer's error mapping reports as "the document
+ * is too large … (stack overflow)" no matter how small the document is; worse,
+ * the WASM instance stays broken for the rest of the session, failing every
+ * later render with a pthread mutex assertion. React's StrictMode double
+ * invokes mount effects in development, so without this chain the very first
+ * preview reliably poisons the renderer.
  */
-export async function renderPreviewHtml(
+let renderChain: Promise<unknown> = Promise.resolve();
+
+async function runRender(
   source: string,
-  options: LocalRenderOptions = {},
+  options: LocalRenderOptions,
 ): Promise<string> {
   const { renderHtml } = await loadRenderer();
   const { html } = await renderHtml({
@@ -85,6 +93,33 @@ export async function renderPreviewHtml(
     ...(options.theme ? { theme: options.theme } : {}),
   });
   return html;
+}
+
+/**
+ * Render a complete PreTeXt document to a standalone HTML page.
+ *
+ * `source` must be a whole `<pretext>` document — which is what
+ * `wrapDivisionForPreview` produces — so fragment mode is not needed. The
+ * paths are virtual: nothing is read from a filesystem, and `sourceContent`
+ * carries the actual text.
+ *
+ * Renders are queued, never overlapped (see {@link renderChain}). Throws on
+ * malformed XML or a failed transform; the caller decides what to do with
+ * that (FullPreview keeps the last good render and shows a banner).
+ */
+export function renderPreviewHtml(
+  source: string,
+  options: LocalRenderOptions = {},
+): Promise<string> {
+  // Chain off both outcomes: one failed render must not wedge the queue.
+  const result = renderChain.then(
+    () => runRender(source, options),
+    () => runRender(source, options),
+  );
+  // The chain tracks completion only — swallow here so an unhandled rejection
+  // is not reported for the internal handle. Callers still see the rejection.
+  renderChain = result.catch(() => undefined);
+  return result;
 }
 
 /**
