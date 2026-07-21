@@ -16,6 +16,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  pull-requests: write
 
 jobs:
   publish:
@@ -43,10 +44,29 @@ jobs:
       - name: Build package
         run: npm run build
 
-      - name: Bump version and publish
+      - name: Bump version
+        id: bump
         run: |
           npm version ${{ github.event.inputs.version }} -m "chore: release v%s"
-          npm publish --provenance --access public
+          echo "new_version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - name: Push version changes
-        run: git push --follow-tags
+      - name: Push release branch
+        run: |
+          git checkout -b release/v${{ steps.bump.outputs.new_version }}
+          git push origin release/v${{ steps.bump.outputs.new_version }} --follow-tags
+
+      - name: Create and merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_URL=$(gh pr create \
+            --title "chore: release v${{ steps.bump.outputs.new_version }}" \
+            --body "Automated release PR for v${{ steps.bump.outputs.new_version }}" \
+            --base main \
+            --head release/v${{ steps.bump.outputs.new_version }})
+          gh pr merge "$PR_URL" --squash --auto --delete-branch
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
