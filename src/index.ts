@@ -76,7 +76,7 @@ export {
 // Export components
 export { default as CodeEditor } from "./components/CodeEditor";
 export { VisualEditor } from "@pretextbook/visual-editor";
-export { default as FullPreview } from "./components/FullPreview";
+export { default as LivePreview } from "./components/LivePreview";
 export { default as FeedbackLink } from "./components/FeedbackLink";
 export { default as DocinfoEditor } from "./components/DocinfoEditor";
 export type {

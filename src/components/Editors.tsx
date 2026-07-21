@@ -1,9 +1,22 @@
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
-import { VisualEditor } from "@pretextbook/visual-editor";
-import FullPreview, { type FullPreviewHandle } from "./FullPreview";
+//import { VisualEditor } from "@pretextbook/visual-editor";
+import LivePreview, { type LivePreviewHandle } from "./LivePreview";
+import { isLocalPreviewAvailable } from "./wasmPreview";
+import {
+  buildPreviewLineMap,
+  divisionForElementId,
+  type PreviewLineMap,
+} from "./previewSync";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
@@ -111,9 +124,16 @@ export interface editorProps {
    */
   onSave?: () => void;
   /**
-   * If provided, the right-hand panel shows a full iframe-based preview
-   * instead of the Tiptap visual editor, and a rebuild button / Ctrl+Enter
-   * shortcut become active.
+   * Server-side preview build handler — **no longer required for a preview**.
+   *
+   * The full preview now renders in the browser via
+   * `@pretextbook/pretext-html` (WebAssembly), so the preview toggle, rebuild
+   * button and Ctrl+Enter shortcut are available to every host without any
+   * wiring. This prop is the fallback for engines that lack WebAssembly JSPI
+   * (currently non-Chromium browsers), where a local render is impossible: if
+   * you must support those, keep providing it. It is also the way to get an
+   * authoritative build from the real PreTeXt toolchain, which — unlike the
+   * WASM renderer — can generate latex-image/sageplot assets.
    *
    * @param source - A standalone PreTeXt fragment document for just the
    * active division: wrapped in a synthetic `<pretext>`/`<book>`/`<article>`
@@ -275,9 +295,11 @@ const Editors = (props: editorProps) => {
     const normalizedRoot =
       normalizedDivisions.find((d) => d.xmlId === initRootDivision?.xmlId) ??
       initRootDivision;
-    const initActiveId = props.activeDivisionId ?? normalizedRoot?.xmlId ?? null;
+    const initActiveId =
+      props.activeDivisionId ?? normalizedRoot?.xmlId ?? null;
     const initActive =
-      normalizedDivisions.find((d) => d.xmlId === initActiveId) ?? normalizedRoot;
+      normalizedDivisions.find((d) => d.xmlId === initActiveId) ??
+      normalizedRoot;
 
     return createEditorStore({
       source: initActive?.source ?? "",
@@ -310,7 +332,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const { bindCallbacks } = props;
 
   // ── Store reads (UI state owned by the store) ───────────────────────────
-  const showFullPreview = useEditorStore((s) => s.showFullPreview);
+  const showLivePreview = useEditorStore((s) => s.showLivePreview);
   const isNarrowScreen = useEditorStore((s) => s.isNarrowScreen);
   const setIsNarrowScreen = useEditorStore((s) => s.setIsNarrowScreen);
   const activeTab = useEditorStore((s) => s.activeTab);
@@ -328,7 +350,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
   const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
   // Replace target is local UI state (only Editors + the asset manager need it).
-  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(null);
+  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(
+    null,
+  );
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
@@ -365,7 +389,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const setDivisionContent = useEditorStore((s) => s.setDivisionContent);
   const patchDivision = useEditorStore((s) => s.patchDivision);
   const addDivisionToPool = useEditorStore((s) => s.addDivisionToPool);
-  const removeDivisionFromPool = useEditorStore((s) => s.removeDivisionFromPool);
+  const removeDivisionFromPool = useEditorStore(
+    (s) => s.removeDivisionFromPool,
+  );
   const setActiveDivisionId = useEditorStore((s) => s.setActiveDivisionId);
   const startSectionEdit = useEditorStore((s) => s.startSectionEdit);
   const setTitle = useEditorStore((s) => s.setTitle);
@@ -373,7 +399,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const editingId = useEditorStore((s) => s.editingId);
   const editingIsNew = useEditorStore((s) => s.editingIsNew);
 
-  const fullPreviewRef = useRef<FullPreviewHandle>(null);
+  const livePreviewRef = useRef<LivePreviewHandle>(null);
   const codeEditorRef = useRef<CodeEditorHandle>(null);
 
   // A brand-new division's properties form (title/format/id) opens immediately
@@ -394,9 +420,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const rootDivision = findRootDivision(divisions, props.rootDivisionId);
 
   const activeDivision =
-    divisions.find((d) => d.xmlId === activeDivisionId) ??
-    divisions[0] ??
-    null;
+    divisions.find((d) => d.xmlId === activeDivisionId) ?? divisions[0] ?? null;
 
   const activeDivisionFormat = activeDivision?.sourceFormat ?? "pretext";
 
@@ -404,6 +428,30 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // wrapper tag included, rather than a stripped-down body — the wrapper
   // (with its xml:id/label attributes and title) is the source of truth.
   const divisionActiveSource = activeDivision?.source ?? "";
+
+  // ── Cross-division preview sync ──────────────────────────────────────────
+  // Clicking inside a child division's content opens that division. Its line
+  // cannot be revealed in the same tick: the editor is still holding the
+  // previous division's source, and only picks up the new one on the next
+  // render. Park the target and apply it once the switch has landed.
+  const pendingRevealRef = useRef<{ xmlId: string; line: number } | null>(null);
+
+  useEffect(() => {
+    const pending = pendingRevealRef.current;
+    if (!pending || activeDivision?.xmlId !== pending.xmlId) return;
+    // CodeEditor's own content effect has already run (child effects fire
+    // before their parent's), so its model holds this division's source.
+    pendingRevealRef.current = null;
+    codeEditorRef.current?.revealLine(pending.line);
+  }, [activeDivision?.xmlId, divisionActiveSource]);
+
+  // Per-division line maps for the document currently on screen. Built lazily
+  // — only a click needs them, and only a cross-division click needs more than
+  // one — and discarded whenever the previewed document changes.
+  const divisionMapCacheRef = useRef<{
+    key: string;
+    maps: Map<string, PreviewLineMap>;
+  }>({ key: "", maps: new Map() });
 
   // ── Content-change emitter ───────────────────────────────────────────────
   // Single channel for every content change: a division edit, a structural
@@ -456,7 +504,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
     // 1. Rewrite this division's own source so its metadata matches.
     let updated: Division;
-    if (changes.sourceFormat !== undefined && changes.sourceFormat !== division.sourceFormat) {
+    if (
+      changes.sourceFormat !== undefined &&
+      changes.sourceFormat !== division.sourceFormat
+    ) {
       // Switching format is only offered for a brand-new, not-yet-saved
       // division (see SectionEditForm's `isNew`), so there's no existing
       // source to translate — start over from that format's blank template.
@@ -469,7 +520,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
         type,
         title,
         xmlId: newXmlId,
-        source: createDivisionContent(type, changes.sourceFormat, title, newXmlId),
+        source: createDivisionContent(
+          type,
+          changes.sourceFormat,
+          title,
+          newXmlId,
+        ),
       };
     } else if (division.sourceFormat === "markdown") {
       updated = updateMarkdownDivisionMetadata(division, changes);
@@ -485,11 +541,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
     const newXmlId = updated.xmlId;
     if (updated.source !== division.source) {
       // Emit keyed on the OLD id — before the record is renamed in step 2.
-      emitContentChange(
-        division.xmlId,
-        updated.source,
-        updated.sourceFormat,
-      );
+      emitContentChange(division.xmlId, updated.source, updated.sourceFormat);
     }
 
     // 2. Patch the record fields (this renames the pool key to newXmlId).
@@ -507,7 +559,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
           updated.type,
         );
         if (newParentContent !== parent.source) {
-          emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+          emitContentChange(
+            parent.xmlId,
+            newParentContent,
+            parent.sourceFormat,
+          );
         }
       }
     }
@@ -549,7 +605,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
     if (activeDivisionFormat === "latex") {
       return latexDivisionToTaggedPretext(activeDivision) ?? undefined;
     }
-    const result = derivePretextContent(divisionActiveSource, activeDivisionFormat);
+    const result = derivePretextContent(
+      divisionActiveSource,
+      activeDivisionFormat,
+    );
     return result.pretextError ? undefined : result.pretextSource;
   }, [activeDivision, activeDivisionFormat, divisionActiveSource]);
 
@@ -622,7 +681,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
               meta.type,
             );
             if (newParentContent !== parent.source) {
-              emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+              emitContentChange(
+                parent.xmlId,
+                newParentContent,
+                parent.sourceFormat,
+              );
             }
           }
         }
@@ -651,7 +714,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
               meta.type,
             );
             if (newParentContent !== parent.source) {
-              emitContentChange(parent.xmlId, newParentContent, parent.sourceFormat);
+              emitContentChange(
+                parent.xmlId,
+                newParentContent,
+                parent.sourceFormat,
+              );
             }
           }
         }
@@ -670,9 +737,14 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // Auto-create Division records for any new <plus:TYPE ref="id"/> placeholders
     // that appeared in the edited content but don't yet have a matching division.
     const existingIds = new Set(divisions.map((d) => d.xmlId));
-    for (const { xmlId, type } of parseDivisionRefsWithTypes(wrapped, activeDivisionFormat)) {
+    for (const { xmlId, type } of parseDivisionRefsWithTypes(
+      wrapped,
+      activeDivisionFormat,
+    )) {
       if (!existingIds.has(xmlId)) {
-        applyDivisionAdd(createDivisionWithId(xmlId, type, activeDivisionFormat));
+        applyDivisionAdd(
+          createDivisionWithId(xmlId, type, activeDivisionFormat),
+        );
         existingIds.add(xmlId); // prevent duplicates within the same edit
       }
     }
@@ -742,7 +814,11 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // asset operations the host already provides. Duplicate re-fetches the
   // original's bytes and re-uploads them as an independent asset; Replace
   // uploads the new image, hands it the old ref, and drops the old asset.
-  const canDuplicateAsset = !!(props.onAssetUpload && props.onAssetFetchUrl && props.onAssetUpdate);
+  const canDuplicateAsset = !!(
+    props.onAssetUpload &&
+    props.onAssetFetchUrl &&
+    props.onAssetUpdate
+  );
   // Replace swaps in a chosen/created asset and drops the old one, so it needs
   // a removal hook plus an upload source for the replacement.
   const canReplaceAsset = !!(props.onAssetRemove && props.onAssetUpload);
@@ -755,8 +831,16 @@ const EditorsInner = (props: EditorsInnerProps) => {
    * code is pasted; we open it in the editor so the user can tweak it.
    */
   const handleAssetDuplicate = async (asset: Asset) => {
-    if (!props.onAssetUpload || !props.onAssetFetchUrl || !asset.ref || !asset.url) return;
-    const taken = new Set(buildProjectAssetView(divisions, projectAssets).map((r) => r.ref));
+    if (
+      !props.onAssetUpload ||
+      !props.onAssetFetchUrl ||
+      !asset.ref ||
+      !asset.url
+    )
+      return;
+    const taken = new Set(
+      buildProjectAssetView(divisions, projectAssets).map((r) => r.ref),
+    );
     const newRef = makeUniqueAssetRef(asset.ref, taken);
     const file = await props.onAssetFetchUrl(asset.url);
     // `file.name` comes from the source URL (often an opaque, server-generated
@@ -767,7 +851,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
     // duplicate's default title/ref instead of the friendly "-copy" we just
     // computed.
     const extension = /\.[^./\\]+$/.exec(file.name)?.[0] ?? "";
-    const renamedFile = new File([file], `${newRef}${extension}`, { type: file.type });
+    const renamedFile = new File([file], `${newRef}${extension}`, {
+      type: file.type,
+    });
     const uploaded = await props.onAssetUpload(renamedFile);
     const copy: Asset = {
       ...uploaded,
@@ -848,7 +934,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       selectDivision: handleDivisionSelect,
       addDivision: (parentXmlId) => handleDivisionAdd(parentXmlId),
       removeDivision: (xmlId) => applyDivisionRemove(xmlId),
-      updateDivision: (xmlId, changes) => applyDivisionMetadataEdit(xmlId, changes),
+      updateDivision: (xmlId, changes) =>
+        applyDivisionMetadataEdit(xmlId, changes),
       // Structural reorders rewrite a parent division's content; route them
       // through the same unified content-change channel as direct edits.
       divisionContentChange: (xmlId, content) => {
@@ -860,7 +947,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
       assetRemove: handleAssetRemove,
       assetRefRemove: removeAssetRefEverywhere,
       assetDuplicate: canDuplicateAsset ? handleAssetDuplicate : undefined,
-      insertContentAtCursor: (content) => codeEditorRef.current?.insertAtCursor(content),
+      insertContentAtCursor: (content) =>
+        codeEditorRef.current?.insertAtCursor(content),
       updateTitle: (value) => {
         setTitle(value);
         props.onTitleChange?.(value);
@@ -1051,7 +1139,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
         error instanceof Error ? error.message : String(error)
       } -->`;
     }
-  }, [isFullSourceOpen, rootDivision, divisions, effectiveDocinfo, projectAssets]);
+  }, [
+    isFullSourceOpen,
+    rootDivision,
+    divisions,
+    effectiveDocinfo,
+    projectAssets,
+  ]);
 
   // The active division's own tagged XML (outer element included), with any
   // `<plus:* ref="..."/>` placeholder expanded against the full divisions
@@ -1076,15 +1170,99 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : undefined;
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
-  const triggerRebuild = () => fullPreviewRef.current?.rebuild();
+  // The full preview no longer needs a host-provided build server: when the
+  // browser supports WebAssembly JSPI it renders in-page via
+  // `@pretextbook/pretext-html`. `onPreviewRebuild` remains the fallback for
+  // engines without JSPI, so a host that must support those should keep
+  // providing it.
+  const canPreview =
+    isLocalPreviewAvailable() || props.onPreviewRebuild !== undefined;
+
+  // ── Two-way sync ─────────────────────────────────────────────────────────
+  // Correspondence between the Monaco buffer (one division's own source) and
+  // the assembled document the preview renders. See previewSync.ts for why
+  // these differ and how the mapping is recovered.
+  //
+  // Memoised on the two strings themselves — they are recomputed every render
+  // but compare by value, so an unchanged edit costs nothing — and skipped
+  // entirely while the preview is closed, since nothing can ask for it then.
+  //
+  // Note the map describes the *current* buffer, while the page on screen is
+  // from the last rebuild (previews rebuild on save, not on every keystroke).
+  // Between the two, a lookup can land on an element that has since moved or
+  // gone; it resolves by id, so the usual outcome is a slightly stale target
+  // or no scroll at all, and the next rebuild restores exactness.
+  const previewLineMap = useMemo(
+    () =>
+      showLivePreview && canPreview && previewContent
+        ? buildPreviewLineMap(divisionActiveSource, previewContent)
+        : null,
+    [showLivePreview, canPreview, previewContent, divisionActiveSource],
+  );
+
+  // Source → preview. Lines with no counterpart (a `<plus:.../>` placeholder,
+  // or anything in a non-PreTeXt buffer whose assembled form is a conversion)
+  // simply do not scroll.
+  const handleCursorLineChange = (editorLine: number) => {
+    const assembledLine = previewLineMap?.toAssembled(editorLine);
+    if (assembledLine !== undefined) {
+      livePreviewRef.current?.scrollToAssembledLine(assembledLine);
+    }
+  };
+
+  // Preview → source. Previewing a parent renders its children inline, so the
+  // click may belong to a different division record entirely. Which one is
+  // read off the element's id, which encodes its authoring division; the line
+  // within that division is then recovered by matching only *that* division's
+  // source, never a search across the pool.
+  const handleSyncToSource = ({
+    assembledLine,
+    elementId,
+  }: {
+    assembledLine: number;
+    elementId: string;
+  }) => {
+    if (!previewContent) return;
+
+    const owner = divisionForElementId(elementId, (xmlId) =>
+      divisions.some((d) => d.xmlId === xmlId),
+    );
+    // Unattributable (page chrome, or an authored xml:id that is not a
+    // division): stay put rather than guess at another division.
+    const targetId = owner ?? activeDivision?.xmlId;
+    if (!targetId) return;
+
+    if (divisionMapCacheRef.current.key !== previewContent) {
+      divisionMapCacheRef.current = { key: previewContent, maps: new Map() };
+    }
+    let map = divisionMapCacheRef.current.maps.get(targetId);
+    if (!map) {
+      const source = divisions.find((d) => d.xmlId === targetId)?.source ?? "";
+      map = buildPreviewLineMap(source, previewContent);
+      divisionMapCacheRef.current.maps.set(targetId, map);
+    }
+    // A converted division (LaTeX, Markdown) shares no lines with its rendered
+    // form, so there is no line to land on — but opening it is still right.
+    const line = map.toEditor(assembledLine);
+
+    if (targetId === activeDivision?.xmlId) {
+      if (line !== undefined) codeEditorRef.current?.revealLine(line);
+      return;
+    }
+    pendingRevealRef.current =
+      line === undefined ? null : { xmlId: targetId, line };
+    applyDivisionSelect(targetId);
+  };
+
+  const triggerRebuild = () => livePreviewRef.current?.rebuild();
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
-    fullPreviewRef.current?.rebuild();
+    livePreviewRef.current?.rebuild();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const isCtrl = e.ctrlKey || e.metaKey;
-    if (isCtrl && e.key === "Enter" && props.onPreviewRebuild) {
+    if (isCtrl && e.key === "Enter" && canPreview) {
       e.preventDefault();
       triggerRebuild();
     } else if (isCtrl && e.key === "s") {
@@ -1133,8 +1311,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
       onChange={handleDivisionContentChange}
-      onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
+      onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
+      onCursorLineChange={handleCursorLineChange}
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
@@ -1161,31 +1340,34 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showFullPreview && props.onPreviewRebuild) {
+  if (showLivePreview && canPreview) {
     preview = (
-      <FullPreview
-        ref={fullPreviewRef}
+      <LivePreview
+        ref={livePreviewRef}
         content={previewContent || ""}
         title={title}
         onRebuild={props.onPreviewRebuild}
+        onSyncToSource={handleSyncToSource}
+        divisionId={activeDivision?.xmlId}
       />
     );
-  } else {
-    const canEditVisually = activeDivisionFormat === "pretext";
-    const editDisabledReason =
-      activeDivisionFormat === "markdown"
-        ? "Visual editing is not available for Markdown documents."
-        : activeDivisionFormat === "latex"
-        ? "Visual editing is not available for LaTeX documents."
-        : "";
-    preview = (
-      <VisualEditor
-        content={divisionActiveSource}
-        canEdit={canEditVisually}
-        editDisabledReason={editDisabledReason}
-        onChange={(content) => handleDivisionContentChange(content)}
-      />
-    );
+    // For now, we disable the visual editor.  This might come back in a later version:
+    //} else {
+    //  const canEditVisually = activeDivisionFormat === "pretext";
+    //  const editDisabledReason =
+    //    activeDivisionFormat === "markdown"
+    //      ? "Visual editing is not available for Markdown documents."
+    //      : activeDivisionFormat === "latex"
+    //      ? "Visual editing is not available for LaTeX documents."
+    //      : "";
+    //  preview = (
+    //    <VisualEditor
+    //      content={divisionActiveSource}
+    //      canEdit={canEditVisually}
+    //      editDisabledReason={editDisabledReason}
+    //      onChange={(content) => handleDivisionContentChange(content)}
+    //    />
+    //  );
   }
 
   // ── TOC sidebar ──────────────────────────────────────────────────────────
@@ -1288,7 +1470,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         saveButtonLabel={props.saveButtonLabel}
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
-        showPreviewModeToggle={props.onPreviewRebuild !== undefined}
+        showPreviewModeToggle={false}
       />
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>
@@ -1339,9 +1521,12 @@ const EditorsInner = (props: EditorsInnerProps) => {
             }}
           />
         ) : null}
-        {(isAssetPickerOpen || assetResolveTarget || assetReplaceTarget) && props.projectAssets !== undefined ? (
+        {(isAssetPickerOpen || assetResolveTarget || assetReplaceTarget) &&
+        props.projectAssets !== undefined ? (
           <AssetManagerModal
-            open={isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget}
+            open={
+              isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget
+            }
             resolveTarget={assetResolveTarget}
             replaceTarget={assetReplaceTarget}
             onClose={() => {
@@ -1353,7 +1538,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onFetchUrl={props.onAssetFetchUrl}
             onCreateDoenet={props.onCreateDoenet}
             onRemoveAsset={props.onAssetRemove ? handleAssetRemove : undefined}
-            onDuplicateAsset={canDuplicateAsset ? handleAssetDuplicate : undefined}
+            onDuplicateAsset={
+              canDuplicateAsset ? handleAssetDuplicate : undefined
+            }
             onAssetAdded={handleAssetAdded}
             onResolveRef={renameAssetRefEverywhere}
             onReplaceAsset={handleAssetReplaceCommit}
@@ -1378,7 +1565,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
             onClose={closeAssetEditor}
             onReplace={
               canReplaceAsset
-                ? (asset) => { closeAssetEditor(); setAssetReplaceTarget(asset); }
+                ? (asset) => {
+                    closeAssetEditor();
+                    setAssetReplaceTarget(asset);
+                  }
                 : undefined
             }
             onDuplicate={

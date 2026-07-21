@@ -17,6 +17,12 @@ interface CodeEditorProps {
   onRebuild?: () => void;
   /** If provided, Ctrl+S in the editor triggers this callback. */
   onSave?: () => void;
+  /**
+   * Called with the 1-based line whenever the cursor moves to a different
+   * line. Drives source → preview sync. Fires only on a genuine line change,
+   * not on horizontal movement or on programmatic reveals.
+   */
+  onCursorLineChange?: (line: number) => void;
   /** Called when the user clicks "Import LaTeX" in the toolbar. */
   onOpenLatexImport: () => void;
   /** Called when the user clicks "Edit Macros" in the toolbar. */
@@ -51,6 +57,8 @@ export interface CodeEditorHandle {
   insertAtCursor: (text: string) => void;
   /** Move keyboard focus into the editor, ready for typing. */
   focus: () => void;
+  /** Put the cursor on `line`, scrolling it into view if it is off-screen. */
+  revealLine: (line: number) => void;
 }
 
 /**
@@ -194,6 +202,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   onChange,
   onRebuild,
   onSave,
+  onCursorLineChange,
   onOpenLatexImport,
   onOpenDocinfoEditor,
   onOpenConvertToPretext,
@@ -214,6 +223,14 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   const leadingLockedLinesRef = useRef(0);
   const contentListenerRef = useRef<{ dispose: () => void } | null>(null);
   const mouseListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const cursorListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const onCursorLineChangeRef = useRef(onCursorLineChange);
+  // Last line reported, so a cursor moving along one line stays quiet.
+  const lastCursorLineRef = useRef<number | null>(null);
+  // Set while `revealLine` moves the cursor itself. Without it, syncing from
+  // the preview would move the cursor, which would report a line change, which
+  // would scroll the preview back — a loop between the two panes.
+  const suppressCursorReportRef = useRef(false);
   const onRequestWrapperEditRef = useRef(onRequestWrapperEdit);
   const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -237,6 +254,27 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     focus: () => {
       editorRef.current?.focus();
     },
+    revealLine: (line: number) => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      // Focus first: an unfocused Monaco draws no cursor and no current-line
+      // highlight, so a sync that moved the caret correctly would still look
+      // like nothing happened. Clicking the preview to find a spot in the
+      // source is a request to go there, so taking focus is the intent.
+      editor.focus();
+      suppressCursorReportRef.current = true;
+      try {
+        // Centred only if it is off-screen, so syncing from the preview does
+        // not jerk the view when the target is already comfortably visible.
+        editor.revealLineInCenterIfOutsideViewport(line);
+        editor.setPosition({ lineNumber: line, column: 1 });
+      } finally {
+        // The cursor event fires synchronously inside setPosition, so the flag
+        // has already done its job by the time this runs.
+        suppressCursorReportRef.current = false;
+      }
+      lastCursorLineRef.current = line;
+    },
   }), []);
 
   useEffect(() => {
@@ -246,6 +284,10 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    onCursorLineChangeRef.current = onCursorLineChange;
+  }, [onCursorLineChange]);
 
   useEffect(() => {
     onRequestWrapperEditRef.current = onRequestWrapperEdit;
@@ -269,6 +311,7 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
       contentListenerRef.current?.dispose?.();
       completionProviderRef.current?.dispose?.();
       mouseListenerRef.current?.dispose?.();
+      cursorListenerRef.current?.dispose?.();
       constrainedRef.current?.disposeConstrainer?.();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
@@ -467,6 +510,16 @@ const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(({
     if (model && model.getValue() !== content) {
       setModelValueSafely(model, content);
     }
+    // Report line changes for source → preview sync.
+    cursorListenerRef.current?.dispose?.();
+    cursorListenerRef.current = editor.onDidChangeCursorPosition((e: any) => {
+      if (suppressCursorReportRef.current) return;
+      const line = e?.position?.lineNumber;
+      if (typeof line !== "number" || line === lastCursorLineRef.current) return;
+      lastCursorLineRef.current = line;
+      onCursorLineChangeRef.current?.(line);
+    });
+
     // Subscribe to content changes to refresh undo/redo availability
     contentListenerRef.current?.dispose?.();
     contentListenerRef.current = editor.onDidChangeModelContent(() => {
