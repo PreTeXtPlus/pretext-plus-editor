@@ -26,7 +26,7 @@ const DEMO_DIVISIONS: Division[] = [
     title: "",
     type: "article",
     sourceFormat: "pretext",
-    source: `<article>
+    source: `<article xml:id="demo-article">
   <title>Divisions Mode Demo for Article</title>
   
   <plus:introduction ref="sec-intro"/>

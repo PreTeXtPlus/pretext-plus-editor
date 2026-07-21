@@ -248,9 +248,102 @@ This package requires:
 
 These must be installed separately in your project.
 
+## Full preview (in-browser builds)
+
+The full preview renders PreTeXt to HTML **in the browser**, using the official
+PreTeXt XSLT stylesheets compiled to WebAssembly
+(`@pretextbook/pretext-html`). There is no build server to run and no token to
+configure: a preview costs roughly 400ms the first time in a session and ~90ms
+after that.
+
+### Bundler configuration (required)
+
+`@pretextbook/libxslt-wasm` locates its WebAssembly binary relative to its own
+module URL. Bundlers that pre-bundle dependencies move that URL and break the
+lookup, so exclude the package. With Vite:
+
+```js
+// vite.config.js
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ["@pretextbook/libxslt-wasm"],
+  },
+});
+```
+
+The renderer itself is loaded with a dynamic `import()` only when a preview is
+first opened, so apps that never show one pay nothing for it.
+
+### Fallback for browsers without JSPI
+
+Local rendering needs WebAssembly JSPI (stack switching), which Chromium-based
+browsers ship and some others do not. The editor feature-detects it:
+
+- **JSPI available** — renders locally; no host wiring needed.
+- **JSPI unavailable** — falls back to the `onPreviewRebuild` prop, if you
+  provide one. Without it, the preview toggle is hidden on those browsers.
+
+Keep `onPreviewRebuild` wired if you need to support non-Chromium browsers, or
+if you want authoritative builds from the real PreTeXt toolchain — the WASM
+renderer cannot generate `latex-image`/`sageplot` assets, which require the
+Python toolchain.
+
+When a render fails (most often because the document is not yet well-formed
+mid-edit), the last successful preview stays on screen and a dismissible
+banner reports the problem.
+
+### Two-way sync
+
+Clicking in the preview moves the cursor to the matching source line, and
+moving the cursor scrolls the preview to the matching element. Both are
+automatic — there is nothing for a host to wire up.
+
+Sync works off a source map the renderer produces alongside the HTML, so it
+follows the document's structure rather than guessing from scroll offsets. Two
+consequences worth knowing:
+
+- **The editor buffer and the rendered document are not the same text.** The
+  preview renders the division with its `<plus:* ref="..."/>` placeholders
+  expanded and a `<pretext>` wrapper added, so line numbers differ. The
+  correspondence is recovered by matching line content (`previewSync.ts`).
+  Lines with no counterpart — a placeholder, or any buffer whose rendered form
+  is a conversion, as with LaTeX and Markdown divisions — simply do not sync.
+- **Clicking content from an expanded child division opens that division** and
+  lands the cursor on the matching line of its own source. Which division owns
+  a click is read from the clicked element's rendered id: PreTeXt builds ids so
+  that an authored `xml:id` resets the chain, so every id begins with the
+  division that authored it (`sec-markdown-2-2-4` → `sec-markdown`). A click
+  whose id belongs to no known division — page chrome, say — leaves the editor
+  where it is rather than guessing.
+
+Previews rebuild on save rather than on every keystroke, so between an edit and
+the next rebuild a sync can land slightly off; the next rebuild restores it.
+Switching to a different division *does* rebuild immediately — the preview has
+to be showing the same division the editor is, or sync would be translating
+between two unrelated documents.
+
+Line-level sync covers PreTeXt divisions. A LaTeX or Markdown division is
+converted to PreTeXt before rendering, and the conversion carries no source
+map, so there is no line to land on and the cursor stays put. Clicking a
+PreTeXt subsection *nested inside* such a division still opens that subsection,
+since which division owns a click does not depend on line matching.
+
+### Preview theme
+
+The preview starts in light mode, matching the editor, which ships no dark mode
+of its own. Authors can switch it from the preview's own readability menu, and
+that choice persists across rebuilds — PreTeXt handles both, so there is nothing
+to wire up.
+
+One host-visible side effect: the preview iframe uses `srcdoc` and therefore
+shares your page's origin, so PreTeXt reads and writes its theme setting in
+**your app's `localStorage`, under the key `theme`**. If your app uses that same
+key, the two will fight; namespace yours to avoid it.
+
 ## Browser Support
 
-This package requires a modern browser with ES2020 support.
+This package requires a modern browser with ES2020 support. The full preview
+additionally requires WebAssembly JSPI; see above for the fallback.
 
 ## Development
 

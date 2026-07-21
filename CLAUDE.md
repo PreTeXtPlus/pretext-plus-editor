@@ -23,16 +23,18 @@ There are **no automated tests**. Validate changes manually via `npm run dev`. T
 ### Main Component: `Editors` (`src/components/Editors.tsx`)
 
 The root component owns all content state and layout. It:
+
 - Holds `EditorContentState` (includes `pretextSource` or `pretextError`)
 - Renders a responsive layout: tabs on screens < 800px, resizable split panels on wider screens (via `react-resizable-panels`)
 - Fires `onContentChange(value, meta)` to the host app on every edit
-- Conditionally renders `FullPreview` (when `onPreviewRebuild` prop is provided) or `VisualEditor`
+- Conditionally renders `LivePreview` (when `onPreviewRebuild` prop is provided) or `VisualEditor`
 
 ### Editing Modes
 
 Two source formats are supported: `"pretext"` (XML) and `"latex"`. Markdown is auto-detected on input but is converted to PreTeXt internally. Auto-detection logic lives in `src/contentConversion.ts`.
 
 Two editing structures exist:
+
 - **Document mode**: one contiguous source string
 - **Sectioned mode**: source split into sections managed by `useSectionedEditing` hook (`src/components/useSectionedEditing.ts`). The host is responsible for persisting sections individually via `onSectionsChange` and `onSectionChange` callbacks.
 
@@ -42,7 +44,7 @@ Book projects add a chapter layer: the host passes a `chapters` array, and the e
 
 - **CodeEditor** (`src/components/CodeEditor.tsx`): Monaco Editor with PreTeXt/LaTeX/Markdown syntax highlighting and completions (`src/components/codeEditorCompletions.ts`)
 - **VisualEditor**: from `@pretextbook/visual-editor` (external package). Only active when source is PreTeXt; read-only otherwise.
-- **FullPreview** (`src/components/FullPreview.tsx`): iframe-based preview; posts content to `https://build.pretext.plus` via `postToIframe.ts`
+- **LivePreview** (`src/components/LivePreview.tsx`): iframe-based preview; posts content to `https://build.pretext.plus` via `postToIframe.ts`
 
 ### Content Conversion (`src/contentConversion.ts`)
 
@@ -77,6 +79,7 @@ Only exports meant for consumers should be added here. Exported types include `E
 ## Build Output
 
 `npm run build` produces:
+
 - `dist/index.js` — CommonJS bundle
 - `dist/index.es.js` — ES module bundle
 - `dist/index.d.ts` — TypeScript declarations

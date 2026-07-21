@@ -149,7 +149,7 @@ export interface EditorStoreState {
   // ── UI state owned by the store ────────────────────────────────────────────
 
   isTocCollapsed: boolean;
-  showFullPreview: boolean;
+  showLivePreview: boolean;
   isNarrowScreen: boolean;
   activeTab: "editor" | "preview";
   isLatexDialogOpen: boolean;
@@ -202,7 +202,7 @@ export interface EditorStoreState {
   }) => void;
 
   // UI
-  setShowFullPreview: (show: boolean) => void;
+  setShowLivePreview: (show: boolean) => void;
   setActiveTab: (tab: "editor" | "preview") => void;
   setIsNarrowScreen: (narrow: boolean) => void;
   setIsTocCollapsed: (value: boolean | ((prev: boolean) => boolean)) => void;
@@ -349,7 +349,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
 
     // ── Initial UI state ───────────────────────────────────────────────────
     isTocCollapsed: false,
-    showFullPreview: true,
+    showLivePreview: true,
     isNarrowScreen:
       typeof window !== "undefined" ? window.innerWidth < 800 : false,
     activeTab: "editor",
@@ -415,7 +415,7 @@ export function createEditorStore(init: EditorStoreInit): EditorStoreHandle {
     setDocinfo: ({ docinfo, commonDocinfo, useCommonDocinfo }) =>
       set({ docinfo, commonDocinfo, useCommonDocinfo }),
 
-    setShowFullPreview: (showFullPreview) => set({ showFullPreview: showFullPreview }),
+    setShowLivePreview: (showLivePreview) => set({ showLivePreview }),
     setActiveTab: (activeTab) => set({ activeTab }),
     setIsNarrowScreen: (isNarrowScreen) => set({ isNarrowScreen }),
     setIsTocCollapsed: (value) =>

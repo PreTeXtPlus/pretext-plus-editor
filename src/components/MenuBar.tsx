@@ -19,8 +19,8 @@ export interface MenuBarProps {
 }
 
 const MenuBar = (props: MenuBarProps) => {
-  const showFullPreview = useEditorStore((s) => s.showFullPreview);
-  const setShowFullPreview = useEditorStore((s) => s.setShowFullPreview);
+  const showLivePreview = useEditorStore((s) => s.showLivePreview);
+  const setShowLivePreview = useEditorStore((s) => s.setShowLivePreview);
   const title = useEditorStore((s) => s.title);
   const updateTitle = useEditorStore((s) => s.updateTitle);
 
@@ -32,8 +32,8 @@ const MenuBar = (props: MenuBarProps) => {
       <label className="pretext-plus-editor__preview-toggle">
         <input
           type="checkbox"
-          checked={!showFullPreview}
-          onChange={() => setShowFullPreview(!showFullPreview)}
+          checked={!showLivePreview}
+          onChange={() => setShowLivePreview(!showLivePreview)}
           className="pretext-plus-editor__preview-toggle-input"
         />
         <div className="pretext-plus-editor__preview-toggle-container">
@@ -42,14 +42,14 @@ const MenuBar = (props: MenuBarProps) => {
           </span>
           <span
             className={`pretext-plus-editor__preview-toggle-slider ${
-              showFullPreview
+              showLivePreview
                 ? "pretext-plus-editor__preview-toggle-slider--active"
                 : ""
             }`}
           >
             <span
               className={`pretext-plus-editor__preview-toggle-dot ${
-                showFullPreview
+                showLivePreview
                   ? "pretext-plus-editor__preview-toggle-dot--active"
                   : ""
               }`}
@@ -64,8 +64,8 @@ const MenuBar = (props: MenuBarProps) => {
         </span>
         <input
           type="checkbox"
-          checked={showFullPreview}
-          onChange={() => setShowFullPreview(!showFullPreview)}
+          checked={showLivePreview}
+          onChange={() => setShowLivePreview(!showLivePreview)}
           className="pretext-plus-editor__preview-toggle-input"
         />
       </label>
