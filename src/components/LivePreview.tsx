@@ -159,25 +159,30 @@ function defaultPreviewToLight(): void {
 const BROWSER_TIP_DISMISSED_KEY = "pretext-plus-editor:browser-tip-dismissed";
 
 /**
- * TODO(you): Has the author already dismissed the "use Chrome for a faster
+ * Has the author already dismissed the "use Chrome for a faster
  * preview" tip?
  *
  * This banner only shows up for authors on a browser without WebAssembly JSPI
  * (see isLocalPreviewAvailable above) — Firefox and Safari, as of this
  * writing — who are therefore paying for a server round-trip on every
- * rebuild. It's worth suggesting Chromium, but only once per author, not
- * once per page load.
+ * rebuild. It's worth suggesting Chromium, but only once per author per session,
+ * not once per page load.
  *
- * Design call to make: should a dismissal be permanent, following the
- * `PRETEXT_THEME_KEY` pattern a few lines up (localStorage, wrapped in
- * try/catch since it throws in private browsing) — or session-only (a plain
- * module- or component-level flag), so the tip quietly reappears next visit?
- * Permanent is less naggy; session-only means an author who forgets *why*
- * their preview is slow eventually rediscovers the explanation.
+ * We don't persist this across sessions in case the author forgets and comes back to
+ * a non-Chromium browser later, but we do persist it across page reloads so the
+ * tip doesn't reappear every time the author hits Ctrl+Enter.
  */
 function isBrowserTipDismissed(): boolean {
-  // TODO(you): read BROWSER_TIP_DISMISSED_KEY (or track session-only state)
-  // and return whether the tip should stay hidden.
+  // Check if the tip is dismissed in the current session.
+  try {
+    const dismissed = sessionStorage.getItem(BROWSER_TIP_DISMISSED_KEY);
+    if (dismissed === "true") {
+      return true;
+    }
+  } catch {
+    // Storage unavailable (private mode, blocked cookies). The tip will
+    // reappear on every page load, which is fine.
+  }
   return false;
 }
 
