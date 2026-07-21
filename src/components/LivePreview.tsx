@@ -155,9 +155,43 @@ function defaultPreviewToLight(): void {
   }
 }
 
+/** localStorage key backing {@link isBrowserTipDismissed}. */
+const BROWSER_TIP_DISMISSED_KEY = "pretext-plus-editor:browser-tip-dismissed";
+
+/**
+ * TODO(you): Has the author already dismissed the "use Chrome for a faster
+ * preview" tip?
+ *
+ * This banner only shows up for authors on a browser without WebAssembly JSPI
+ * (see isLocalPreviewAvailable above) — Firefox and Safari, as of this
+ * writing — who are therefore paying for a server round-trip on every
+ * rebuild. It's worth suggesting Chromium, but only once per author, not
+ * once per page load.
+ *
+ * Design call to make: should a dismissal be permanent, following the
+ * `PRETEXT_THEME_KEY` pattern a few lines up (localStorage, wrapped in
+ * try/catch since it throws in private browsing) — or session-only (a plain
+ * module- or component-level flag), so the tip quietly reappears next visit?
+ * Permanent is less naggy; session-only means an author who forgets *why*
+ * their preview is slow eventually rediscovers the explanation.
+ */
+function isBrowserTipDismissed(): boolean {
+  // TODO(you): read BROWSER_TIP_DISMISSED_KEY (or track session-only state)
+  // and return whether the tip should stay hidden.
+  return false;
+}
+
+/** TODO(you): record that the author dismissed the tip, per the same call. */
+function dismissBrowserTip(): void {
+  // TODO(you): persist (or record in-session) that the tip was dismissed.
+}
+
 const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   ({ content, title, onRebuild, onSyncToSource, divisionId }, ref) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
+    const [browserTipDismissed, setBrowserTipDismissed] = useState(
+      isBrowserTipDismissed,
+    );
     // The last render that succeeded. Kept across failures so a transient
     // typo does not blank the panel and lose the author's place.
     const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -181,6 +215,10 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // provides no server handler gets the local path regardless, since there
     // is nothing to fall back to.
     const renderLocally = isLocalPreviewAvailable() || !onRebuild;
+    // Only engines without JSPI ever reach the server path (see renderLocally
+    // above), so this is exactly the "your browser is using the slower remote
+    // build" case worth mentioning.
+    const showBrowserTip = !renderLocally && !browserTipDismissed;
 
     const preview = useCallback(() => {
       const source = content;
@@ -241,15 +279,30 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
     // division they just left, and both sync directions would be translating
     // between two unrelated documents.
     //
-    // Still deliberately not on every content change: rebuilds are otherwise
-    // driven by save (Ctrl+S), Ctrl+Enter, and the Rebuild button, so a
-    // half-typed document is never rendered.
+    // Not on every content change: rebuilds are otherwise driven by save
+    // (Ctrl+S), Ctrl+Enter, the Rebuild button, and — when rendering
+    // locally — the debounced effect below, so a half-typed document is
+    // never rendered through the (comparatively expensive) server path.
     useEffect(() => {
       // Before the first render, so the very first page already knows its theme.
       defaultPreviewToLight();
       preview();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [divisionId]);
+
+    // Local renders are cheap enough (~90ms warm) to keep the preview live
+    // while typing. Debounced 1s past the last keystroke rather than firing
+    // on every change, so a fast typist doesn't queue up a render per
+    // character. Server builds stay manual-only (see effect above) — a
+    // network round trip on every pause would be both slow and wasteful.
+    useEffect(() => {
+      if (!renderLocally) return;
+      const timer = setTimeout(() => {
+        preview();
+      }, 1000);
+      return () => clearTimeout(timer);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [content, renderLocally]);
 
     useImperativeHandle(
       ref,
@@ -373,6 +426,28 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
               ? { srcDoc: previewHtml }
               : {})}
           />
+          {showBrowserTip && (
+            <div
+              className="pretext-plus-editor__browser-tip"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="pretext-plus-editor__browser-tip-text">
+                Previews refresh much faster and have two-way sync in
+                Chrome-based browsers.
+              </span>
+              <button
+                className="pretext-plus-editor__browser-tip-dismiss"
+                onClick={() => {
+                  setBrowserTipDismissed(true);
+                  dismissBrowserTip();
+                }}
+                aria-label="Dismiss browser suggestion"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
