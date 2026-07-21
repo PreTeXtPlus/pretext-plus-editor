@@ -34,6 +34,35 @@ export interface FullPreviewHandle {
   rebuild: () => void;
 }
 
+/**
+ * The key pretext-core.js reads to decide light/dark. Because the preview is a
+ * `srcdoc` iframe it shares this origin — and so this exact `localStorage` —
+ * with the editor, which is what makes an author's choice in the preview's own
+ * readability menu survive every rebuild without any help from us.
+ */
+const PRETEXT_THEME_KEY = "theme";
+
+/**
+ * Start the preview in light mode, matching the editor, which ships no dark
+ * mode of its own.
+ *
+ * Seeds the key only when it is unset. With no value pretext-core.js falls
+ * back to `prefers-color-scheme`, so an author on a dark-mode OS would get a
+ * dark preview beside light editor chrome. Writing the same key the readability
+ * menu writes — rather than overriding the page after the fact — means a
+ * deliberate choice there still wins, and still persists across rebuilds.
+ */
+function defaultPreviewToLight(): void {
+  try {
+    if (localStorage.getItem(PRETEXT_THEME_KEY) === null) {
+      localStorage.setItem(PRETEXT_THEME_KEY, "light");
+    }
+  } catch {
+    // Storage unavailable (private mode, blocked cookies). The preview falls
+    // back to prefers-color-scheme, exactly as it did before.
+  }
+}
+
 const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
   ({ content, title, onRebuild }, ref) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
@@ -109,6 +138,8 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
     // content change: rebuilds are driven by save (Ctrl+S), Ctrl+Enter, and
     // the Rebuild button, so a half-typed document is never rendered.
     useEffect(() => {
+      // Before the first render, so the very first page already knows its theme.
+      defaultPreviewToLight();
       preview();
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

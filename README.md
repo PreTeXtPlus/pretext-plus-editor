@@ -292,6 +292,18 @@ When a render fails (most often because the document is not yet well-formed
 mid-edit), the last successful preview stays on screen and a dismissible
 banner reports the problem.
 
+### Preview theme
+
+The preview starts in light mode, matching the editor, which ships no dark mode
+of its own. Authors can switch it from the preview's own readability menu, and
+that choice persists across rebuilds — PreTeXt handles both, so there is nothing
+to wire up.
+
+One host-visible side effect: the preview iframe uses `srcdoc` and therefore
+shares your page's origin, so PreTeXt reads and writes its theme setting in
+**your app's `localStorage`, under the key `theme`**. If your app uses that same
+key, the two will fight; namespace yours to avoid it.
+
 ## Browser Support
 
 This package requires a modern browser with ES2020 support. The full preview
