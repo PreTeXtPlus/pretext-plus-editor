@@ -94,6 +94,56 @@
   color: #1f2937;
 }
 
+/* Warm local rebuilds are ~90ms: a non-blocking pill instead of an overlay. */
+.pretext-plus-editor__rebuilding-pill {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  z-index: 1000;
+  border-radius: 9999px;
+  padding: 0.125rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: #065f46;
+  background-color: #d1fae5;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+}
+
+/* Render failure: the last good preview stays on screen beneath this. */
+.pretext-plus-editor__preview-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #f59e0b;
+  background-color: #fffbeb;
+  color: #78350f;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.pretext-plus-editor__preview-error-text {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.pretext-plus-editor__preview-error-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: #78350f;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+
+.pretext-plus-editor__preview-error-dismiss:hover {
+  color: #451a03;
+}
+
 /* Spinner animation */
 .pretext-plus-editor__spinner {
   width: 40px;

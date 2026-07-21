@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 import { VisualEditor } from "@pretextbook/visual-editor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
+import { isLocalPreviewAvailable } from "./wasmPreview";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
@@ -111,9 +112,16 @@ export interface editorProps {
    */
   onSave?: () => void;
   /**
-   * If provided, the right-hand panel shows a full iframe-based preview
-   * instead of the Tiptap visual editor, and a rebuild button / Ctrl+Enter
-   * shortcut become active.
+   * Server-side preview build handler — **no longer required for a preview**.
+   *
+   * The full preview now renders in the browser via
+   * `@pretextbook/pretext-html` (WebAssembly), so the preview toggle, rebuild
+   * button and Ctrl+Enter shortcut are available to every host without any
+   * wiring. This prop is the fallback for engines that lack WebAssembly JSPI
+   * (currently non-Chromium browsers), where a local render is impossible: if
+   * you must support those, keep providing it. It is also the way to get an
+   * authoritative build from the real PreTeXt toolchain, which — unlike the
+   * WASM renderer — can generate latex-image/sageplot assets.
    *
    * @param source - A standalone PreTeXt fragment document for just the
    * active division: wrapped in a synthetic `<pretext>`/`<book>`/`<article>`
@@ -1076,6 +1084,13 @@ const EditorsInner = (props: EditorsInnerProps) => {
       : undefined;
 
   // ── Preview rebuild helpers ──────────────────────────────────────────────
+  // The full preview no longer needs a host-provided build server: when the
+  // browser supports WebAssembly JSPI it renders in-page via
+  // `@pretextbook/pretext-html`. `onPreviewRebuild` remains the fallback for
+  // engines without JSPI, so a host that must support those should keep
+  // providing it.
+  const canPreview = isLocalPreviewAvailable() || props.onPreviewRebuild !== undefined;
+
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
@@ -1084,7 +1099,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const isCtrl = e.ctrlKey || e.metaKey;
-    if (isCtrl && e.key === "Enter" && props.onPreviewRebuild) {
+    if (isCtrl && e.key === "Enter" && canPreview) {
       e.preventDefault();
       triggerRebuild();
     } else if (isCtrl && e.key === "s") {
@@ -1133,7 +1148,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       content={divisionActiveSource}
       sourceFormat={activeDivisionFormat}
       onChange={handleDivisionContentChange}
-      onRebuild={props.onPreviewRebuild ? triggerRebuild : undefined}
+      onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
@@ -1161,7 +1176,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
 
   // ── Preview panel ─────────────────────────────────────────────────────────
   let preview: ReactNode;
-  if (showFullPreview && props.onPreviewRebuild) {
+  if (showFullPreview && canPreview) {
     preview = (
       <FullPreview
         ref={fullPreviewRef}
@@ -1288,7 +1303,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         saveButtonLabel={props.saveButtonLabel}
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
-        showPreviewModeToggle={props.onPreviewRebuild !== undefined}
+        showPreviewModeToggle={canPreview}
       />
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>

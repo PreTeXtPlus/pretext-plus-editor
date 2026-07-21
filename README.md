@@ -248,9 +248,54 @@ This package requires:
 
 These must be installed separately in your project.
 
+## Full preview (in-browser builds)
+
+The full preview renders PreTeXt to HTML **in the browser**, using the official
+PreTeXt XSLT stylesheets compiled to WebAssembly
+(`@pretextbook/pretext-html`). There is no build server to run and no token to
+configure: a preview costs roughly 400ms the first time in a session and ~90ms
+after that.
+
+### Bundler configuration (required)
+
+`@pretextbook/libxslt-wasm` locates its WebAssembly binary relative to its own
+module URL. Bundlers that pre-bundle dependencies move that URL and break the
+lookup, so exclude the package. With Vite:
+
+```js
+// vite.config.js
+export default defineConfig({
+  optimizeDeps: {
+    exclude: ["@pretextbook/libxslt-wasm"],
+  },
+});
+```
+
+The renderer itself is loaded with a dynamic `import()` only when a preview is
+first opened, so apps that never show one pay nothing for it.
+
+### Fallback for browsers without JSPI
+
+Local rendering needs WebAssembly JSPI (stack switching), which Chromium-based
+browsers ship and some others do not. The editor feature-detects it:
+
+- **JSPI available** — renders locally; no host wiring needed.
+- **JSPI unavailable** — falls back to the `onPreviewRebuild` prop, if you
+  provide one. Without it, the preview toggle is hidden on those browsers.
+
+Keep `onPreviewRebuild` wired if you need to support non-Chromium browsers, or
+if you want authoritative builds from the real PreTeXt toolchain — the WASM
+renderer cannot generate `latex-image`/`sageplot` assets, which require the
+Python toolchain.
+
+When a render fails (most often because the document is not yet well-formed
+mid-edit), the last successful preview stays on screen and a dismissible
+banner reports the problem.
+
 ## Browser Support
 
-This package requires a modern browser with ES2020 support.
+This package requires a modern browser with ES2020 support. The full preview
+additionally requires WebAssembly JSPI; see above for the fallback.
 
 ## Development
 

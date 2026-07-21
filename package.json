@@ -52,7 +52,7 @@
     "@pretextbook/completions": "^0.1.0",
     "@pretextbook/format": "^0.3.0",
     "@pretextbook/latex-pretext": "^0.0.13",
-    "@pretextbook/pretext-html": "^0.1.1",
+    "@pretextbook/pretext-html": "^0.2.0",
     "@pretextbook/remark-pretext": "^0.0.11",
     "@pretextbook/visual-editor": "^0.1.0",
     "@tailwindcss/vite": "^4.3.3",
