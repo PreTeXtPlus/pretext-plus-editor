@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
-import { VisualEditor } from "@pretextbook/visual-editor";
+//import { VisualEditor } from "@pretextbook/visual-editor";
 import LivePreview, { type LivePreviewHandle } from "./LivePreview";
 import { isLocalPreviewAvailable } from "./wasmPreview";
 import {
@@ -1351,22 +1351,23 @@ const EditorsInner = (props: EditorsInnerProps) => {
         divisionId={activeDivision?.xmlId}
       />
     );
-  } else {
-    const canEditVisually = activeDivisionFormat === "pretext";
-    const editDisabledReason =
-      activeDivisionFormat === "markdown"
-        ? "Visual editing is not available for Markdown documents."
-        : activeDivisionFormat === "latex"
-        ? "Visual editing is not available for LaTeX documents."
-        : "";
-    preview = (
-      <VisualEditor
-        content={divisionActiveSource}
-        canEdit={canEditVisually}
-        editDisabledReason={editDisabledReason}
-        onChange={(content) => handleDivisionContentChange(content)}
-      />
-    );
+    // For now, we disable the visual editor.  This might come back in a later version:
+    //} else {
+    //  const canEditVisually = activeDivisionFormat === "pretext";
+    //  const editDisabledReason =
+    //    activeDivisionFormat === "markdown"
+    //      ? "Visual editing is not available for Markdown documents."
+    //      : activeDivisionFormat === "latex"
+    //      ? "Visual editing is not available for LaTeX documents."
+    //      : "";
+    //  preview = (
+    //    <VisualEditor
+    //      content={divisionActiveSource}
+    //      canEdit={canEditVisually}
+    //      editDisabledReason={editDisabledReason}
+    //      onChange={(content) => handleDivisionContentChange(content)}
+    //    />
+    //  );
   }
 
   // ── TOC sidebar ──────────────────────────────────────────────────────────
@@ -1469,7 +1470,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
         saveButtonLabel={props.saveButtonLabel}
         onCancelButton={props.onCancelButton}
         cancelButtonLabel={props.cancelButtonLabel}
-        showPreviewModeToggle={canPreview}
+        showPreviewModeToggle={false}
       />
       <div className="pretext-plus-editor__editor-displays">
         <ErrorBoundary resetKeys={[divisionActiveSource, activeDivisionId]}>

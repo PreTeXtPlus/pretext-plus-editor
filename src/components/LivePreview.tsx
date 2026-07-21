@@ -313,7 +313,7 @@ const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
             className="pretext-plus-editor__rebuild-button"
             onClick={() => preview()}
           >
-            Rebuild
+            Refresh
           </button>
         </div>
         {error && (
