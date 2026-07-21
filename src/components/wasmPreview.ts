@@ -23,10 +23,32 @@
  * fall back to a server build when it is false.
  */
 
+// Type-only, so this is erased at compile time and does not drag the WASM
+// entry (and its top-level await) onto the load path. The matching runtime
+// helper is reached through loadRenderer() instead — see findEntryForLine.
+import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
+
+/**
+ * Virtual path we render under. Nothing reads it from disk, but every
+ * source-map entry is stamped with it, so sync lookups filter on this value.
+ */
+export const PREVIEW_SOURCE_PATH = "/source/main.ptx";
+
 /** Options accepted by a local render. Mirrors the subset we actually use. */
 interface LocalRenderOptions {
   /** Light/dark theme for the rendered page; omit for its native behaviour. */
   theme?: "light" | "dark" | "system";
+}
+
+/** A rendered page plus the map that ties its elements back to the source. */
+export interface PreviewRender {
+  /** Complete standalone HTML page. */
+  html: string;
+  /**
+   * One entry per element, in document order. Empty rather than absent when
+   * the renderer produced none, so callers never branch on undefined.
+   */
+  sourceMap: PtxSourceMap;
 }
 
 type PretextHtmlModule = typeof import("@pretextbook/pretext-html");
@@ -63,39 +85,6 @@ function loadRenderer(): Promise<PretextHtmlModule> {
 }
 
 /**
- * Serializes renders. **Load-bearing, not an optimisation.**
- *
- * `renderHtml` is not reentrant: it drives a single cached compiled
- * stylesheet through a patched `globalThis.fetch` and shared mount tables.
- * The transform *suspends* mid-run (that is what JSPI is for) to fetch
- * stylesheets, and a second render entering during that window interleaves
- * with the first and corrupts libxslt's internal state.
- *
- * The symptom is badly misleading. The collision surfaces as an out-of-bounds
- * memory access, which the renderer's error mapping reports as "the document
- * is too large … (stack overflow)" no matter how small the document is; worse,
- * the WASM instance stays broken for the rest of the session, failing every
- * later render with a pthread mutex assertion. React's StrictMode double
- * invokes mount effects in development, so without this chain the very first
- * preview reliably poisons the renderer.
- */
-let renderChain: Promise<unknown> = Promise.resolve();
-
-async function runRender(
-  source: string,
-  options: LocalRenderOptions,
-): Promise<string> {
-  const { renderHtml } = await loadRenderer();
-  const { html } = await renderHtml({
-    sourcePath: "/source/main.ptx",
-    projectDir: "/source",
-    sourceContent: source,
-    ...(options.theme ? { theme: options.theme } : {}),
-  });
-  return html;
-}
-
-/**
  * Render a complete PreTeXt document to a standalone HTML page.
  *
  * `source` must be a whole `<pretext>` document — which is what
@@ -103,23 +92,58 @@ async function runRender(
  * paths are virtual: nothing is read from a filesystem, and `sourceContent`
  * carries the actual text.
  *
- * Renders are queued, never overlapped (see {@link renderChain}). Throws on
- * malformed XML or a failed transform; the caller decides what to do with
- * that (FullPreview keeps the last good render and shows a banner).
+ * `renderHtml` is not reentrant — it drives one cached compiled stylesheet
+ * through shared mount tables, and suspends mid-transform — but it queues
+ * concurrent calls itself as of pretext-html 0.3.0, so callers may fire freely.
+ *
+ * Throws on malformed XML or a failed transform; the caller decides what to do
+ * with that (FullPreview keeps the last good render and shows a banner).
  */
-export function renderPreviewHtml(
+export async function renderPreviewHtml(
   source: string,
   options: LocalRenderOptions = {},
-): Promise<string> {
-  // Chain off both outcomes: one failed render must not wedge the queue.
-  const result = renderChain.then(
-    () => runRender(source, options),
-    () => runRender(source, options),
-  );
-  // The chain tracks completion only — swallow here so an unhandled rejection
-  // is not reported for the internal handle. Callers still see the rejection.
-  renderChain = result.catch(() => undefined);
-  return result;
+): Promise<PreviewRender> {
+  const { renderHtml } = await loadRenderer();
+  const { html, sourceMap } = await renderHtml({
+    sourcePath: PREVIEW_SOURCE_PATH,
+    projectDir: "/source",
+    sourceContent: source,
+    sourceMap: true,
+    ...(options.theme ? { theme: options.theme } : {}),
+  });
+  return { html, sourceMap: sourceMap ?? [] };
+}
+
+/**
+ * The element to sync to for a cursor sitting on `assembledLine`: the nearest
+ * element starting at or above it.
+ *
+ * Async only because the helper lives in the renderer entry, which is loaded
+ * dynamically to keep its top-level await off the page-load path. By the time
+ * anything can sync there is a rendered preview on screen, so the module is
+ * already cached and this resolves immediately.
+ */
+export async function findEntryForLine(
+  sourceMap: PtxSourceMap,
+  assembledLine: number,
+): Promise<SourceMapEntry | undefined> {
+  if (sourceMap.length === 0) return undefined;
+  const { findSourceMapEntry } = await loadRenderer();
+  return findSourceMapEntry(sourceMap, assembledLine);
+}
+
+/**
+ * The source location an element id was rendered from.
+ *
+ * Ids come off the clicked element in the preview, so an unknown one is
+ * routine — plenty of markup in the page (MathJax output, chrome the
+ * stylesheets add) was never stamped from source.
+ */
+export function findEntryById(
+  sourceMap: PtxSourceMap,
+  id: string,
+): SourceMapEntry | undefined {
+  return sourceMap.find((entry) => entry.id === id);
 }
 
 /**

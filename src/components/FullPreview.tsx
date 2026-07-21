@@ -10,9 +10,15 @@ import "./FullPreview.css";
 import { postToIframe } from "./postToIframe";
 import {
   describePreviewError,
+  findEntryById,
+  findEntryForLine,
   isLocalPreviewAvailable,
   renderPreviewHtml,
 } from "./wasmPreview";
+import type {
+  PtxSourceMap,
+  SourceMapEntry,
+} from "@pretextbook/pretext-html";
 
 interface FullPreviewProps {
   content: string;
@@ -28,10 +34,96 @@ interface FullPreviewProps {
     title: string,
     postToIframe: (url: string, data: any) => void,
   ) => void;
+  /**
+   * Called when the author clicks somewhere in the preview, for preview →
+   * source sync.
+   *
+   * `line` refers to the rendered (assembled) document, which is not the
+   * editor buffer, and `elementId` is the clicked element's rendered id —
+   * which encodes the division that authored it. The caller needs both to
+   * translate the click (see previewSync.ts).
+   *
+   * Only fires on the local render: a server-built preview is cross-origin and
+   * cannot be inspected.
+   */
+  onSyncToSource?: (click: { assembledLine: number; elementId: string }) => void;
+  /**
+   * Identity of the division being previewed. Changing it rebuilds, because
+   * the preview must show the division the editor is showing: sync maps
+   * between the buffer and the rendered page, and those have to be the same
+   * document or every lookup is nonsense.
+   *
+   * This is deliberately an identity rather than the content — content changes
+   * on every keystroke and must *not* rebuild.
+   */
+  divisionId?: string;
 }
 
 export interface FullPreviewHandle {
   rebuild: () => void;
+  /**
+   * Scroll the preview to whatever was rendered from `assembledLine`, for
+   * source → preview sync. A no-op when nothing maps to that line.
+   */
+  scrollToAssembledLine: (assembledLine: number) => void;
+}
+
+/**
+ * The rendered element a source-map entry points at.
+ *
+ * Not every mapped element survives into the page with an id — the stylesheets
+ * emit ids selectively — so walk the entry's ancestor chain outward until one
+ * does. Scrolling to the enclosing division is a good answer; scrolling nowhere
+ * is not.
+ */
+function elementForEntry(
+  doc: Document,
+  sourceMap: PtxSourceMap,
+  entry: SourceMapEntry,
+): Element | null {
+  let current: SourceMapEntry | undefined = entry;
+  while (current) {
+    const element = doc.getElementById(current.id);
+    if (element) return element;
+    current = current.parent
+      ? findEntryById(sourceMap, current.parent)
+      : undefined;
+  }
+  return null;
+}
+
+/**
+ * The source line a click in the preview corresponds to, or `undefined` when
+ * the click landed on markup that came from no particular source element
+ * (MathJax output, chrome the stylesheets add).
+ *
+ * Walks up from the clicked node rather than requiring a direct hit, since the
+ * text under the pointer is usually a child of the element that carries the id.
+ */
+function entryForClick(
+  target: EventTarget | null,
+  sourceMap: PtxSourceMap,
+): SourceMapEntry | undefined {
+  // `target` belongs to the iframe's realm, so `instanceof Element` — which
+  // tests *this* window's constructor — is always false for it, even though
+  // the document is same-origin. Duck-type on nodeType instead. A click can
+  // also land on a text node, so start from its parent element.
+  const node = target as Node | null;
+  let element: Element | null =
+    node == null
+      ? null
+      : node.nodeType === 1
+        ? (node as Element)
+        : node.parentElement;
+
+  while (element) {
+    if (element.id) {
+      const entry = findEntryById(sourceMap, element.id);
+      if (entry) return entry;
+    }
+    element = element.parentElement;
+  }
+  return undefined;
 }
 
 /**
@@ -64,7 +156,7 @@ function defaultPreviewToLight(): void {
 }
 
 const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
-  ({ content, title, onRebuild }, ref) => {
+  ({ content, title, onRebuild, onSyncToSource, divisionId }, ref) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
     // The last render that succeeded. Kept across failures so a transient
     // typo does not blank the panel and lose the author's place.
@@ -75,6 +167,15 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
     // Only the newest render may commit: a fast second rebuild must not be
     // overwritten by a slower one that started earlier.
     const renderToken = useRef(0);
+    // Source map for whatever is currently displayed. A ref, not state: it is
+    // only ever read inside callbacks, and re-rendering on it would be waste.
+    const sourceMapRef = useRef<PtxSourceMap>([]);
+    // Kept current so the iframe's click listener — attached once per loaded
+    // document — always calls the latest prop.
+    const onSyncToSourceRef = useRef(onSyncToSource);
+    useEffect(() => {
+      onSyncToSourceRef.current = onSyncToSource;
+    }, [onSyncToSource]);
 
     // Decided once: whether this engine can render in-page at all. A host that
     // provides no server handler gets the local path regardless, since there
@@ -105,10 +206,11 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
       if (renderLocally) {
         const token = ++renderToken.current;
         renderPreviewHtml(source)
-          .then((html) => {
+          .then(({ html, sourceMap }) => {
             if (token !== renderToken.current) {
               return;
             }
+            sourceMapRef.current = sourceMap;
             setPreviewHtml(html);
             setError(null);
           })
@@ -134,17 +236,38 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
       onRebuild?.(source, previewTitle, postHelper);
     }, [content, title, onRebuild, renderLocally]);
 
-    // Rebuild once when the preview is opened. Deliberately not on every
-    // content change: rebuilds are driven by save (Ctrl+S), Ctrl+Enter, and
-    // the Rebuild button, so a half-typed document is never rendered.
+    // Rebuild when the preview opens, and whenever the author switches to a
+    // different division — otherwise the page on screen belongs to the
+    // division they just left, and both sync directions would be translating
+    // between two unrelated documents.
+    //
+    // Still deliberately not on every content change: rebuilds are otherwise
+    // driven by save (Ctrl+S), Ctrl+Enter, and the Rebuild button, so a
+    // half-typed document is never rendered.
     useEffect(() => {
       // Before the first render, so the very first page already knows its theme.
       defaultPreviewToLight();
       preview();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
+    }, [divisionId]);
 
-    useImperativeHandle(ref, () => ({ rebuild: preview }), [preview]);
+    useImperativeHandle(
+      ref,
+      () => ({
+        rebuild: preview,
+        scrollToAssembledLine: (assembledLine: number) => {
+          void (async () => {
+            const sourceMap = sourceMapRef.current;
+            const entry = await findEntryForLine(sourceMap, assembledLine);
+            const doc = iframeRef.current?.contentDocument;
+            if (!entry || !doc) return;
+            const element = elementForEntry(doc, sourceMap, entry);
+            element?.scrollIntoView({ block: "center", behavior: "smooth" });
+          })();
+        },
+      }),
+      [preview],
+    );
 
     const handleIframeLoad = () => {
       // A local render settles its own rebuilding state once the promise
@@ -152,6 +275,22 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
       // finished.
       if (!renderLocally) {
         setIsRebuilding(false);
+      }
+
+      // Preview → source. Attached per loaded document; each render replaces
+      // the document wholesale, so there is nothing to clean up. Passive and
+      // non-capturing: the page's own links and knowls behave normally.
+      if (renderLocally) {
+        const doc = iframeRef.current?.contentDocument;
+        doc?.addEventListener("click", (event) => {
+          const entry = entryForClick(event.target, sourceMapRef.current);
+          if (entry) {
+            onSyncToSourceRef.current?.({
+              assembledLine: entry.line,
+              elementId: entry.id,
+            });
+          }
+        });
       }
       if (savedScrollPosition.current) {
         try {

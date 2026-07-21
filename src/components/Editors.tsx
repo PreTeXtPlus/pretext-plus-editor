@@ -5,6 +5,11 @@ import CodeEditor, { type CodeEditorHandle } from "./CodeEditor";
 import { VisualEditor } from "@pretextbook/visual-editor";
 import FullPreview, { type FullPreviewHandle } from "./FullPreview";
 import { isLocalPreviewAvailable } from "./wasmPreview";
+import {
+  buildPreviewLineMap,
+  divisionForElementId,
+  type PreviewLineMap,
+} from "./previewSync";
 import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
@@ -412,6 +417,30 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // wrapper tag included, rather than a stripped-down body — the wrapper
   // (with its xml:id/label attributes and title) is the source of truth.
   const divisionActiveSource = activeDivision?.source ?? "";
+
+  // ── Cross-division preview sync ──────────────────────────────────────────
+  // Clicking inside a child division's content opens that division. Its line
+  // cannot be revealed in the same tick: the editor is still holding the
+  // previous division's source, and only picks up the new one on the next
+  // render. Park the target and apply it once the switch has landed.
+  const pendingRevealRef = useRef<{ xmlId: string; line: number } | null>(null);
+
+  useEffect(() => {
+    const pending = pendingRevealRef.current;
+    if (!pending || activeDivision?.xmlId !== pending.xmlId) return;
+    // CodeEditor's own content effect has already run (child effects fire
+    // before their parent's), so its model holds this division's source.
+    pendingRevealRef.current = null;
+    codeEditorRef.current?.revealLine(pending.line);
+  }, [activeDivision?.xmlId, divisionActiveSource]);
+
+  // Per-division line maps for the document currently on screen. Built lazily
+  // — only a click needs them, and only a cross-division click needs more than
+  // one — and discarded whenever the previewed document changes.
+  const divisionMapCacheRef = useRef<{
+    key: string;
+    maps: Map<string, PreviewLineMap>;
+  }>({ key: "", maps: new Map() });
 
   // ── Content-change emitter ───────────────────────────────────────────────
   // Single channel for every content change: a division edit, a structural
@@ -1091,6 +1120,82 @@ const EditorsInner = (props: EditorsInnerProps) => {
   // providing it.
   const canPreview = isLocalPreviewAvailable() || props.onPreviewRebuild !== undefined;
 
+  // ── Two-way sync ─────────────────────────────────────────────────────────
+  // Correspondence between the Monaco buffer (one division's own source) and
+  // the assembled document the preview renders. See previewSync.ts for why
+  // these differ and how the mapping is recovered.
+  //
+  // Memoised on the two strings themselves — they are recomputed every render
+  // but compare by value, so an unchanged edit costs nothing — and skipped
+  // entirely while the preview is closed, since nothing can ask for it then.
+  //
+  // Note the map describes the *current* buffer, while the page on screen is
+  // from the last rebuild (previews rebuild on save, not on every keystroke).
+  // Between the two, a lookup can land on an element that has since moved or
+  // gone; it resolves by id, so the usual outcome is a slightly stale target
+  // or no scroll at all, and the next rebuild restores exactness.
+  const previewLineMap = useMemo(
+    () =>
+      showFullPreview && canPreview && previewContent
+        ? buildPreviewLineMap(divisionActiveSource, previewContent)
+        : null,
+    [showFullPreview, canPreview, previewContent, divisionActiveSource],
+  );
+
+  // Source → preview. Lines with no counterpart (a `<plus:.../>` placeholder,
+  // or anything in a non-PreTeXt buffer whose assembled form is a conversion)
+  // simply do not scroll.
+  const handleCursorLineChange = (editorLine: number) => {
+    const assembledLine = previewLineMap?.toAssembled(editorLine);
+    if (assembledLine !== undefined) {
+      fullPreviewRef.current?.scrollToAssembledLine(assembledLine);
+    }
+  };
+
+  // Preview → source. Previewing a parent renders its children inline, so the
+  // click may belong to a different division record entirely. Which one is
+  // read off the element's id, which encodes its authoring division; the line
+  // within that division is then recovered by matching only *that* division's
+  // source, never a search across the pool.
+  const handleSyncToSource = ({
+    assembledLine,
+    elementId,
+  }: {
+    assembledLine: number;
+    elementId: string;
+  }) => {
+    if (!previewContent) return;
+
+    const owner = divisionForElementId(elementId, (xmlId) =>
+      divisions.some((d) => d.xmlId === xmlId),
+    );
+    // Unattributable (page chrome, or an authored xml:id that is not a
+    // division): stay put rather than guess at another division.
+    const targetId = owner ?? activeDivision?.xmlId;
+    if (!targetId) return;
+
+    if (divisionMapCacheRef.current.key !== previewContent) {
+      divisionMapCacheRef.current = { key: previewContent, maps: new Map() };
+    }
+    let map = divisionMapCacheRef.current.maps.get(targetId);
+    if (!map) {
+      const source =
+        divisions.find((d) => d.xmlId === targetId)?.source ?? "";
+      map = buildPreviewLineMap(source, previewContent);
+      divisionMapCacheRef.current.maps.set(targetId, map);
+    }
+    // A converted division (LaTeX, Markdown) shares no lines with its rendered
+    // form, so there is no line to land on — but opening it is still right.
+    const line = map.toEditor(assembledLine);
+
+    if (targetId === activeDivision?.xmlId) {
+      if (line !== undefined) codeEditorRef.current?.revealLine(line);
+      return;
+    }
+    pendingRevealRef.current = line === undefined ? null : { xmlId: targetId, line };
+    applyDivisionSelect(targetId);
+  };
+
   const triggerRebuild = () => fullPreviewRef.current?.rebuild();
   const triggerSaveAndRebuild = () => {
     props.onSave?.();
@@ -1150,6 +1255,7 @@ const EditorsInner = (props: EditorsInnerProps) => {
       onChange={handleDivisionContentChange}
       onRebuild={canPreview ? triggerRebuild : undefined}
       onSave={triggerSaveAndRebuild}
+      onCursorLineChange={handleCursorLineChange}
       onOpenLatexImport={() => openModal("isLatexDialogOpen")}
       onOpenDocinfoEditor={() => openModal("isDocinfoEditorOpen")}
       onOpenConvertToPretext={
@@ -1183,6 +1289,8 @@ const EditorsInner = (props: EditorsInnerProps) => {
         content={previewContent || ""}
         title={title}
         onRebuild={props.onPreviewRebuild}
+        onSyncToSource={handleSyncToSource}
+        divisionId={activeDivision?.xmlId}
       />
     );
   } else {

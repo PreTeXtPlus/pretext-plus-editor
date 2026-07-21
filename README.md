@@ -292,6 +292,42 @@ When a render fails (most often because the document is not yet well-formed
 mid-edit), the last successful preview stays on screen and a dismissible
 banner reports the problem.
 
+### Two-way sync
+
+Clicking in the preview moves the cursor to the matching source line, and
+moving the cursor scrolls the preview to the matching element. Both are
+automatic — there is nothing for a host to wire up.
+
+Sync works off a source map the renderer produces alongside the HTML, so it
+follows the document's structure rather than guessing from scroll offsets. Two
+consequences worth knowing:
+
+- **The editor buffer and the rendered document are not the same text.** The
+  preview renders the division with its `<plus:* ref="..."/>` placeholders
+  expanded and a `<pretext>` wrapper added, so line numbers differ. The
+  correspondence is recovered by matching line content (`previewSync.ts`).
+  Lines with no counterpart — a placeholder, or any buffer whose rendered form
+  is a conversion, as with LaTeX and Markdown divisions — simply do not sync.
+- **Clicking content from an expanded child division opens that division** and
+  lands the cursor on the matching line of its own source. Which division owns
+  a click is read from the clicked element's rendered id: PreTeXt builds ids so
+  that an authored `xml:id` resets the chain, so every id begins with the
+  division that authored it (`sec-markdown-2-2-4` → `sec-markdown`). A click
+  whose id belongs to no known division — page chrome, say — leaves the editor
+  where it is rather than guessing.
+
+Previews rebuild on save rather than on every keystroke, so between an edit and
+the next rebuild a sync can land slightly off; the next rebuild restores it.
+Switching to a different division *does* rebuild immediately — the preview has
+to be showing the same division the editor is, or sync would be translating
+between two unrelated documents.
+
+Line-level sync covers PreTeXt divisions. A LaTeX or Markdown division is
+converted to PreTeXt before rendering, and the conversion carries no source
+map, so there is no line to land on and the cursor stays put. Clicking a
+PreTeXt subsection *nested inside* such a division still opens that subsection,
+since which division owns a click does not depend on line matching.
+
 ### Preview theme
 
 The preview starts in light mode, matching the editor, which ships no dark mode
