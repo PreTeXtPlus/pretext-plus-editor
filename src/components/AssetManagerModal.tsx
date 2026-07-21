@@ -12,6 +12,11 @@ export interface AssetManagerModalProps {
   open: boolean;
   onClose: () => void;
   /**
+   * Which main tab to show on open. Defaults to "in-document". Has no effect
+   * in resolve/replace mode, which always goes straight to the source picker.
+   */
+  initialTab?: AssetManagerMainTab;
+  /**
    * When set, the modal opens in "resolve" mode for an unresolved
    * `<plus:KIND ref="..."/>` placeholder: it goes straight to the source picker
    * for that kind, and whatever asset the user picks/uploads/creates is bound to
@@ -60,7 +65,8 @@ export interface AssetManagerModalProps {
   onReplaceAsset: (oldAsset: Asset, newAsset: Asset) => void;
 }
 
-type MainTab = "in-document" | "add";
+export type AssetManagerMainTab = "in-document" | "add";
+type MainTab = AssetManagerMainTab;
 type ImageSourceTab = "upload" | "url";
 
 /**
@@ -74,9 +80,21 @@ function localAssetId(prefix: string): string {
   return `${prefix}-${Date.now()}`;
 }
 
+/**
+ * Clipboard image files never carry a meaningful filename — browsers hand
+ * back either an empty string (Firefox) or a generic placeholder like
+ * "image.png" (Chromium) that looks legitimate but isn't. Always replace it
+ * with a fresh, uniquely-timestamped name.
+ */
+
+function namePastedImageFile(file: File): File {
+  return new File([file], `pasted-image-${Date.now()}`, { type: file.type });
+}
+
 const AssetManagerModal = ({
   open,
   onClose,
+  initialTab,
   resolveTarget,
   replaceTarget,
   onUpload,
@@ -104,7 +122,7 @@ const AssetManagerModal = ({
   const openAssetResolver = useEditorStore((s) => s.openAssetResolver);
   const removeAssetRefFromDocument = useEditorStore((s) => s.removeAssetRefFromDocument);
 
-  const [tab, setTab] = useState<MainTab>("in-document");
+  const [tab, setTab] = useState<MainTab>(initialTab ?? "in-document");
   const [addKind, setAddKind] = useState<AssetKind | null>(null);
   const [imageTab, setImageTab] = useState<ImageSourceTab>("upload");
 
@@ -141,6 +159,18 @@ const AssetManagerModal = ({
   // Success panel shown after a normal-mode add (asset added + embed copied).
   const [addedAsset, setAddedAsset] = useState<Asset | null>(null);
 
+  // Stash a picked/dropped file for preview; the actual upload is deferred
+  // until the user confirms via "Add to Project". `title` defaults to the
+  // filename, but callers can override it — a pasted image's filename is a
+  // disposable, timestamped placeholder (see `namePastedImageFile`), not
+  // something worth showing as the default title/ref.
+  const selectPendingUpload = (file: File, title = file.name) => {
+    setUploadError(null);
+    setPendingUploadFile(file);
+    setUploadTitle(title);
+    setPendingUploadPreviewUrl(URL.createObjectURL(file));
+  };
+
   // Escape-to-close. Re-binds when `onClose` changes, but never triggers a load.
   useEffect(() => {
     if (!open) return;
@@ -155,6 +185,48 @@ const AssetManagerModal = ({
       if (pendingUploadPreviewUrl) URL.revokeObjectURL(pendingUploadPreviewUrl);
     };
   }, [pendingUploadPreviewUrl]);
+
+  // Is pasting an image a sensible thing to do right now? Any time this
+  // modal is open and uploads are supported — including the "Assets" tab,
+  // the kind picker, mid-Doenet-form, or with an image already staged (a
+  // fresh paste replaces it) — a stray Ctrl/Cmd+V with an image on the
+  // clipboard jumps straight to Image/Upload. The one exception is a
+  // resolve/replace target locked to a non-image kind (e.g. an unresolved
+  // Doenet placeholder), which has no Image view to receive it.
+  const pasteImageActive =
+    open &&
+    !!onUpload &&
+    (resolveTarget ? resolveTarget.kind === "image"
+      : replaceTarget ? replaceTarget.kind === "image"
+      : true);
+
+  // Bound at the window level (rather than the drop zone's onPaste) so it
+  // fires no matter what currently has focus inside the modal.
+  useEffect(() => {
+    if (!pasteImageActive) return;
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of items) {
+        if (item.kind === "file" && item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            // Clear the prior success panel (if any) — the newly staged
+            // upload should show, not a stale "added" confirmation.
+            setAddedAsset(null);
+            setTab("add");
+            setAddKind("image");
+            setImageTab("upload");
+            selectPendingUpload(namePastedImageFile(file), "Pasted Image");
+          }
+          return;
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [pasteImageActive]);
 
   if (!open) return null;
 
@@ -186,15 +258,6 @@ const AssetManagerModal = ({
     navigator.clipboard.writeText(embedFor(kind, ref)).catch(() => {});
     setCopiedKey(key);
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 2000);
-  };
-
-  // Stash a picked/dropped file for preview; the actual upload is deferred
-  // until the user confirms via "Add to Project".
-  const selectPendingUpload = (file: File) => {
-    setUploadError(null);
-    setPendingUploadFile(file);
-    setUploadTitle(file.name);
-    setPendingUploadPreviewUrl(URL.createObjectURL(file));
   };
 
   const clearPendingUpload = () => {
@@ -525,7 +588,7 @@ const AssetManagerModal = ({
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInputRef.current?.click(); } }}
-                aria-label="Upload image — click or drag and drop"
+                aria-label="Paste an image, drag and drop to upload, or click to browse files"
               >
                 <input
                   ref={fileInputRef}
@@ -535,7 +598,7 @@ const AssetManagerModal = ({
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) selectPendingUpload(f); }}
                 />
                 <span className="pretext-plus-editor__am-drop-icon" aria-hidden="true">↑</span>
-                <p className="pretext-plus-editor__am-drop-text">Drag &amp; drop an image, or click to browse</p>
+                <p className="pretext-plus-editor__am-drop-text">Paste your image, drag &amp; drop a file, or click to browse</p>
                 <p className="pretext-plus-editor__dialog-helper-copy">PNG, JPEG, GIF, SVG, WebP</p>
               </div>
             ) : (

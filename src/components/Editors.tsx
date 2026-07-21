@@ -21,7 +21,7 @@ import LatexImportDialog from "./LatexImportDialog";
 import ConvertToPretextDialog from "./ConvertToPretextDialog";
 import DocinfoEditor from "./DocinfoEditor";
 import FullSourceModal from "./FullSourceModal";
-import AssetManagerModal from "./AssetManagerModal";
+import AssetManagerModal, { type AssetManagerMainTab } from "./AssetManagerModal";
 import AssetEditModal from "./AssetEditModal";
 import MenuBar from "./MenuBar";
 import TableOfContents from "./TableOfContents";
@@ -350,9 +350,9 @@ const EditorsInner = (props: EditorsInnerProps) => {
   const assetResolveTarget = useEditorStore((s) => s.assetResolveTarget);
   const closeAssetResolver = useEditorStore((s) => s.closeAssetResolver);
   // Replace target is local UI state (only Editors + the asset manager need it).
-  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(
-    null,
-  );
+  const [assetReplaceTarget, setAssetReplaceTarget] = useState<Asset | null>(null);
+  // Which tab the asset manager should open on — local UI state, reset per open.
+  const [assetPickerInitialTab, setAssetPickerInitialTab] = useState<AssetManagerMainTab>("in-document");
   const openModal = useEditorStore((s) => s.openModal);
   const closeModal = useEditorStore((s) => s.closeModal);
   const syncState = useEditorStore((s) => s.syncState);
@@ -1379,7 +1379,10 @@ const EditorsInner = (props: EditorsInnerProps) => {
       hideAssets={props.hideAssets}
       onOpenAssetPicker={
         props.projectAssets !== undefined
-          ? () => openModal("isAssetPickerOpen")
+          ? (initialTab) => {
+              setAssetPickerInitialTab(initialTab ?? "in-document");
+              openModal("isAssetPickerOpen");
+            }
           : undefined
       }
     />
@@ -1524,15 +1527,15 @@ const EditorsInner = (props: EditorsInnerProps) => {
         {(isAssetPickerOpen || assetResolveTarget || assetReplaceTarget) &&
         props.projectAssets !== undefined ? (
           <AssetManagerModal
-            open={
-              isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget
-            }
+            open={isAssetPickerOpen || !!assetResolveTarget || !!assetReplaceTarget}
+            initialTab={assetPickerInitialTab}
             resolveTarget={assetResolveTarget}
             replaceTarget={assetReplaceTarget}
             onClose={() => {
               closeModal("isAssetPickerOpen");
               closeAssetResolver();
               setAssetReplaceTarget(null);
+              setAssetPickerInitialTab("in-document");
             }}
             onUpload={props.onAssetUpload}
             onFetchUrl={props.onAssetFetchUrl}

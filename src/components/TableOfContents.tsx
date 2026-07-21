@@ -5,7 +5,7 @@ export interface TableOfContentsProps {
   isCollapsed: boolean;
   onToggleCollapse: () => void;
   /** When provided, shows "Open asset picker" affordance in the TOC. */
-  onOpenAssetPicker?: () => void;
+  onOpenAssetPicker?: (initialTab?: "add") => void;
   /** If true, hides all assets in the TOC and asset manager. */
   hideAssets?: boolean;
 }
