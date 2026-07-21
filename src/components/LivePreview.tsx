@@ -6,7 +6,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
-import "./FullPreview.css";
+import "./LivePreview.css";
 import { postToIframe } from "./postToIframe";
 import {
   describePreviewError,
@@ -15,12 +15,9 @@ import {
   isLocalPreviewAvailable,
   renderPreviewHtml,
 } from "./wasmPreview";
-import type {
-  PtxSourceMap,
-  SourceMapEntry,
-} from "@pretextbook/pretext-html";
+import type { PtxSourceMap, SourceMapEntry } from "@pretextbook/pretext-html";
 
-interface FullPreviewProps {
+interface LivePreviewProps {
   content: string;
   title?: string;
   /**
@@ -46,7 +43,10 @@ interface FullPreviewProps {
    * Only fires on the local render: a server-built preview is cross-origin and
    * cannot be inspected.
    */
-  onSyncToSource?: (click: { assembledLine: number; elementId: string }) => void;
+  onSyncToSource?: (click: {
+    assembledLine: number;
+    elementId: string;
+  }) => void;
   /**
    * Identity of the division being previewed. Changing it rebuilds, because
    * the preview must show the division the editor is showing: sync maps
@@ -59,7 +59,7 @@ interface FullPreviewProps {
   divisionId?: string;
 }
 
-export interface FullPreviewHandle {
+export interface LivePreviewHandle {
   rebuild: () => void;
   /**
    * Scroll the preview to whatever was rendered from `assembledLine`, for
@@ -113,8 +113,8 @@ function entryForClick(
     node == null
       ? null
       : node.nodeType === 1
-        ? (node as Element)
-        : node.parentElement;
+      ? (node as Element)
+      : node.parentElement;
 
   while (element) {
     if (element.id) {
@@ -155,7 +155,7 @@ function defaultPreviewToLight(): void {
   }
 }
 
-const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
+const LivePreview = forwardRef<LivePreviewHandle, LivePreviewProps>(
   ({ content, title, onRebuild, onSyncToSource, divisionId }, ref) => {
     const [isRebuilding, setIsRebuilding] = useState(false);
     // The last render that succeeded. Kept across failures so a transient
@@ -231,7 +231,7 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
 
       // Server path: the host posts the source into our named iframe.
       const postHelper = (url: string, data: any) => {
-        postToIframe(url, data, "fullPreview");
+        postToIframe(url, data, "livePreview");
       };
       onRebuild?.(source, previewTitle, postHelper);
     }, [content, title, onRebuild, renderLocally]);
@@ -308,7 +308,7 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
     return (
       <div className="pretext-plus-editor__full-preview">
         <div className="pretext-plus-editor__preview-header">
-          <p className="pretext-plus-editor__preview-title">Full Preview</p>
+          <p className="pretext-plus-editor__preview-title">Live Preview</p>
           <button
             className="pretext-plus-editor__rebuild-button"
             onClick={() => preview()}
@@ -348,9 +348,7 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
                 <div className="pretext-plus-editor__rebuilding-popup">
                   <div className="pretext-plus-editor__spinner"></div>
                   <p className="pretext-plus-editor__rebuilding-text">
-                    {renderLocally
-                      ? "Preparing preview..."
-                      : "Rebuilding..."}
+                    {renderLocally ? "Preparing preview..." : "Rebuilding..."}
                   </p>
                 </div>
               </div>
@@ -366,7 +364,7 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
           <iframe
             ref={iframeRef}
             className="pretext-plus-editor__preview-iframe"
-            name="fullPreview"
+            name="livePreview"
             title="PreTeXt preview"
             onLoad={handleIframeLoad}
             // srcdoc drives the local path; the server path posts a form into
@@ -381,6 +379,6 @@ const FullPreview = forwardRef<FullPreviewHandle, FullPreviewProps>(
   },
 );
 
-FullPreview.displayName = "FullPreview";
+LivePreview.displayName = "LivePreview";
 
-export default FullPreview;
+export default LivePreview;

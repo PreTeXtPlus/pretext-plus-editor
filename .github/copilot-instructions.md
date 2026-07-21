@@ -19,7 +19,7 @@ The package is published to npm and consumed as a React component library. It is
 
 ```
 src/
-  components/       # React components (Editors, CodeEditor, FullPreview, MenuBar, …)
+  components/       # React components (Editors, CodeEditor, LivePreveiw, MenuBar, …)
   index.ts          # Package entry point — exports public API
   defaultContent.ts # Starter PreTeXt content used when no content prop is provided
   types.d.ts        # Shared TypeScript types

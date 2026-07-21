@@ -2,7 +2,7 @@
 
 ## Problem
 
-`FullPreview` currently receives `previewContent` (`Editors.tsx`), which is:
+`LivePreview` currently receives `previewContent` (`Editors.tsx`), which is:
 
 - For PreTeXt-format divisions: the active division's raw `content`, including its
   own outer tag (e.g. `<section xml:id="...">...</section>`), but with **no**
@@ -43,7 +43,7 @@ export function wrapDivisionForPreview(
   divisionType: DivisionType,
   divisionXml: string,
   docinfo: string,
-): string
+): string;
 ```
 
 Conversion-agnostic: takes XML that is already fully tagged with the
@@ -107,7 +107,7 @@ No automated tests in this repo (per `CLAUDE.md`). Verify via `npm run dev`:
 
 - Load the Book demo, select a `section` division deep in a chapter — preview
   payload (visible via the demo's existing "Show Build Payload" panel is a
-  *different* code path, so instead inspect the POST via browser devtools or
+  _different_ code path, so instead inspect the POST via browser devtools or
   a temporary console log) should show `<pretext><docinfo>...</docinfo>
   <article><section ...>...</section></article></pretext>`.
 - Select a `chapter` division — wrapper should be `<book>`, not `<article>`.

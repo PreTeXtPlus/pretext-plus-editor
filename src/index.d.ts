@@ -159,7 +159,7 @@ export function CodeEditor(props: any): React.JSX.Element;
 
 export function VisualEditor(props: any): React.JSX.Element;
 
-export function FullPreview(props: any): React.JSX.Element;
+export function LivePreview(props: any): React.JSX.Element;
 
 export function FeedbackLink(props: any): React.JSX.Element;
 

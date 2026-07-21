@@ -97,7 +97,7 @@ function loadRenderer(): Promise<PretextHtmlModule> {
  * concurrent calls itself as of pretext-html 0.3.0, so callers may fire freely.
  *
  * Throws on malformed XML or a failed transform; the caller decides what to do
- * with that (FullPreview keeps the last good render and shows a banner).
+ * with that (LivePreview keeps the last good render and shows a banner).
  */
 export async function renderPreviewHtml(
   source: string,
